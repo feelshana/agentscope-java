@@ -24,6 +24,12 @@ public record ModelingTurnPurpose(String value) {
      */
     public static final String COACH = "coach";
 
+    /**
+     * spec149: the data developer asked to draft or update caliber lists from business documents;
+     * only this turn may write {@code calibers/} (and rewrite rules that duplicate a caliber).
+     */
+    public static final String CALIBER = "caliber";
+
     /** Draft-change source for a turn without a declared purpose: the user's own chat request. */
     public static final String CHAT = "chat";
 
@@ -41,6 +47,7 @@ public record ModelingTurnPurpose(String value) {
                         || CONFIRM.equals(value)
                         || ASSET.equals(value)
                         || COACH.equals(value)
+                        || CALIBER.equals(value)
                 ? value
                 : null;
     }
@@ -59,5 +66,9 @@ public record ModelingTurnPurpose(String value) {
 
     public boolean coach() {
         return COACH.equals(value);
+    }
+
+    public boolean caliber() {
+        return CALIBER.equals(value);
     }
 }

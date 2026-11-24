@@ -35,6 +35,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -319,6 +320,13 @@ public class MdlPublishService {
                         return new MdlValidation(false, issues, "", snapshot.files());
                     }
                     Path projectDir = workspace.copyToStaging(groupId);
+                    // spec149: check what would ship, with unreviewed caliber changes held back.
+                    issues.addAll(
+                            CaliberReviews.stage(
+                                    workspace.workspaceRoot(groupId),
+                                    projectDir,
+                                    props.groupRoot(groupId).resolve("published")));
+                    snapshot = shipped(snapshot, projectDir);
                     WrenCli.Result result =
                             wrenCli.run(
                                     projectDir,
@@ -346,6 +354,8 @@ public class MdlPublishService {
                             buildChecks.dryRunSqlObjects(
                                     projectDir, snapshot, selection.external()));
                     issues.addAll(buildChecks.dryRunCubes(projectDir, snapshot.cubes()));
+                    // spec149: generated caliber assets must be exactly what their lists produce.
+                    issues.addAll(CaliberCompiler.check(projectDir));
                     return new MdlValidation(
                             !hasErrors(issues), issues, result.output(), snapshot.files());
                 });
@@ -706,6 +716,15 @@ public class MdlPublishService {
         }
 
         Path projectDir = workspace.copyToStaging(groupId);
+        // spec149: tables publish independently; unreviewed caliber changes and hand-written
+        // Cubes stay out of this version (warnings), the published calibers keep serving.
+        issues.addAll(
+                CaliberReviews.stage(
+                        workspace.workspaceRoot(groupId),
+                        projectDir,
+                        props.groupRoot(groupId).resolve("published")));
+        issues.addAll(CaliberCompiler.ruleWarnings(projectDir));
+        snapshot = shipped(snapshot, projectDir);
 
         WrenCli.Result validation =
                 wrenCli.run(
@@ -731,13 +750,15 @@ public class MdlPublishService {
         issues.addAll(buildChecks.dryRunSqlObjects(projectDir, snapshot, selection.external()));
         // ADR 0033 D6: every cube must survive its own SQL transformation before the snapshot.
         issues.addAll(buildChecks.dryRunCubes(projectDir, snapshot.cubes()));
+        // spec149: generated caliber assets must be exactly what their lists produce.
+        issues.addAll(CaliberCompiler.check(projectDir));
         if (hasErrors(issues)) {
             return failure(group, issues, build.output());
         }
 
         // spec091: confirmed questions must still plan against this build; failures are left out
         // of the snapshot and returned to the user without blocking the model release.
-        issues.addAll(dryPlanConfirmedQuestions(groupId, projectDir));
+        issues.addAll(dryPlanConfirmedQuestions(groupId, projectDir, selection.external()));
 
         Path groupRoot = props.groupRoot(groupId);
         Path preparedDir = groupRoot.resolve("published.next");
@@ -831,19 +852,115 @@ public class MdlPublishService {
                                                 sql,
                                                 "-d",
                                                 props.dataSource()));
-                        return plan.ok() ? null : planError(plan.output());
+                        if (!plan.ok()) return planError(plan.output());
+                        return explainDraft(groupId, scratch, List.of(sql)).get(0);
                     } finally {
                         workspace.deleteScratchQuietly(groupId);
                     }
                 });
     }
 
-    /** One SQL planned against the draft: the expanded SQL Wren would send, or the error. */
+    /** The workspace snapshot restricted to the Views and Cubes present in the staging copy. */
+    private static MdlWorkspaceReader.Snapshot shipped(
+            MdlWorkspaceReader.Snapshot snapshot, Path projectDir) {
+        return new MdlWorkspaceReader.Snapshot(
+                snapshot.files(),
+                snapshot.issues(),
+                snapshot.models(),
+                snapshot.relations(),
+                snapshot.cubes().stream()
+                        .filter(c -> Files.isRegularFile(projectDir.resolve(c.path())))
+                        .toList(),
+                snapshot.views().stream()
+                        .filter(v -> Files.isRegularFile(projectDir.resolve(v.path())))
+                        .toList());
+    }
+
+    /**
+     * spec149 P2: caliber verification expands each generated Cube query with the official
+     * {@code cube query --sql-only} on one scratch build of the draft, then EXPLAINs the expanded
+     * SQL; no rows are read. {@code sql} of each plan is the argument line shown to the reviewer.
+     */
+    public List<DraftPlan> planDraftCubeQueries(String groupId, List<List<String>> queries) {
+        return workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    try {
+                        Path scratch = workspace.copyToScratch(groupId);
+                        WrenCli.Result build =
+                                wrenCli.run(scratch, props.timeout(), List.of("context", "build"));
+                        List<DraftPlan> out = new ArrayList<>();
+                        for (List<String> query : queries) {
+                            String line = String.join(" ", query);
+                            if (!build.ok()) {
+                                out.add(
+                                        new DraftPlan(
+                                                line, null, "草稿编译失败：" + planError(build.output())));
+                                continue;
+                            }
+                            List<String> args = new ArrayList<>(List.of("cube", "query"));
+                            args.addAll(query);
+                            args.add("--sql-only");
+                            WrenCli.Result plan = wrenCli.run(scratch, props.timeout(), args);
+                            String expanded = plan.output() == null ? "" : plan.output().strip();
+                            out.add(
+                                    plan.ok() && !expanded.isEmpty()
+                                            ? new DraftPlan(line, expanded, null)
+                                            : new DraftPlan(line, null, planError(plan.output())));
+                        }
+                        List<Integer> planned = new ArrayList<>();
+                        for (int i = 0; i < out.size(); i++)
+                            if (out.get(i).error() == null) planned.add(i);
+                        if (!planned.isEmpty()) {
+                            List<String> errors =
+                                    explainDraft(
+                                            groupId,
+                                            scratch,
+                                            planned.stream()
+                                                    .map(i -> out.get(i).expanded())
+                                                    .toList());
+                            for (int k = 0; k < planned.size(); k++) {
+                                if (errors.get(k) == null) continue;
+                                DraftPlan p = out.get(planned.get(k));
+                                out.set(
+                                        planned.get(k),
+                                        new DraftPlan(p.sql(), p.expanded(), errors.get(k)));
+                            }
+                        }
+                        return out;
+                    } finally {
+                        workspace.deleteScratchQuietly(groupId);
+                    }
+                });
+    }
+
+    /** EXPLAINs SQL already planned on the scratch build, with the group's publish connection. */
+    private List<String> explainDraft(String groupId, Path scratch, List<String> sqls) {
+        List<DatasetEntity> datasets = datasetRepository.findByGroupId(groupId);
+        String refused = datasets.isEmpty() ? "知识库内没有数据集，无法校验 SQL" : null;
+        WrenSourceSelection selection = refused == null ? selectWrenSource(datasets) : null;
+        if (selection != null && selection.error() != null) refused = selection.error();
+        if (refused != null) {
+            String error = refused;
+            return sqls.stream().map(sql -> error).toList();
+        }
+        try {
+            return buildChecks.explainAll(scratch, sqls, selection.external());
+        } catch (DatasetException e) {
+            return sqls.stream().map(sql -> e.getMessage()).toList();
+        }
+    }
+
+    /**
+     * One SQL planned against the draft: the expanded SQL Wren would send, or the error. Since
+     * spec149 an EXPLAIN failure keeps the expansion and adds the error, so it cannot pass.
+     */
     public record DraftPlan(String sql, String expanded, String error) {}
 
     /**
      * spec114 / ADR0132: verification only reads SQL. Each SQL is planned with the official
-     * {@code dry-plan} on one scratch build of the draft; nothing reaches the database.
+     * {@code dry-plan} on one scratch build of the draft, then EXPLAINed (spec149 P0) so unknown
+     * columns fail; no rows are read.
      */
     public List<DraftPlan> planDraft(String groupId, List<String> sqls) {
         return workspace.withWorkspaceLock(
@@ -881,6 +998,26 @@ public class MdlPublishService {
                                                     null)
                                             : new DraftPlan(sql, null, planError(plan.output())));
                         }
+                        // spec149 P0: dry-plan does not resolve columns; planned SQL must also
+                        // pass the database's EXPLAIN, keeping the expansion for the reviewer.
+                        List<Integer> planned = new ArrayList<>();
+                        for (int i = 0; i < out.size(); i++) {
+                            if (out.get(i).error() == null) planned.add(i);
+                        }
+                        if (!planned.isEmpty()) {
+                            List<String> errors =
+                                    explainDraft(
+                                            groupId,
+                                            scratch,
+                                            planned.stream().map(i -> out.get(i).sql()).toList());
+                            for (int k = 0; k < planned.size(); k++) {
+                                if (errors.get(k) == null) continue;
+                                DraftPlan p = out.get(planned.get(k));
+                                out.set(
+                                        planned.get(k),
+                                        new DraftPlan(p.sql(), p.expanded(), errors.get(k)));
+                            }
+                        }
                         return out;
                     } finally {
                         workspace.deleteScratchQuietly(groupId);
@@ -899,8 +1036,11 @@ public class MdlPublishService {
         return firstLine(output);
     }
 
-    private List<MdlIssue> dryPlanConfirmedQuestions(String groupId, Path projectDir) {
+    private List<MdlIssue> dryPlanConfirmedQuestions(
+            String groupId, Path projectDir, ExternalDataSourceEntity external) {
         List<MdlIssue> issues = new ArrayList<>();
+        Map<String, String> failures = new LinkedHashMap<>();
+        Map<String, String> planned = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : questionStore.confirmedSql(groupId).entrySet()) {
             WrenCli.Result result =
                     wrenCli.run(
@@ -912,15 +1052,33 @@ public class MdlPublishService {
                                     entry.getValue(),
                                     "-d",
                                     props.dataSource()));
-            if (result.ok()) continue;
-            String reason = "发布检查未通过，未进入本次发布：" + planError(result.output());
+            if (result.ok()) planned.put(entry.getKey(), entry.getValue());
+            else failures.put(entry.getKey(), planError(result.output()));
+        }
+        // spec149 P0: dry-plan does not resolve columns, so planned questions are also EXPLAINed.
+        // An unavailable connection only warns; it must not revoke confirmations.
+        if (!planned.isEmpty()) {
             try {
-                Files.deleteIfExists(projectDir.resolve("knowledge/sql/" + entry.getKey() + ".md"));
+                List<String> keys = List.copyOf(planned.keySet());
+                List<String> errors =
+                        buildChecks.explainAll(projectDir, List.copyOf(planned.values()), external);
+                for (int i = 0; i < keys.size(); i++) {
+                    if (errors.get(i) != null) failures.put(keys.get(i), errors.get(i));
+                }
+            } catch (DatasetException e) {
+                issues.add(issue("warning", "问答数据库校验未执行：" + e.getMessage(), "questions"));
+            }
+        }
+        for (Map.Entry<String, String> failure : failures.entrySet()) {
+            String reason = "发布检查未通过，未进入本次发布：" + failure.getValue();
+            try {
+                Files.deleteIfExists(
+                        projectDir.resolve("knowledge/sql/" + failure.getKey() + ".md"));
             } catch (IOException e) {
                 throw new DatasetException("移除未通过检查的问答失败：" + e.getMessage(), e);
             }
-            questionStore.revokeConfirmation(groupId, entry.getKey(), reason);
-            String text = questionStore.requireQuestion(groupId, entry.getKey()).question();
+            questionStore.revokeConfirmation(groupId, failure.getKey(), reason);
+            String text = questionStore.requireQuestion(groupId, failure.getKey()).question();
             issues.add(issue("warning", "「" + text + "」" + reason, "questions"));
         }
         return issues;

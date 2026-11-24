@@ -663,6 +663,99 @@ class OfficialWrenToolkitTest {
     }
 
     /**
+     * spec149: only the caliber turn writes calibers/; a list must compile, its View and Cube are
+     * regenerated and read-only, and a document draft never overwrites a row a person set.
+     */
+    @Test
+    void caliberTurnWritesCompilingListsAndKeepsGeneratedAssetsAndHumanRowsSafe() throws Exception {
+        var root = access.resolve(alice).root();
+        Files.createDirectories(root.resolve("models/vip_m"));
+        Files.writeString(
+                root.resolve("models/vip_m/metadata.yml"),
+                "name: vip_m\n"
+                        + "columns:\n"
+                        + "  - {name: period_id, type: INTEGER}\n"
+                        + "  - {name: cnt_zd, type: BIGINT}\n"
+                        + "  - {name: vip_type_6, type: VARCHAR}\n");
+        Files.createDirectories(root.resolve("raw/docs"));
+        Files.writeString(root.resolve("raw/docs/会员.md"), "# 会员口径\n\n适用模型：`vip_m`\n");
+        String list =
+                """
+                model: vip_m
+                name: vip
+                scenario:
+                  subject: 会员规模
+                  time: {column: period_id, grain: month, format: yyyymm}
+                  measures:
+                    - {column: cnt_zd, name: members, label: 会员数}
+                calibers:
+                  - {name: 足球通, where: {vip_type_6: 足球通会员}}
+                  - {name: 篮球通, where: {vip_type_6: 篮球通会员}}
+                """;
+
+        // Outside the caliber turn the list is readable but not writable.
+        assertThat(files.write(alice, "calibers/vip.yml", list).error()).contains("起草口径清单的轮次");
+
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.CALIBER));
+        assertThat(
+                        files.write(
+                                        alice,
+                                        "calibers/vip.yml",
+                                        list.replace("vip_type_6: 足", "vip_type_9: 足"))
+                                .error())
+                .contains("vip_type_9", "不在模型 vip_m");
+        assertThat(files.write(alice, "calibers/sub/vip.yml", list).isSuccess()).isFalse();
+        assertThat(files.write(alice, "models/vip_m/metadata.yml", "name: vip_m\n").error())
+                .contains("本轮只起草口径清单");
+        assertThat(files.write(alice, "calibers/vip.yml", list).isSuccess()).isTrue();
+        assertThat(root.resolve("views/vip_caliber/metadata.yml")).exists();
+        assertThat(root.resolve("cubes/vip_metrics/metadata.yml")).exists();
+        assertThat(files.read(alice, "calibers/vip.yml", 0, 100).isSuccess()).isTrue();
+
+        var sources = io.agentscope.dataagent.dataset.CaliberSources.read(root);
+        assertThat(sources.rows().get("calibers/vip.yml").get("足球通").document()).isEqualTo("会员.md");
+        assertThat(sources.documents().get("calibers/vip.yml")).containsKey("会员.md");
+
+        // A person's edit of 篮球通 (P3 entry) must survive a later document draft.
+        var state = io.agentscope.dataagent.dataset.CaliberSources.read(root);
+        var rows = new java.util.LinkedHashMap<>(state.rows().get("calibers/vip.yml"));
+        var basketball = rows.get("篮球通");
+        rows.put(
+                "篮球通",
+                new io.agentscope.dataagent.dataset.CaliberSources.RowSource(
+                        "edit", null, "alice", basketball.at(), basketball.hash()));
+        var all = new java.util.TreeMap<>(state.rows());
+        all.put("calibers/vip.yml", rows);
+        Files.writeString(
+                root.resolve(".platform/caliber-sources.json"),
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(
+                                new io.agentscope.dataagent.dataset.CaliberSources.State(
+                                        all, state.conflicts(), state.documents())));
+        String redrafted = list.replace("vip_type_6: 篮球通会员", "vip_type_6: 篮球会员");
+        assertThat(files.write(alice, "calibers/vip.yml", redrafted).error())
+                .contains("篮球通", "文档起草不能覆盖");
+        assertThat(Files.readString(root.resolve("calibers/vip.yml"))).contains("篮球通会员");
+        assertThat(io.agentscope.dataagent.dataset.CaliberSources.read(root).conflicts())
+                .singleElement()
+                .satisfies(c -> assertThat(c.caliber()).isEqualTo("篮球通"));
+
+        // Generated files change only through their list, even in an asset turn.
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.ASSET));
+        assertThat(
+                        files.write(alice, "views/vip_caliber/metadata.yml", "name: vip_caliber\n")
+                                .error())
+                .contains("由口径清单生成");
+        assertThat(files.write(alice, "calibers/vip.yml", list).isSuccess()).isFalse();
+    }
+
+    /**
      * spec114: the coach writes question files only, and a question with an open card keeps an
      * empty SQL until the answer (2026-11-03: rule and SQL written on an invented confirmation).
      */

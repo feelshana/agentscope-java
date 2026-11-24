@@ -1,0 +1,53 @@
+.cp-pane { display: flex; flex-direction: column; }
+.cp-layout { display: grid; grid-template-columns: minmax(180px, 220px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cp-list { display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; }
+.cp-item { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 10px 12px; border: 1px solid var(--da-border); border-radius: 8px; background: var(--da-surface); color: var(--da-text); font: inherit; cursor: pointer; min-width: 0; }
+.cp-item-on { border-color: var(--da-primary); box-shadow: 0 0 0 1px var(--da-primary); }
+.cp-item-name { font-weight: 600; font-size: 12px; overflow-wrap: anywhere; }
+.cp-item-meta { display: flex; align-items: center; gap: 8px; }
+.cp-item-subject { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cp-detail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cp-detail-head { display: flex; align-items: flex-start; gap: 12px; }
+.cp-detail-head p { margin: 4px 0 0; overflow-wrap: anywhere; }
+.cp-model { font-size: 15px; overflow-wrap: anywhere; }
+.cp-subject { font-size: 13px; color: var(--da-text); }
+.cp-table-wrap { overflow-x: auto; border: 1px solid var(--da-border); border-radius: 8px; }
+.cp-table { min-width: 820px; table-layout: fixed; width: 100%; }
+.cp-table td, .cp-table th { vertical-align: top; overflow-wrap: anywhere; }
+.cp-col-name { width: 150px; }
+.cp-col-group { width: 100px; }
+.cp-col-pending { width: 170px; }
+.cp-col-check { width: 90px; }
+.cp-col-source { width: 64px; }
+.cp-conditions { list-style: none; margin: 0; padding: 0; font-size: 12px; line-height: 1.7; }
+.cp-conditions code { font-size: 11px; color: var(--da-text-muted); }
+.cp-unrestricted { color: var(--da-text-muted); }
+.cp-note { margin-top: 4px; }
+.cp-pending { font-size: 12px; line-height: 1.6; padding: 4px 8px; border-left: 3px solid var(--da-warn); background: color-mix(in srgb, var(--da-warn) 8%, var(--da-surface)); border-radius: 4px; margin: 2px 0; }
+.cp-ok { font-size: 12px; color: var(--da-success); }
+.cp-foot { margin: 0; }
+@media (max-width: 720px) {
+  .cp-layout { grid-template-columns: 1fr; }
+  .cp-list { position: static; }
+  .cp-detail-head { flex-direction: column; }
+}
+.cp-col-pick { width: 32px; }
+.cp-col-state { width: 84px; }
+.cp-tag-problem { background: color-mix(in srgb, var(--da-danger, #c0392b) 10%, var(--da-surface)); color: var(--da-danger, #c0392b); }
+.cp-progress { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--da-warn) 8%, var(--da-surface)); font-size: 12px; }
+.cp-progress-ok { background: color-mix(in srgb, var(--da-success) 8%, var(--da-surface)); }
+.cp-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.cp-check { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; }
+.cp-verify { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--da-border); border-radius: 8px; }
+.cp-verify-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.cp-case { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid var(--da-border); }
+.cp-case-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+.cp-verdict { display: inline-flex; gap: 12px; font-size: 12px; }
+.cp-verdict label { display: inline-flex; gap: 4px; align-items: center; }
+.cp-sql { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; background: var(--da-surface-sunken); padding: 8px; border-radius: 6px; max-height: 320px; overflow: auto; margin: 6px 0 0; }
+.cp-generated summary { cursor: pointer; }
+.cp-scenario { border: 1px solid var(--da-border); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; }
+.cp-scenario-grid { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 13px; }
+.cp-scenario-grid dt { color: var(--da-text-muted, var(--da-text)); }
+.cp-scenario-grid dd { margin: 0; overflow-wrap: anywhere; }
+.cp-scenario-list { margin: 0; padding-left: 16px; }

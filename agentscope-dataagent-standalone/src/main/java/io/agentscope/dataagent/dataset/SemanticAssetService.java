@@ -470,7 +470,8 @@ public class SemanticAssetService {
             }
         }
         if (!runnable.isEmpty()) {
-            // spec114 / ADR0132: verification reads SQL only; the plan never reaches the database.
+            // spec114 / ADR0132: verification reads SQL only; spec149 adds an EXPLAIN, no rows
+            // read.
             groups.getGroup(actor, groupId);
             var plans = publisher.planDraft(groupId, runnable.stream().map(Check::sql).toList());
             for (int i = 0; i < runnable.size(); i++) {

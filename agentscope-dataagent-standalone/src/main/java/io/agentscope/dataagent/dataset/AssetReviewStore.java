@@ -104,7 +104,9 @@ public class AssetReviewStore {
         Map<String, Review> reviews = load(draft);
         List<Asset> assets = new ArrayList<>();
         MdlWorkspaceReader.Snapshot snapshot = reader.read(groupId);
-        for (var view : snapshot.views())
+        for (var view : snapshot.views()) {
+            // spec149: caliber Views are reviewed row by row on the caliber page, not here.
+            if (CaliberCompiler.isGeneratedPath(draft, view.path())) continue;
             assets.add(
                     asset(
                             KIND_VIEW,
@@ -115,6 +117,7 @@ public class AssetReviewStore {
                             draft,
                             published,
                             reviews));
+        }
         for (var model : snapshot.models()) {
             // A model without table_reference is a ref_sql model even before its SQL is written.
             boolean physical = model.tableName() != null && !model.tableName().isBlank();

@@ -23,7 +23,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class BusinessDocumentService {
     public static final String DIRECTORY = "raw/docs";
-    public static final int MAX_DOCUMENTS = 20;
+    // spec149: one document per table (or a few) instead of a single long, truncated document.
+    public static final int MAX_DOCUMENTS = 100;
     public static final int MAX_CHARS = 20000;
     private static final String HISTORY = ".platform/docs-history";
     private static final Pattern NAME = Pattern.compile("[\\p{L}\\p{N}_\\-. ]{1,80}");
@@ -39,6 +40,50 @@ public class BusinessDocumentService {
     /** ADDED since publish, MODIFIED (replaced), UNCHANGED, or DELETED in the draft. */
     public record Document(
             String name, String status, int chars, String updatedAt, int previousVersions) {}
+
+    private static final Pattern DECLARED =
+            Pattern.compile("^[\\s>*\\-#]*适用(?:模型|表)[^:：\\n]{0,8}[:：](.+)$", Pattern.MULTILINE);
+    private static final Pattern QUOTED = Pattern.compile("`([\\p{L}\\p{N}_]+)`");
+    private static final Pattern MODEL_NAME = Pattern.compile("[\\p{L}\\p{N}_]+");
+    private static final int DECLARATION_LINES = 40;
+
+    /**
+     * Models a document declares in its opening lines ("适用模型：`a`、`b`", spec149). A document
+     * without the line applies to the whole knowledge base.
+     */
+    public static List<String> declaredModels(String text) {
+        if (text == null) return List.of();
+        String head = String.join("\n", text.lines().limit(DECLARATION_LINES).toList());
+        Set<String> out = new LinkedHashSet<>();
+        var line = DECLARED.matcher(head);
+        while (line.find()) {
+            String value = line.group(1);
+            // Backticked names are exact; otherwise names run to the end of the first sentence.
+            var quoted = QUOTED.matcher(value);
+            boolean any = false;
+            while (quoted.find()) {
+                out.add(quoted.group(1));
+                any = true;
+            }
+            if (any) continue;
+            var name = MODEL_NAME.matcher(value.split("[。；;]", 2)[0]);
+            while (name.find()) out.add(name.group());
+        }
+        return List.copyOf(out);
+    }
+
+    /** Documents declaring a model, with a hash of their current content, by file name. */
+    public static java.util.Map<String, String> documentsFor(Path root, String model) {
+        java.util.Map<String, String> out = new java.util.TreeMap<>();
+        Path directory = root.resolve(DIRECTORY);
+        for (String name : names(directory)) {
+            String text = read(directory.resolve(name));
+            if (text == null) continue;
+            if (declaredModels(text).stream().anyMatch(m -> m.equalsIgnoreCase(model)))
+                out.put(name, CaliberSources.sha(text));
+        }
+        return out;
+    }
 
     public static boolean hasDocuments(Path root) {
         Path directory = root.resolve(DIRECTORY);

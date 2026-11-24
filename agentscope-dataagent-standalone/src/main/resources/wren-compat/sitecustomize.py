@@ -1,4 +1,4 @@
-"""Process-local workaround for wrenai 0.15.0's MySQL LIMIT composition bug.
+"""Process-local workaround for wrenai's MySQL LIMIT composition bug (0.15.0, 0.18.0).
 
 Loaded only in platform-owned Wren subprocesses. Never changes installed files.
 Remove after upgrading to an upstream release with equivalent regression tests.
@@ -6,16 +6,28 @@ Remove after upgrading to an upstream release with equivalent regression tests.
 
 import os
 
+# Versions verified to still append LIMIT blindly; others are left untouched.
+PATCHED_VERSIONS = ("0.15.0", "0.18.0")
 
-def apply_limit(sql, limit):
+
+def _strip(sql, dialect):
+    from wren.connector.base import strip_trailing_semicolon
+
+    # 0.18 added an optional dialect argument; 0.15 accepts the SQL only.
+    if dialect is None:
+        return strip_trailing_semicolon(sql)
+    return strip_trailing_semicolon(sql, dialect)
+
+
+def apply_limit(sql, limit, dialect=None):
     from sqlglot import exp, parse
-    from wren.connector.base import coerce_limit, strip_trailing_semicolon
+    from wren.connector.base import coerce_limit
 
     limit = coerce_limit(limit)
     if limit is None:
-        return strip_trailing_semicolon(sql)
-    cleaned = strip_trailing_semicolon(sql)
-    statements = [s for s in parse(cleaned, read="mysql") if s is not None]
+        return _strip(sql, dialect)
+    cleaned = _strip(sql, dialect)
+    statements = [s for s in parse(cleaned, read=dialect or "mysql") if s is not None]
     if len(statements) != 1 or not isinstance(statements[0], exp.Query):
         raise ValueError("Wren 限行兼容仅支持单条查询")
     outer = statements[0].args.get("limit")
@@ -36,7 +48,7 @@ def apply_limit(sql, limit):
 def install():
     from importlib.metadata import version
 
-    if version("wrenai") != "0.15.0":
+    if version("wrenai") not in PATCHED_VERSIONS:
         return
     from wren.connector import mysql
 

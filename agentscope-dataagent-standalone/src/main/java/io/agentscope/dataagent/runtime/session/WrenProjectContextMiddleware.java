@@ -187,7 +187,9 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
                                             || p.matches(
                                                     "knowledge/(rules|caveats|glossary|metrics|questions)/[^/]+")
                                             || p.equals("knowledge/knowledge.yml")
-                                            || p.matches("raw/docs/[^/]+"))
+                                            || p.matches("raw/docs/[^/]+")
+                                            // spec149: caliber lists (read-only outside their turn)
+                                            || p.matches("calibers/[^/]+\\.yml"))
                     .filter(p -> !p.endsWith(".gitkeep"))
                     .sorted()
                     .limit(200)

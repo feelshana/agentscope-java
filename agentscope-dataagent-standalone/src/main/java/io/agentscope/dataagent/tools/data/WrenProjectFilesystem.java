@@ -193,6 +193,53 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
         }
     }
 
+    /**
+     * spec149: a caliber list is the single source of its generated View and Cube. A change must
+     * compile against the models, must not take over a hand-written asset's name, and must not
+     * overwrite rows a person set (recorded as conflicts instead). Returns null when accepted.
+     */
+    static String caliberGuard(
+            RuntimeContext context, Project p, String relative, String before, String after) {
+        if (!relative.startsWith(io.agentscope.dataagent.dataset.CaliberList.DIRECTORY + "/"))
+            return null;
+        String model = null;
+        if (after != null) {
+            var compiled =
+                    io.agentscope.dataagent.dataset.CaliberCompiler.compile(
+                            p.root(), relative, after);
+            if (!compiled.ok())
+                return "未写入：口径清单有问题，请修正后重写：\n- " + String.join("\n- ", compiled.errors());
+            for (String generated : List.of(compiled.viewPath(), compiled.cubePath())) {
+                Path existing = p.root().resolve(generated);
+                if (Files.isRegularFile(existing)
+                        && !io.agentscope.dataagent.dataset.CaliberCompiler.isGeneratedPath(
+                                p.root(), generated))
+                    return "未写入：" + generated + " 已是手工建设的资产，请在口径清单中另写 name 避免同名。";
+            }
+            model = compiled.list().model();
+        } else if (before != null) {
+            var parsed = io.agentscope.dataagent.dataset.CaliberList.parse(relative, before);
+            model = parsed.list() == null ? null : parsed.list().model();
+        }
+        return io.agentscope.dataagent.dataset.CaliberSources.apply(
+                p.root(),
+                relative,
+                before,
+                after,
+                io.agentscope.dataagent.dataset.CaliberSources.DOCUMENT,
+                context == null ? p.ownerId() : context.getUserId(),
+                model == null
+                        ? java.util.Map.of()
+                        : io.agentscope.dataagent.dataset.BusinessDocumentService.documentsFor(
+                                p.root(), model));
+    }
+
+    /** Regenerates caliber Views and Cubes after a list changed. */
+    private static void caliberSync(Project p, String relative) {
+        if (relative.startsWith(io.agentscope.dataagent.dataset.CaliberList.DIRECTORY + "/"))
+            io.agentscope.dataagent.dataset.CaliberCompiler.sync(p.root());
+    }
+
     /** Annotates the draft diff with the turn's source and user (never blocks the write). */
     private static void recordChange(RuntimeContext context, Project p, String relative) {
         var purpose =
@@ -222,8 +269,11 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                         if (refused == null) refused = rulesGuard(context, p, relative);
                         if (refused == null) refused = assetDateGuard(p, relative, content);
                         if (refused == null) refused = awaitingGuard(p, relative, content);
-                        if (refused != null) return WriteResult.fail(refused);
                         Path file = p.root().resolve(relative);
+                        if (refused == null)
+                            refused =
+                                    caliberGuard(context, p, relative, readQuietly(file), content);
+                        if (refused != null) return WriteResult.fail(refused);
                         WriteResult result;
                         if (Files.isRegularFile(file)) {
                             // Whole-file replacement of an existing project file: the native
@@ -239,6 +289,7 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                             result = delegate(p).write(context, relative, content);
                         }
                         if (result.isSuccess()) {
+                            caliberSync(p, relative);
                             access.changed(p);
                             recordChange(context, p, relative);
                         }
@@ -270,6 +321,8 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                         String invalid = yamlError(relative, edited);
                         if (invalid == null) invalid = assetDateGuard(p, relative, edited);
                         if (invalid == null) invalid = awaitingGuard(p, relative, edited);
+                        if (invalid == null)
+                            invalid = caliberGuard(context, p, relative, original, edited);
                         if (invalid != null) {
                             // Restore the previous bytes so a broken edit never lands on disk.
                             try {
@@ -281,6 +334,7 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                             }
                             return EditResult.fail(invalid);
                         }
+                        caliberSync(p, relative);
                         access.changed(p);
                         recordChange(context, p, relative);
                         return result;
@@ -458,9 +512,12 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                             String relative = checked(p, path, true);
                             String refused = coachGuard(p, relative);
                             if (refused == null) refused = rulesGuard(c, p, relative);
+                            if (refused == null && Files.isRegularFile(file))
+                                refused = caliberGuard(c, p, relative, readQuietly(file), null);
                             if (refused != null) return WriteResult.fail(refused);
                             WriteResult result = delegate(p).delete(c, relative);
                             if (result.isSuccess()) {
+                                caliberSync(p, relative);
                                 access.changed(p);
                                 recordChange(c, p, relative);
                             }

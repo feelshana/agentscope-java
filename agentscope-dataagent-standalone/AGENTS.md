@@ -47,7 +47,7 @@
 1. **多租户与共享**：资源归属用 `ownerId`；知识库可见性经 `KnowledgeBaseAccessService` 的 QUERY/MANAGE 校验。`DatasetScope` 表示当前请求用户及本轮选库，不能把共享库 owner 当运行用户；null scope 不得扩大权限；共享写入受权限与资源锁约束，排队后复核撤权。
 2. **新 HTTP 端点**：参照 `ChatController` —— `(String) auth.getPrincipal()` 取 userId → `AgentAccessGuard.require(userId, agentId, Tier.X)` → 需要时记审计/用量；数据集类接口在服务层再做 owner 校验（参照 `DatasetService#get`）。
 3. **查询边界**：语义查询只经官方 MCP/CLI，只读、遵守 strict_mode 已声明模型边界，允许官方 LIMIT/OFFSET，不改写官方 MDL；禁止物理 SQL 回退或平台业务路由。`WrenQueryAccess` 校验本轮范围和 QUERY，调用前及排队后复核撤权。
-4. **建模写面**：只通过原生 `write_file`/`edit_file` 和 `wren_cli` 修改当前用户有 MANAGE 的单库草稿；禁写平台文件、禁止路径逃逸、任意 shell 与 profile 切换。基础建模维护模型、关系与 knowledge，Cube/View 不读不写；View、ref_sql 只在页面声明的资产轮次起草（问数优化用 `propose_modeling_change` 提议规则、关系、计算字段，不提议 View；建模对话仅在用户明确要求时提议 View 并直接起草），验证只核对 dry-plan 展开的 SQL、不执行，核查和验证结论只能由人写入（ADR0128、ADR0132）；问答对不由建模生成。
+4. **建模写面**：只通过原生 `write_file`/`edit_file` 和 `wren_cli` 修改当前用户有 MANAGE 的单库草稿；禁写平台文件、禁止路径逃逸、任意 shell 与 profile 切换。基础建模维护模型、关系与 knowledge，Cube/View 不读不写；口径清单 `calibers/` 只在页面声明的口径轮次照抄业务文档写入，其生成的 View/Cube 任何轮次不可直接改（spec149）；View、ref_sql 只在页面声明的资产轮次起草（问数优化用 `propose_modeling_change` 提议规则、关系、计算字段，不提议 View；建模对话仅在用户明确要求时提议 View 并直接起草），验证核对 dry-plan 展开的 SQL 并经 EXPLAIN 解析列名、不读取数据，核查和验证结论只能由人写入（ADR0128、ADR0132）；问答对不由建模生成。
 5. **上传数据集物理表**：一律 `ds_` 前缀落在数据集 MySQL。
 6. **知识库范围**：每轮有效授权范围同时写 `ConversationScopeRegistry` 和 RuntimeContext 的 `DatasetScope`，问数仅零/单库、建模限定单库，多库/全选拒绝；历史多库重新选择；`done.sessionKey` 是 conversationId。
 7. **语言**：代码注释/Javadoc 用英文；面向 LLM 的文本（`@Tool` 描述、系统提示词、SKILL.md、图表标题、返回给模型的错误信息）用简体中文。
@@ -74,7 +74,7 @@
 - 建模变更治理：修改直接进入草稿，在每轮"AI 建模结果"中逐条查看、编辑，草稿栏统一发布，不逐项确认（ADR0111、spec092 §7）；例外是 View、ref_sql 须逐项核查和问题验证后才能发布（ADR0128）；初次建模只做基础；问数优化按常用问题分析缺口，只提议规则、关系、计算字段（关联靠关系，ADR0133）：默认过滤只写 `## Default filters` 规则；查询模板（公共视图）只在用户明确要求时起草、配 `## Canonical tables` 规则，日后从已确认问答提炼；加工表不作默认，问数不做平台路由（ADR0129、ADR0131）；无业务文档的自动建模不写业务规则；业务文档多份、只由用户上传。
 - 问答：只来自用户逐题确认、问数点赞与资产验证确认，发布后可被召回；确认后其依赖的模型、资产、关系或规则有变化时待复核，复核前不作为示例发布（ADR0130）。
 - 时间门禁：外部数据源事实表窗口存平台数据库，不写入 MDL；建模、问数、问题验证共用逐表检查，已发布 View、ref_sql 继承依赖表窗口；上传表不设门禁。
-- 问数：只有登记了受限事实表的库才"缺日期先问"；统计必须来自 SQL 返回值。
+- 问数：只有登记了受限事实表的库才"缺日期先问"；统计必须来自 SQL 返回值；口径指标先按业务×统计对象选表，`query_cube` 须按口径名筛选或分组、范围维度逐一指定或分组，口径名不在清单时拒绝并提示先问；有已发布口径清单的原表不得 `run_sql`（spec149）。
 - 工程整合：模型切换为全局管理员手动操作，每轮及辅助调用固定快照；不自动切公网；会话使用框架持久存储。SQL 问题投影仅在问题列表按修订流程维护，不绕过确认。
 - 容量默认值均为单进程预算，不能描述为分布式全局容量。
 

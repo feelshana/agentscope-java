@@ -209,6 +209,74 @@ class MdlBuildChecksTest {
         verifyNoInteractions(profiles);
     }
 
+    @Test
+    void cubeMembersNamedAfterTheirOwnColumnAreRejectedBeforeTheDryRun() {
+        answer(args -> new WrenCli.Result(0, ""));
+        var selfMeasure =
+                new MdlWorkspaceReader.WorkspaceMember(
+                        "member_count", "SUM(member_count)", "BIGINT", "");
+        var renamed =
+                new MdlWorkspaceReader.WorkspaceMember(
+                        "members", "SUM(\"member_count\")", "BIGINT", "");
+        var selfDimension =
+                new MdlWorkspaceReader.WorkspaceMember(
+                        "Member_Name", "\"member_name\"", "VARCHAR", "");
+        var literal =
+                new MdlWorkspaceReader.WorkspaceMember(
+                        "label", "CASE WHEN x = 'label' THEN 1 END", "INT", "");
+        var function = new MdlWorkspaceReader.WorkspaceMember("count", "COUNT(*)", "BIGINT", "");
+        var broken =
+                new MdlWorkspaceReader.WorkspaceCube(
+                        "broken",
+                        "v",
+                        "",
+                        List.of(selfMeasure),
+                        List.of(selfDimension),
+                        List.of(),
+                        "cubes/broken");
+        var fine =
+                new MdlWorkspaceReader.WorkspaceCube(
+                        "fine",
+                        "v",
+                        "",
+                        List.of(renamed, function),
+                        List.of(literal),
+                        List.of(),
+                        "cubes/fine");
+
+        var issues = checks.dryRunCubes(project, List.of(broken, fine));
+
+        assertThat(issues).hasSize(2).allSatisfy(i -> assertThat(i.source()).isEqualTo("local"));
+        assertThat(issues.get(0).message()).contains("broken", "member_count", "改名");
+        assertThat(issues.get(1).message()).contains("Member_Name");
+        assertThat(calls).extracting(c -> c.get(3)).containsExactly("fine");
+    }
+
+    @Test
+    void explainReportsRejectedSqlPerCaseButAnUnavailableConnectionAsAnException() {
+        when(profiles.connectionInfo(any())).thenReturn(Map.of("host", "db"));
+        answer(
+                args ->
+                        new WrenCli.Result(
+                                args.get(2).contains("nosuch") ? 1 : 0,
+                                "Unknown column 'nosuch'\nmore"));
+
+        var errors =
+                checks.explainAll(
+                        project, List.of("SELECT a FROM t", "SELECT nosuch FROM t"), null);
+
+        assertThat(errors).containsExactly(null, "数据库校验未通过：Unknown column 'nosuch'");
+        assertThat(calls)
+                .allSatisfy(c -> assertThat(c.subList(0, 2)).containsExactly("dry-run", "-s"));
+        Path file = Path.of(calls.get(0).get(4));
+        assertThat(file).doesNotExist();
+
+        when(profiles.connectionInfo(any())).thenThrow(new DatasetException("未配置数据集库连接"));
+        assertThatThrownBy(() -> checks.explainAll(project, List.of("SELECT 1"), null))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("未配置数据集库连接");
+    }
+
     private void answer(Function<List<String>, WrenCli.Result> response) {
         when(cli.run(any(), any(), any()))
                 .thenAnswer(

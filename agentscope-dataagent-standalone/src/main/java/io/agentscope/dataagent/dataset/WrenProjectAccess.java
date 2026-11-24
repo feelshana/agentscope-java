@@ -34,7 +34,14 @@ public final class WrenProjectAccess {
     // still take part in the official CLI's validate/build, which reads the project directly.
     private static final Set<String> CLOSED_ROOTS = Set.of("cubes", "views");
     private static final Set<String> READ_ROOTS =
-            Set.of("models", "relationships.yml", "knowledge", "raw", "target", "wren_project.yml");
+            Set.of(
+                    "models",
+                    "relationships.yml",
+                    "knowledge",
+                    "raw",
+                    "target",
+                    "wren_project.yml",
+                    CaliberList.DIRECTORY);
     private final DatasetGroupService groups;
     private final MdlWorkspaceService workspace;
     private final DatasetKnowledgeRepository knowledge;
@@ -70,13 +77,25 @@ public final class WrenProjectAccess {
             Path root,
             boolean assetTurn,
             // spec114 §8: the coach reads existing query templates to judge reuse, never writes.
-            boolean coachTurn) {
+            boolean coachTurn,
+            // spec149: drafting caliber lists from business documents.
+            boolean caliberTurn) {
         public Project(String ownerId, String groupId, String name, Path root) {
-            this(ownerId, groupId, name, root, false, false);
+            this(ownerId, groupId, name, root, false, false, false);
         }
 
         public Project(String ownerId, String groupId, String name, Path root, boolean assetTurn) {
-            this(ownerId, groupId, name, root, assetTurn, false);
+            this(ownerId, groupId, name, root, assetTurn, false, false);
+        }
+
+        public Project(
+                String ownerId,
+                String groupId,
+                String name,
+                Path root,
+                boolean assetTurn,
+                boolean coachTurn) {
+            this(ownerId, groupId, name, root, assetTurn, coachTurn, false);
         }
     }
 
@@ -100,14 +119,16 @@ public final class WrenProjectAccess {
         }
         Project project = resolve(scope.ownerId(), selected.get(0));
         ModelingTurnPurpose purpose = context.get(ModelingTurnPurpose.class);
-        if (purpose == null || !(purpose.asset() || purpose.coach())) return project;
+        if (purpose == null || !(purpose.asset() || purpose.coach() || purpose.caliber()))
+            return project;
         return new Project(
                 project.ownerId(),
                 project.groupId(),
                 project.name(),
                 project.root(),
                 purpose.asset(),
-                purpose.coach());
+                purpose.coach(),
+                purpose.caliber());
     }
 
     public Project resolve(String owner, String group) {
@@ -163,6 +184,27 @@ public final class WrenProjectAccess {
         if (!resolved.startsWith(project.root())) throw new DatasetException("工程路径越界", 403);
         assertNoLinks(resolved);
         if (write) {
+            // spec149: generated caliber Views and Cubes change only through their list.
+            if (openView && CaliberCompiler.isGeneratedPath(project.root(), relative)) {
+                throw new DatasetException("这是由口径清单生成的查询模板，不能直接修改；请修改 calibers/ 下对应的口径清单。", 403);
+            }
+            String lowerPath = relative.toLowerCase(Locale.ROOT);
+            boolean caliberFile = first.equals(CaliberList.DIRECTORY);
+            if (caliberFile && !project.caliberTurn()) {
+                throw new DatasetException("口径清单只在起草口径清单的轮次中修改；需要时提示用户在语义模型页点“起草口径清单”。", 403);
+            }
+            if (caliberFile && !lowerPath.matches("calibers/[a-z0-9_-]{1,64}\\.yml")) {
+                throw new DatasetException(
+                        "口径清单只能写 calibers/<名称>.yml（名称用小写字母、数字、下划线），不要创建子目录或其他文件。", 403);
+            }
+            // The caliber turn drafts lists and may rewrite rules that duplicate them, nothing
+            // else.
+            if (project.caliberTurn()
+                    && !caliberFile
+                    && !lowerPath.startsWith("knowledge/rules/")) {
+                throw new DatasetException(
+                        "本轮只起草口径清单：只能写 calibers/<名称>.yml，以及把 knowledge/rules/ 中重复的口径条件改写为指引。", 403);
+            }
             // spec090: Q&A pairs are written by MdlQuestionStore#decide after user confirmation
             // only.
             String sqlDir = relative.toLowerCase(Locale.ROOT);

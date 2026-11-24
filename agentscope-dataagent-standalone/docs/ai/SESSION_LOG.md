@@ -641,3 +641,37 @@ Java17选测20项、前端三前缀各25项、TS/样板构建与正式前端隔�
 9 张线上报表首次同步完成并已设计划。现有任务支持滚动调度扩展，普通源索引变化不再使已有任务因字段校验中止。测试覆盖跨年窗口、月报频率切换、空期保护和加索引后复用已有任务。未提交、未部署，未执行源表 DDL。
 
 用户授权提交并依次合入 `liyufan_dev`、`develop-2.0`。Python 表同步 20 项通过，含 7 项 MySQL 5.7→8 联调。合并前完整构建、打包通过，后端 1207 项零失败和错误、23 项条件跳过，前端三个部署前缀各通过 146 项。部署与源表索引变更由用户操作。
+
+## 2026-11-22 Asia/Shanghai · 示例只读源行数修正
+
+本机（Windows）搭建 E 盘 MySQL 8.4 与 wrenai 0.18.0 后，只读示例源 `demo_commerce_v1` 一直不可用：随包示例已精简为 20 位客户、1000 笔订单（ADR0134），`DemoDataService` 仍按 200/10000 行校验，导入被拒、只读账号未创建。修正行数并在 `DemoSampleFilesTest` 断言其与随包文件一致。重启后两表导入完成、只读账号可查（净销售额 202014.50）。`DemoSampleFilesTest`、`DemoDataServiceTest` 通过；`SyntheticDemoMysqlTest` 要求一次性 MySQL，未在开发库运行。未提交。注意：本机使用 wrenai 0.18.0，与随包固定的 0.15.0 不一致，LIMIT 兼容补丁不生效，建模/问数未在 0.18 下验收。
+
+2026-11-23 续：11-04 曾短暂随包 200 位客户、10000 笔订单（`642a4d44`→`5da15f09`），按 ADR0134"已有完整旧批次保留"把该批次加入完整行数判定并补 `DemoDataServiceTest` 用例。`DemoDataServiceTest`、`DemoSampleFilesTest`、`DocsConsistencyTest` 12 项通过。本机启动注意：`application-dev.yml` 被 pom 排除出构建，需 `--spring.config.additional-location` 显式加载；JDK 17 需 `-Djdk.net.unixdomain.tmpdir=E:/jdk-tmp`，否则报 loopback 错误。重启后日志 `Demo data source ready`。前端静态资源为当前前端源码的重新构建产物。未提交。
+
+## 2026-11-24 Asia/Shanghai · 对话建模与 Cube+View 问数对比
+
+用 `E:\总部常规性分析` 会员规模宽表与口径文档建两个知识库：A 仅对话建模，B 加文档口径 View 与 Cube（View 由用户核查、问题验证后发布 v1）。三问两边数值都能对上，A 每题 2–3 条 run_sql 且各有一次自纠，B 用 describe_cube/query_cube 一次取数。发现 CSV 字符集/BOM、字段筛选排除口径列、问题验证放过不存在列的 SQL 等问题，详见 `docs/test-reports/20261124-wren-dialog-vs-cube-view.md`。未改代码、未提交；是否引入类本体方式待用户决定。
+
+## 2026-11-24 Asia/Shanghai · spec149 确认与 P0 实施
+
+用户确认 spec149（多表口径清单）与 ADR0155，待确认项按建议。P0 完成：Wren 固定版本升到 0.18.0 / core 0.8.2，LIMIT 兼容补丁扩展到 0.18（接受 dialect 参数）；问题验证、问答保存与发布时问答检查在 dry-plan 后追加官方 dry-run（EXPLAIN），因 0.18 dry-plan 不解析列名，连接不可用时发布只告警不撤销确认；构建检查拒绝成员名与引用列同名的 Cube 成员。验证：相关类与单元通道 1136 项通过（28 项需 `-Djdk.net.unixdomain.tmpdir` 的本机回环问题，加参数后通过），真实 Wren 0.18 补丁回归、DocsConsistencyTest 通过；本机真实回归：B 问答改写为不存在列被 MySQL 1054 拒绝且不落盘，A 带 LIMIT 5 的 run_sql 返回 5 行。未提交；66 需按新 requirements 重装并回归，duckdb 2.x 等原生依赖在 Anolis 7.9（glibc 2.17）的兼容性未核对。P1 起未开始。
+
+## 2026-11-24 Asia/Shanghai · spec149 P1 口径清单
+
+新增口径清单 `calibers/<名称>.yml`（`CaliberList`、`CaliberCompiler` 生成 `<name>_caliber` 视图与 `<name>_metrics` 指标，同列多取值须 `combine: sum`；Wren 0.18 会把视图中双引号标识符转成字符串，生成时不加引号），口径轮次 `ModelingTurnPurpose#CALIBER` 独占写入，文件工具落盘前编译校验、记录行来源并拒绝覆盖人设定的行（`CaliberSources`），发布/校验要求生成文件与清单一致；业务文档上限 100 份并解析"适用模型"；`CaliberService`/`CaliberController` 与前端"口径"页签给出每表状态、行来源、冲突与取值检查（上传表平台统计并缓存，外部表只比采样）。验证：后端单元通道 1148 项、前端 149 项、DocsConsistencyTest、spotless 通过；本机真实口径轮次在知识库 B 起草 13 个口径（钻石/黄金被 combine 校验拦下后拆分并标待确认），规则中逐条条件改写为指引，Wren 0.18 取数 14 行与标准答案一致，11 列取值检查通过。浏览器面板隐藏，口径页签界面未目视验收；生成视图会出现在公共视图待核查（P2 处理）。未提交。
+
+## 2026-11-24 Asia/Shanghai · spec149 P2 口径核查与按表发布
+
+`CaliberReviews` 按内容哈希记录表说明与每行的核查、验证结论；`CaliberService#review/verify/verdict` 与 `CaliberController` 三个接口（MANAGE，锁内复核）；验证问题由平台按口径确定性生成 Cube 查询，`MdlPublishService#planDraftCubeQueries` 展开并 EXPLAIN、不执行。发布/校验用 `CaliberReviews#stage` 让未通过的清单退回已发布版本、手写 Cube 不发布（警告），`MdlPublishService#shipped` 过滤试跑与元数据；规则重复警告；生成视图不进公共视图。起草提示词收紧（体系名照抄文档、度量含义不沿用推断、表说明 30 字内）。口径页签增加状态、核查、验证判定、生成文件预览。验证：后端单元通道 1153 项、前端 152 项、DocsConsistencyTest、spotless 通过；本机：B 的口径接口全部行待核查、不可发布，公共视图只剩 vip_member_scale，发布前校验给出清单撤回与手写 Cube 不发布两条警告，口径页签截图正常。人工核查、验证与发布未执行（须用户本人操作）。未提交。
+
+## 2026-11-24 Asia/Shanghai · spec149 验证展示与 P4 问数门禁
+
+问题验证结果增加该口径在视图中的取数段（`CaliberCompiler#segment`），解决只显示 `caliber_name IN (...)` 无法核对条件的问题。P4：清单生成平台文件 `knowledge/rules/calibers.md`（选表与"歧义先问"规则，发布暂存按实际发布清单重写，`check` 要求一致）；`CaliberQueryGate` 在 `query_cube` 执行前拒绝不按口径筛选/分组、非 in/equals、清单外口径名的查询，返回前缀加权的候选，不改写参数。时间维度门禁未做。验证：后端单元通道 1158 项、前端 152 项、DocsConsistencyTest、spotless 通过；本机 B 校验仍给出两条按表发布警告。门禁的真实问数验收需用户先核查、验证并发布 B 的口径清单。未提交。
+
+## 2026-11-24 Asia/Shanghai · spec149 问数验收与 query_cube 空时间范围
+
+B 口径清单发布后问数验收。选表规则与按口径名 query_cube 生效；Q2 因 Wren 时间范围左闭右开、模型传 `2026-10-01,2026-10-01` 查空。新增 `CubeTimeRangeCheck` 在 query_cube 前拒绝空范围并给出正确结束日期，生成指标时间维度说明写明左闭右开；重问 Q2 答对（10,548,714）。单元通道 1160 项通过。未提交。遗留："足球会员"被模型直接映射为足球通、未就中超会员先问。
+
+## 2026-11-24 Asia/Shanghai · spec149 P5 多表选表、指标说法与范围维度
+
+清单增加 `business`/`audience`（选表键）、度量 `synonyms`/`default`、`scope`（范围维度：列、维度名、汇总值、默认值、可选取值）。编译器把范围列作为视图列和 Cube 维度；`calibers.md` 改为"业务 × 统计对象"选表索引；多表时警告缺选表键、业务对象相同、说法与口径重名。门禁：`query_cube` 每个范围维度须筛选（in/eq）或分组、取值须在 values 内；`run_sql` 引用有已发布清单的原表时拒绝。口径页增加表说明卡片与范围取值检查；验证问题用默认指标并带默认范围；起草提示词补 P5 字段，【】内容不当事实。修正：Wren 等值筛选为 `eq` 不是 `equals`（P4 起即写错）。旧清单表说明哈希不变（B 重启后仍已核查、可发布）。验证：单元 1168 项、前端 7 项与构建、DocsConsistencyTest 通过；本机 B 问"各省份足球通"时 run_sql 原表被拒、如实答取不到；示例文档起草出业务、对象、默认指标、5 个范围维度，无错误；草稿副本经 Wren build、展开、EXPLAIN 并执行，篮球通 10 月 3,283,751；B 草稿已还原。未提交。多表真实验收待活跃用户等表和文档。

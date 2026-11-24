@@ -21,7 +21,7 @@ class WrenPreflightTest(unittest.TestCase):
             (source.parents[3] / "requirements-wren.txt").read_bytes())
         self.main = runpy.run_path(str(script))["main"]
         self.globals = self.main.__globals__
-        self.versions = {"wrenai": "0.15.0", "wren-core-py": "0.8.0", "mcp": "1.30.0"}
+        self.versions = {"wrenai": "0.18.0", "wren-core-py": "0.8.2", "mcp": "1.30.0"}
 
     def invoke(self, importer):
         with patch.object(sys, "argv", ["check-wren.py", "dependencies", "wren"]), \
@@ -29,7 +29,7 @@ class WrenPreflightTest(unittest.TestCase):
                 patch.object(self.globals["importlib"], "import_module", side_effect=importer), \
                 patch.object(self.globals["shutil"], "which", return_value="/fixture/bin/wren"), \
                 patch.object(self.globals["subprocess"], "run", return_value=subprocess.CompletedProcess(
-                    [], 0, stdout=b"wrenai 0.15.0\n", stderr=b"")):
+                    [], 0, stdout=b"wrenai 0.18.0\n", stderr=b"")):
             return self.main()
 
     def test_mysqlclient_is_checked_by_its_actual_import_name(self):

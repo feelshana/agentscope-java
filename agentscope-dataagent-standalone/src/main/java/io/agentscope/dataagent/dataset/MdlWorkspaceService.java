@@ -178,6 +178,8 @@ public class MdlWorkspaceService {
         return normalized.equals("wren_project.yml")
                 || normalized.equals("raw/data-samples.md")
                 || normalized.equals("knowledge/rules/data-sampling.md")
+                // spec149: generated from caliber lists.
+                || normalized.equals(CaliberCompiler.RULES_FILE)
                 // spec092: business documents are uploaded by users only; the agent reads them.
                 || normalized.equals(BusinessDocumentService.DIRECTORY)
                 || normalized.startsWith(BusinessDocumentService.DIRECTORY + "/")

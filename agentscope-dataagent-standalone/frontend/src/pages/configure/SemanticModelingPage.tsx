@@ -45,10 +45,11 @@ import type { Confirmation, ConfirmationAnswer, ConfirmationDecision } from '../
 import type { TurnPurpose } from '../../api/chat';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
 import SemanticAssetsPanel from '../../components/modeling/SemanticAssetsPanel';
+import CaliberPanel from '../../components/modeling/CaliberPanel';
 import './SemanticModelingPage.css';
 import '../../components/modeling/ModelingSetup.css';
 
-type Tab = 'semantic' | 'coach' | 'assets' | 'overview';
+type Tab = 'semantic' | 'coach' | 'calibers' | 'assets' | 'overview';
 /** spec117 §3c: the right panel the icon bar switches; null when folded away. */
 type Panel = 'detail' | 'assistant' | 'pending' | null;
 // spec092 §7: the conversation is the workspace; review happens inline, publishing in the draft bar.
@@ -57,7 +58,7 @@ const LEGACY_TABS: Record<string, Tab> = {
   models: 'semantic', relations: 'semantic', knowledge: 'semantic', modeling: 'semantic', qa: 'coach',
   schema: 'semantic', derived: 'semantic', views: 'semantic', cubes: 'semantic', mdl: 'semantic', glossary: 'semantic', sql: 'coach',
 };
-const TAB_KEYS: Tab[] = ['semantic', 'coach', 'assets', 'overview'];
+const TAB_KEYS: Tab[] = ['semantic', 'coach', 'calibers', 'assets', 'overview'];
 const ADVANCED = new Set(['views', 'cubes', 'mdl']);
 const RULE_ADDRESSES = new Set(['knowledge', 'glossary']);
 const tabOf = (asset: string | null, kind: string | null): Tab | null => {
@@ -357,7 +358,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const baselineFiles = useMemo(() => version === 'draft' && hasPublished && preview ? new Map(preview.publishedFiles.map(f => [f.path, f.content])) : null, [version, hasPublished, preview]);
   const workbenchView = workbenchViewOf(asset, params.get('view'));
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'semantic', label: '语义模型' }, { key: 'coach', label: '问数优化' }, { key: 'assets', label: '公共视图' }, { key: 'overview', label: '资料' },
+    { key: 'semantic', label: '语义模型' }, { key: 'coach', label: '问数优化' }, { key: 'calibers', label: '口径' }, { key: 'assets', label: '公共视图' }, { key: 'overview', label: '资料' },
   ];
   // A turn's changes are marked when it ends; marks accumulate from the earliest unmarked turn.
   const turnStart = useRef<string | null>(null);
@@ -523,6 +524,8 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           views={legacyAsset === 'cubes' ? [] : viewEntries} cubes={legacyAsset === 'views' ? [] : cubeEntries} knowledge={otherKnowledge} selected={selected} initialTab={legacyAsset === 'mdl' ? 'compiled' : legacyAsset === 'views' ? 'views' : legacyAsset === 'cubes' ? 'cubes' : 'files'}
           onSelect={key => setParams({ asset: 'semantic', selected: key }, { replace: true })} onSelectKnowledge={key => setParams({ asset: 'semantic', view: 'rules', selected: key }, { replace: true })} />
       </section>}
+      {tab === 'calibers' && <CaliberPanel key={groupId} groupId={groupId} assistantIdle={idle}
+        onDraft={(text, label) => { const sent = request(text, 'caliber', label); if (sent) openAssistant(); return sent; }} />}
       {tab === 'assets' && <SemanticAssetsPanel key={groupId} groupId={groupId} assistantIdle={idle}
         onDraft={(text, label) => { const sent = request(text, 'asset', label); if (sent) openAssistant(); return sent; }} />}
       {tab === 'coach' && <div className="mw-coach-wrap">

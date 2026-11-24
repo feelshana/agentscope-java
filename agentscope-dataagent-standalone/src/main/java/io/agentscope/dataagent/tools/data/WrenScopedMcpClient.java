@@ -209,6 +209,28 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                     throw new DatasetException("官方 sql 参数不能为空", 400);
                                 OfficialWrenToolkit.requireReadOnly(sql);
                                 validateQueryBoundary(tool, sql);
+                                // spec149 P5: tables with a published caliber list are read
+                                // through their Cube, never by rebuilding conditions in SQL.
+                                if ("run_sql".equals(tool) && projects != null) {
+                                    String refused =
+                                            io.agentscope.dataagent.dataset.CaliberQueryGate
+                                                    .checkSql(projects.publishedRoot(groupId), sql);
+                                    if (refused != null) throw new DatasetException(refused, 400);
+                                }
+                            }
+                            // spec149 P4: calibers overlap; a caliber Cube must be filtered or
+                            // grouped by caliber name, and names must exist. Refuse, never rewrite.
+                            if ("query_cube".equals(tool)) {
+                                // Wren's time range end is exclusive; an empty range answers
+                                // "no data" for a month that has data.
+                                String emptyRange = CubeTimeRangeCheck.check(args);
+                                if (emptyRange != null) throw new DatasetException(emptyRange, 400);
+                            }
+                            if ("query_cube".equals(tool) && projects != null) {
+                                String refused =
+                                        io.agentscope.dataagent.dataset.CaliberQueryGate.check(
+                                                projects.publishedRoot(groupId), args);
+                                if (refused != null) throw new DatasetException(refused, 400);
                             }
                             // Analysis scripts need the whole result, so the row limit is not
                             // left to the model's guess.

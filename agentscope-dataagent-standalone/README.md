@@ -426,10 +426,10 @@ mvn spotless:check
 
 ### Wren dependencies and example retrieval
 
-固定官方 `wrenai==0.15.0` / `wren-core-py==0.8.0` / `mcp==1.30.0`，使用 `memory-onnx` 依赖支持中文语义召回。Wren 0.15.0 使用的 FastMCP 导入与 MCP 2.x 不兼容，不要仅安装未固定版本的 `wrenai[mcp]`。
+固定官方 `wrenai==0.18.0` / `wren-core-py==0.8.2` / `mcp==1.30.0`，使用 `memory-onnx` 依赖支持中文语义召回（spec149 P0 由 0.15.0 升级）。Wren 要求 `mcp<2`，不要仅安装未固定版本的 `wrenai[mcp]`。
 应用不会自动修改外部 Python 环境；在服务实际使用的 CLI 环境安装依赖并重启加载新代码。
 
-应用启动的 CLI/MCP 子进程带有针对 Wren 0.15.0 MySQL 重复 LIMIT 的临时兼容修复：保留 SQL
+应用启动的 CLI/MCP 子进程带有针对 Wren 0.15.0/0.18.0 MySQL 重复 LIMIT 的临时兼容修复：保留 SQL
 原有排序、分页与内层限制，仅收紧最外层行数，官方 N+1 截断行为不变。资源随 JAR 打包，
 不修改 Python 安装目录；直接在终端执行原版 `wren` 不会自动带上此修复。升级 Wren 后需重验并移除补丁。
 工具列表在同一 MCP 实例内复用，发布或进程重建后重新发现。详见 [ADR 0072](docs/adr/0072-wren-mysql-limit-compatibility-and-discovery-cache.md)。

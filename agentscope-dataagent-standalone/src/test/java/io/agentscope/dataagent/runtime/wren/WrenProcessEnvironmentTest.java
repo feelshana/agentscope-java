@@ -23,7 +23,7 @@ class WrenProcessEnvironmentTest {
                 .endsWith(java.io.File.pathSeparator + "existing-path");
         assertThat(environment.get("DATAAGENT_WREN_COMPAT")).isEqualTo("1");
         assertThat(Files.readString(WrenProcessEnvironment.directory().resolve("sitecustomize.py")))
-                .contains("0.15.0", "min(int(count.this), limit)");
+                .contains("0.18.0", "min(int(count.this), limit)");
     }
 
     @Test

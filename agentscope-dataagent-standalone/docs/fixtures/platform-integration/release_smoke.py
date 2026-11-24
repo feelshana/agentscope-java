@@ -71,7 +71,7 @@ HTTPServer(('127.0.0.1',port),Handler).serve_forever()
 ''', encoding="utf-8")
         java.chmod(0o755)
         wren = base / "wren-stub"
-        wren.write_text("#!/bin/sh\necho 'wrenai 0.15.0'\n", encoding="utf-8")
+        wren.write_text("#!/bin/sh\necho 'wrenai 0.18.0'\n", encoding="utf-8")
         wren.chmod(0o755)
         python = base / "python-wrapper"
         python.write_text('''#!/usr/bin/env python3

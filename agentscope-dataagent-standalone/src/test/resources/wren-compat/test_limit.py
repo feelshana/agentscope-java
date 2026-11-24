@@ -69,7 +69,10 @@ class LimitCompatibilityTest(unittest.TestCase):
             def query(self, sql, limit):
                 connection = duckdb.connect()
                 try:
-                    return connection.execute(compat.apply_limit(sql, limit)).fetch_arrow_table()
+                    cursor = connection.execute(compat.apply_limit(sql, limit))
+                    # DuckDB 2.0 renamed fetch_arrow_table to to_arrow_table.
+                    fetch = getattr(cursor, "to_arrow_table", None) or cursor.fetch_arrow_table
+                    return fetch()
                 finally:
                     connection.close()
         ctx = SimpleNamespace(engine=Engine())
@@ -93,10 +96,16 @@ class LimitCompatibilityTest(unittest.TestCase):
             self.assertIs(mysql._apply_limit, fixed)
 
     def test_install_replaces_only_broken_composition(self):
-        broken = lambda sql, limit: f"{sql}\nLIMIT {limit}"
-        with patch("importlib.metadata.version", return_value="0.15.0"), patch.object(mysql, "_apply_limit", broken):
-            compat.install()
-            self.assertEqual(mysql._apply_limit("SELECT 1 LIMIT 1", 2), "SELECT 1 LIMIT 1")
+        broken = lambda sql, limit, dialect=None: f"{sql}\nLIMIT {limit}"
+        for release in compat.PATCHED_VERSIONS:
+            with patch("importlib.metadata.version", return_value=release), patch.object(mysql, "_apply_limit", broken):
+                compat.install()
+                self.assertEqual(mysql._apply_limit("SELECT 1 LIMIT 1", 2), "SELECT 1 LIMIT 1")
+
+    def test_accepts_connector_dialect_argument(self):
+        # 0.18 connectors pass their dialect as a third argument.
+        self.assertEqual(compat.apply_limit("SELECT 1 LIMIT 8;", 3, "mysql"), "SELECT 1 LIMIT 3")
+        self.assertEqual(compat.apply_limit("SELECT 1", 3, "doris"), "SELECT 1\nLIMIT 3")
 
 
 if __name__ == "__main__":

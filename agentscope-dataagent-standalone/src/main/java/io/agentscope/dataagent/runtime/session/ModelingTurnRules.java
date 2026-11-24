@@ -60,6 +60,47 @@ public final class ModelingTurnRules {
             最终回复 3–6 行：做了什么（查询模板、规则或计算字段）、粒度、关键口径、写了哪条默认使用规则、还需要用户确认什么。建了查询模板或加工表时提示到公共视图页核查，默认使用规则在草稿栏查看；只写规则或计算字段时提示在草稿栏审阅后发布，它们不进公共视图页。
             """;
 
+    /** spec149: copy a business document's caliber table into a caliber list, nothing more. */
+    static final String CALIBER =
+            """
+            # 本轮任务要求：起草口径清单
+            用户要求按业务文档为指定的表起草或更新口径清单。口径清单是该表取数口径的唯一来源，平台按清单自动生成查询模板和指标，你不写 views/、cubes/，也不写模型文件。本轮只能写 calibers/<名称>.yml（名称用小写字母、数字、下划线，通常与模型同名），以及把 knowledge/rules/ 中与清单重复的具体取数条件改写为一句指引。
+            先读：用户点名的业务文档（raw/docs/ 下，文档开头的"适用模型"写明对应的表）、对应模型的 metadata.yml（列名与取值说明）、已有的 calibers/ 清单和 knowledge/rules/。
+            清单格式（YAML）：
+            model: 模型名
+            name: 生成名（字母、数字、下划线，平台生成 <name>_caliber 查询模板和 <name>_metrics 指标；模型名含中文时必须另写）
+            scenario:
+              subject: 这张表统计什么（一句话，不超过 30 字）
+              description: 补充说明（可省略）
+              business: {name: 业务或产品名, synonyms: [用户的其他说法]}   # 照抄文档"业务（产品）"，例如咪咕视频；问数先按业务和统计对象选表，文档没写时不写
+              audience: {name: 统计对象, synonyms: [用户的其他说法]}   # 照抄文档"统计对象"，例如会员、活跃用户；文档没写时不写
+              time: {column: 时间列, grain: month 或 day, format: yyyymm、yyyymmdd 或 date}
+              measures:
+                - {column: 度量列, name: 指标英文名（不能与列名相同）, label: 中文名, description: 含义, synonyms: [用户常见说法], default: true}   # 只写文档或用户说明的名称、含义和说法；文档没有定义时 label 写列名，description 写"含义文档未定义，待业务确认"，不要沿用模型列描述中的推断；文档写明的默认指标才写 default: true，最多一个
+              scope:   # 文档"统计范围"中有汇总值与明细值并存的列（省份、渠道、支付方式等），每列一项
+                - {column: 范围列, name: 维度英文名（不能与列名相同，例如 province）, label: 中文名, total: 汇总值, default: 用户没指定时取的值, values: [文档列出的取值，没列时不写]}
+              fixed_scope: {列: 取值}   # 文档要求所有口径都只取一个固定值、且问数不会按它细分的列；已写进 scope 的列不要再写
+              use_for: [适合回答的问题类型]
+              not_for: [不适合回答的问题类型]
+            conventions: {unrestricted: 不限}   # 文档中表示"该列不加条件"的词
+            calibers:
+              - name: 口径名（照抄文档）
+                group: 所属体系   # 照抄文档中该口径所在的体系或分组名（例如"总体""体育会员"）；文档没有分组时不写，不要用列名或层级说明代替
+                where: {列: 取值, 列: [候选1, 候选2], 列: 不限}
+                synonyms: [用户可能的其他说法，只写文档里出现过的]
+                note: 文档中的补充说明
+                pending: 文档没有说清、需要业务确认的事项
+                source: {document: 文档文件名}
+            照抄规则：
+            - 口径名、取值逐字照抄文档表格，列与层级的对应关系按文档说明；"全部"等汇总值按库中实际字符串写入，"不限"写成 conventions 里的词，平台不为它加条件。
+            - 文档没有写的不补：度量含义、合并方式、缺失的条件都写进 pending，不自行推断；文档里"A 或 B"这类同一列多个取值，文档明确说可以相加时写候选列表并写 combine: sum；文档给出拆分方案时按文档的口径名拆成多个口径；两者都没有时拆成多个口径，口径名写"原口径名-取值"，每个都在 pending 中说明待业务确认合并方式。
+            - 文档中用【】标出的待填写内容不是事实：对应项写进 pending（表级的待确认事项，例如范围维度的取值写法或 default 文档没写清，写在 scenario.description 末尾，以"待业务确认："开头；default 没写清时先写汇总值），不要把示意内容当成定义照抄。
+            - 每张表一份清单；文档同时声明多张表时分别写。已有清单时只改与文档有差异的口径，其余保持原样；平台提示某些口径由用户修改过、不能覆盖时，保持它们原样再写一次。
+            - 写入后平台立即按模型校验列名并生成查询模板与指标；校验失败会返回原因，按原因修正后重写，不要改动生成的文件。
+            - 写完清单后读 knowledge/rules/：其中逐条写出了与清单相同口径的具体取值条件的，改写成一句指引（例如"会员规模口径见指标 <name>_metrics，按口径名取数，不要自行拼条件"）；一般原则（汇总范围、不能相加等）保留。
+            不查询任何表数据。最终回复 3–6 行：为哪些表起草了多少个口径、哪些内容待业务确认、改写了哪些规则，并提示到口径页查看。
+            """;
+
     /** spec114 / ADR0132: the only turn that proposes modeling changes, from listed questions. */
     static final String COACH =
             """
@@ -93,6 +134,7 @@ public final class ModelingTurnRules {
         if (ModelingTurnPurpose.QUESTION.equals(purpose)) return QUESTION;
         if (ModelingTurnPurpose.ASSET.equals(purpose)) return ASSET;
         if (ModelingTurnPurpose.COACH.equals(purpose)) return COACH;
+        if (ModelingTurnPurpose.CALIBER.equals(purpose)) return CALIBER;
         return CHAT + "\n" + QUESTION;
     }
 

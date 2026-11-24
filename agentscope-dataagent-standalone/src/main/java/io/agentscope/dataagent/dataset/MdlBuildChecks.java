@@ -77,6 +77,51 @@ final class MdlBuildChecks {
         return issues;
     }
 
+    /**
+     * spec149 P0: Wren 0.18 {@code dry-plan} expands SQL without resolving columns, so a
+     * verification case naming a column that does not exist used to pass. Each SQL is therefore
+     * also sent through the official {@code dry-run} (an EXPLAIN: the database resolves names but
+     * reads no rows), the same gate publication applies to views. Returns one entry per SQL: the
+     * error text, or {@code null} when the database accepted it.
+     *
+     * @throws DatasetException when the check connection cannot be prepared, so callers never
+     *     mistake an unavailable database for SQL the database rejected
+     */
+    List<String> explainAll(Path projectDir, List<String> sqls, ExternalDataSourceEntity external) {
+        Path connectionFile;
+        try {
+            Map<String, String> connection = profileHome.connectionInfo(external);
+            connectionFile = Files.createTempFile("dataagent-wren-check-", ".json");
+            mapper.writeValue(connectionFile.toFile(), connection);
+        } catch (IOException ex) {
+            throw new DatasetException("准备 SQL 校验连接失败：" + ex.getMessage(), ex);
+        }
+        try {
+            List<String> errors = new ArrayList<>();
+            for (String sql : sqls) {
+                WrenCli.Result result =
+                        wrenCli.run(
+                                projectDir,
+                                props.timeout(),
+                                List.of(
+                                        "dry-run",
+                                        "-s",
+                                        sql,
+                                        "--connection-file",
+                                        connectionFile.toString()));
+                errors.add(result.ok() ? null : "数据库校验未通过：" + firstLine(result.output()));
+            }
+            return errors;
+        } finally {
+            try {
+                Files.deleteIfExists(connectionFile);
+            } catch (IOException ignored) {
+                // Cleanup failure is not a verdict on the SQL; the file sits in the OS temp
+                // directory exactly as publication's dry-run connection file does.
+            }
+        }
+    }
+
     private List<MdlIssue> dryRunViews(
             Path projectDir, List<MdlWorkspaceReader.WorkspaceView> views, Path connectionFile) {
         List<MdlIssue> issues = new ArrayList<>();
@@ -150,10 +195,21 @@ final class MdlBuildChecks {
      * becomes an error issue naming the cube; the loop continues so one broken cube does not
      * mask the others. Cubes without measures are structurally covered by {@code validate
      * --strict} and skipped here ({@code cube query} requires at least one measure).
+     *
+     * <p>Before translating, a member whose name equals a column its own expression references is
+     * rejected locally (spec149 P0): under Wren 0.18 a measure such as {@code member_count:
+     * SUM(member_count)} fails as a circular dependency, and a dimension such as {@code
+     * member_name: member_name} only fails once a query filters on it, which the measure-only dry
+     * run cannot reveal. Such cubes are not dry-run, so the rename hint is the only error shown.
      */
     List<MdlIssue> dryRunCubes(Path projectDir, List<MdlWorkspaceReader.WorkspaceCube> cubes) {
         List<MdlIssue> issues = new ArrayList<>();
         for (MdlWorkspaceReader.WorkspaceCube cube : cubes) {
+            List<MdlIssue> selfReferences = selfReferences(cube);
+            if (!selfReferences.isEmpty()) {
+                issues.addAll(selfReferences);
+                continue;
+            }
             if (cube.measures().isEmpty()) {
                 continue;
             }
@@ -180,6 +236,42 @@ final class MdlBuildChecks {
                                 "error",
                                 "Cube「" + cube.name() + "」试跑失败：" + firstLine(result.output()),
                                 "wren"));
+            }
+        }
+        return issues;
+    }
+
+    private static final Pattern STRING_LITERAL = Pattern.compile("'(?:[^']|'')*'");
+    private static final Pattern IDENTIFIER =
+            // Possessive so "COUNT(" is never shortened to "COUN" to dodge the function lookahead.
+            Pattern.compile("(?<![\\p{L}\\p{N}_])[\\p{L}_][\\p{L}\\p{N}_]*+(?!\\s*\\()");
+
+    /** Members (measures, dimensions, time dimensions) whose expression references their name. */
+    static List<MdlIssue> selfReferences(MdlWorkspaceReader.WorkspaceCube cube) {
+        List<MdlIssue> issues = new ArrayList<>();
+        List<MdlWorkspaceReader.WorkspaceMember> members = new ArrayList<>(cube.measures());
+        members.addAll(cube.dimensions());
+        members.addAll(cube.timeDimensions());
+        for (MdlWorkspaceReader.WorkspaceMember member : members) {
+            if (member.name() == null || member.expression() == null) continue;
+            // Literals are not column references; quoted identifiers are compared unquoted.
+            String expression =
+                    STRING_LITERAL.matcher(member.expression()).replaceAll(" ").replace("\"", "");
+            Matcher identifier = IDENTIFIER.matcher(expression);
+            while (identifier.find()) {
+                if (identifier.group().equalsIgnoreCase(member.name())) {
+                    issues.add(
+                            issue(
+                                    "error",
+                                    "Cube「"
+                                            + cube.name()
+                                            + "」的成员「"
+                                            + member.name()
+                                            + "」与其表达式引用的列同名，Wren 会报循环依赖或在筛选时无法解析；"
+                                            + "请给成员改名（例如 member_name 改为 member），表达式保持引用原列",
+                                    "local"));
+                    break;
+                }
             }
         }
         return issues;

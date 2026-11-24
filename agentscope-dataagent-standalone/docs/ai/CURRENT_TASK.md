@@ -1,29 +1,32 @@
-# 当前任务 · 管理员表同步
+# 当前任务 · 多表口径资产（spec149）
 
-2026-11-18，分支 codex/architecture-phase1。前次任务见[看板草稿检查](archive/CURRENT_TASK-before-table-sync-20261118.md)。
+2026-11-24，分支 develop-2.0（未提交）。前次任务见[管理员表同步](archive/CURRENT_TASK-before-caliber-assets-20261124.md)。
 
-[spec148](../specs/148-configurable-table-sync.md) 实现管理员单表全量、按业务日与按业务月同步，实现日期试查、首次回填、定时计划、补跑和运行详情。新页保留旧 BI 同步监控入口。边界见 [ADR0152](../adr/0152-configurable-table-sync-boundary.md)。
+依据[对话建模与 Cube+View 对比验收](../test-reports/20261124-wren-dialog-vs-cube-view.md)，用户确认 [spec149](../specs/149-caliber-views-and-cubes.md) 与 [ADR0155](../adr/0155-caliber-assets-view-plus-cube.md)：每表一份口径清单（使用场景 + 口径表）为唯一事实源，生成 View + Cube；文档多份增量上传、对话、表格三入口只改草稿，统一在口径页核查；问数按场景选表、按口径 `query_cube`。待确认项按建议：Wren 0.18.x、未核查清单不随版本发布、建模后出现提议卡片、不可相加硬拒绝、顺序 P0 → P1 → P2 → P4 → P3。
 
-隔离 MySQL 5.7.44→8.4.5 验证全量、跨月日表、字符与整数月表、20 万行分批、异常空结果保护及手动确认。18 项后端选测及浏览器实际同步通过，见[验证报告](../test-reports/20261118-configurable-table-sync.md)。待按[运维指引](../guides/configurable-table-sync.md)配置正式环境和试运行。
+## P0（本地完成，未提交）
 
-按用户要求已停止隔离演示。两个连接均改在页面填写。目标配置直接存平台库，源密码随任务直接存控制库，接口省略密码。原 IDEA 同步专用配置已撤下。已在本机用已有同步专用账号验证目标保存与读源表，等待用户重启 IDEA 后在 5173 测试。
+- `requirements-wren.txt` 升到 wrenai 0.18.0 / wren-core-py 0.8.2；`wren-compat/sitecustomize.py` 补丁扩展到 0.18（接受 dialect）。
+- `MdlBuildChecks#explainAll`：验证、问答保存、发布时问答检查在 dry-plan 后追加 EXPLAIN；`MdlBuildChecks#selfReferences` 拒绝与引用列同名的 Cube 成员。
+- 本机真实回归通过（列校验 1054 拒绝且不落盘；LIMIT 5 返回 5 行）。
 
-正式只使用现有 `data_agent_platform` 和 `data_agent`。管理员在 BI 数据开发手工执行 0152 创建四张平台同步表，再审核页面生成的目标表 SQL。运行时仅执行同步数据和进度读写。分批读写设有 500 行及体积上限，单期事务失败回滚。未变更正式环境。
+## P1（本地完成，未提交）
 
-## 看板快捷提示
+- 口径清单与生成器 `CaliberList`/`CaliberCompiler`；口径轮次独占 `calibers/`，`WrenProjectFilesystem#caliberGuard` 校验与 `CaliberSources` 行来源/冲突；发布检查生成文件一致。
+- 文档"适用模型"声明与上限 100；`CaliberService` 状态、取值检查；前端"口径"页签 `CaliberPanel`。
+- 真实口径轮次在 B 起草 13 个口径，取数与标准答案一致；界面未目视验收。
 
-已实现输入框左下角的「✧ 快捷提示」。空看板保留首轮卡片，已有看板和选中面板各用对应话术。Chrome 验证保留历史、切换模板、自写内容的追加和替换、键盘关闭及 390px 布局。前端相关 21 项及独立目录生产构建通过，待用户体验。
+## P2（本地完成，未提交）
 
-## 双分支交付
+- `CaliberReviews` 逐行核查与验证、按表发布（未通过退回已发布版本、手写 Cube 不发布）、规则重复警告；口径页签核查与验证界面；起草提示词收紧。
+- 验证展示口径取数段；P4 选表规则文件与 `query_cube` 口径门禁本地完成。
+- B 已由用户核查、验证、发布；三问验收完成，`query_cube` 空时间范围门禁已补。
+- P5（选表键、指标说法与默认指标、范围维度、`run_sql` 原表门禁）本地完成；Wren 等值筛选改为 `eq`。示例业务文档：`E:/总部常规性分析/会员规模-取数口径.md`。
 
-业务提交 `e7cd3540` 包含看板快捷提示与管理员表同步，父提交含看板草稿检查与发布修复。独立源码完整验证通过，详情见[合并前验证](../test-reports/20261118-configurable-table-sync.md)。用户已手工执行 0152 并在 66 上验证两张月表的首次同步和行数。交付路径为 `codex/architecture-phase1` → `liyufan_dev` → `develop-2.0`。
+## 待办
 
-## 无源索引日期列
-
-生产报表的 `period_id` 在日期下拉框被过滤。改为手工选择日期列，整表处于行数和字节限额内时，用一次源端只读扫描获取匹配周期，随后沿用原有按期写入流程。MySQL 5.7/8 夹具及合并前完整 `clean verify` 通过，见[验证报告](../test-reports/20261118-configurable-table-sync.md)。用户授权提交并推送至个人分支和主线。部署由用户在 66 执行，复用已有 0152 四张表和现有配置。
-
-66 月表试查时，用户确认 `period_id='202609'` 有数据，先遇到维护时间列的源会话时区校验，取消两列后又遇到整表扫描上限。改为试查只查询日期列、最多三条，错误与进度显示在按钮旁。无索引也逐日或逐月查询和提交，行数限额按单期计算，范围合计可以超过 10 万行。MySQL 5.7→8 逐期边界和续跑测试及合并前完整验证通过。用户授权通过 `liyufan_dev` 合入 `develop-2.0`，由用户在 66 更新并复验。
-
-2026-11-19，用户在 66 报告视频彩铃月报每月约七万行并触发单期行数或体积限制。按月、按日、全量的单事务估算写入上限统一为 128 MiB，行筛选后议。边界回归、MySQL 5.7→8 和合并前完整构建通过。用户授权合入 `liyufan_dev` 和 `develop-2.0`，在 66 部署后继续首次同步复验。
-
-9 张报表首轮同步已完成，计划已全部启用。滚动计划扩展为日报前两个完整日，月报可选择每天刷新上月和当月。普通源索引变化不再触发字段结构冲突，目标表身份及任务数据沿用。完整构建与 MySQL 5.7→8 联调通过。用户授权提交并合入 `liyufan_dev`、`develop-2.0`，由用户在 66 更新。拟加索引的源表结构与日期字段待用户提供，源库 DDL 由用户执行。
+- 66 按新 requirements 重装 Wren 并回归；duckdb 2.x 等原生依赖在 Anolis 7.9 的 glibc 兼容性未核对。
+- 受限事实表 `query_cube` 时间维度门禁；P3：口径编辑与对话修改、冲突选择。
+- 度量中文名被助手沿用模型列描述里的猜测（文档未定义），P2 核查时需人工确认。
+- 真实多表验收（spec149 验收 14–17）需要用户提供活跃用户等表和文档；B 若要按省份、渠道问数，需按新文档重新起草、核查并发布。
+- 本机启动注意：JVM 需 `-Djdk.net.unixdomain.tmpdir=E:/jdk-tmp -Dfile.encoding=UTF-8`（CSV 上传乱码 bug 未修）。

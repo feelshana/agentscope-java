@@ -66,8 +66,8 @@ RUN sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc
 
 RUN python -m pip install --no-cache-dir --timeout 60 --retries 2 \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
-    'wrenai[mcp,mysql,memory-onnx]==0.15.0' \
-    'wren-core-py==0.8.0' 'mcp==1.30.0' \
+    'wrenai[mcp,mysql,memory-onnx]==0.18.0' \
+    'wren-core-py==0.8.2' 'mcp==1.30.0' \
     && python -m pip check
 
 RUN python -c 'import wren,wren_core,mcp,MySQLdb,lancedb,onnxruntime; print("Wren native dependencies imported successfully")' \

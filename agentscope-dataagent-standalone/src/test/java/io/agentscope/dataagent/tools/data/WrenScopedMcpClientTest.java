@@ -202,6 +202,108 @@ class WrenScopedMcpClientTest {
         verify(gateway).call("a", "run_sql", args);
     }
 
+    /** spec149 P4: a caliber Cube query that would add calibers or guess a name never runs. */
+    @Test
+    void caliberCubeQueriesAreCheckedBeforeExecution(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path published) throws Exception {
+        grant("alice", "a");
+        var cubeTool =
+                new McpSchema.Tool(
+                        "query_cube",
+                        null,
+                        "指标查询",
+                        new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null),
+                        null,
+                        null,
+                        null);
+        doReturn(List.of(sqlTool, cubeTool)).when(gateway).listTools("a");
+        java.nio.file.Files.createDirectories(published.resolve("models/vip_m"));
+        java.nio.file.Files.writeString(
+                published.resolve("models/vip_m/metadata.yml"),
+                "name: vip_m\n"
+                        + "columns:\n"
+                        + "  - {name: cnt_zd, type: BIGINT}\n"
+                        + "  - {name: vip_type_6, type: VARCHAR}\n");
+        java.nio.file.Files.createDirectories(published.resolve("calibers"));
+        java.nio.file.Files.writeString(
+                published.resolve("calibers/vip.yml"),
+                "model: vip_m\n"
+                        + "name: vip\n"
+                        + "scenario:\n"
+                        + "  subject: 会员规模\n"
+                        + "  measures:\n"
+                        + "    - {column: cnt_zd, name: members}\n"
+                        + "calibers:\n"
+                        + "  - {name: 足球通, where: {vip_type_6: 足球通会员}}\n");
+        io.agentscope.dataagent.dataset.CaliberCompiler.sync(published);
+        when(projects.publishedRoot("a")).thenReturn(published);
+        var client = client("alice", "a");
+
+        assertThatThrownBy(
+                        () ->
+                                client.callTool(
+                                                "query_cube",
+                                                Map.of(
+                                                        "cube",
+                                                        "vip_metrics",
+                                                        "measures",
+                                                        List.of("members")))
+                                        .block())
+                .hasMessageContaining("不能跨口径相加");
+        assertThatThrownBy(
+                        () ->
+                                client.callTool(
+                                                "query_cube",
+                                                Map.of(
+                                                        "cube",
+                                                        "vip_metrics",
+                                                        "measures",
+                                                        List.of("members"),
+                                                        "filters",
+                                                        List.of("caliber:in:足球会员")))
+                                        .block())
+                .hasMessageContaining("可能对应：足球通");
+        assertThatThrownBy(
+                        () ->
+                                client.callTool(
+                                                "query_cube",
+                                                Map.of(
+                                                        "cube",
+                                                        "vip_metrics",
+                                                        "measures",
+                                                        List.of("members"),
+                                                        "filters",
+                                                        List.of("caliber:in:足球通"),
+                                                        "time_dimension",
+                                                        "period:month:2026-10-01,2026-10-01"))
+                                        .block())
+                .hasMessageContaining("period:month:2026-10-01,2026-11-01");
+        // spec149 P5: the raw table of a published caliber list is read through its Cube.
+        assertThatThrownBy(
+                        () ->
+                                client.callTool(
+                                                "run_sql",
+                                                Map.of(
+                                                        "sql",
+                                                        "SELECT SUM(cnt_zd) FROM vip_m WHERE"
+                                                                + " vip_type_6 = '足球'"))
+                                        .block())
+                .hasMessageContaining("请用指标 vip_metrics 的 query_cube");
+        verify(gateway, never()).call(anyString(), anyString(), anyMap());
+
+        var ok =
+                Map.<String, Object>of(
+                        "cube",
+                        "vip_metrics",
+                        "measures",
+                        List.of("members"),
+                        "filters",
+                        List.of("caliber:in:足球通"));
+        when(gateway.call("a", "query_cube", ok))
+                .thenReturn(new WrenQueryGateway.WrenCallResult(true, "{\"rows\":[[1]]}"));
+        assertThat(client.callTool("query_cube", ok).block().isError()).isFalse();
+    }
+
     @Test
     void foreignScopeCannotDiscoverAndRevocationInvalidatesExistingClient() {
         grant("alice", "a");

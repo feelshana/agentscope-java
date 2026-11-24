@@ -305,6 +305,66 @@ class MdlPublishServiceTest {
     }
 
     @Test
+    void verificationKeepsExpansionButFailsWhenTheDatabaseRejectsAColumn() throws IOException {
+        // spec149 P0: Wren 0.18 dry-plan expands unknown columns, so EXPLAIN decides.
+        registerGroup("g1");
+        registerDataset("ds_a", "g1", "orders", new String[][] {{"amount", "BIGINT"}});
+        assertTrue(service.publish("g1").ok());
+        wren.failDryRunFor = "stat_date";
+
+        var plans =
+                service.planDraft(
+                        "g1",
+                        List.of(
+                                "SELECT SUM(amount) AS total FROM orders",
+                                "SELECT SUM(amount) AS total FROM orders WHERE stat_date >"
+                                        + " '2026-10-01'"));
+
+        assertNull(plans.get(0).error());
+        assertEquals("planned", plans.get(1).expanded());
+        assertTrue(plans.get(1).error().startsWith("数据库校验未通过"), plans.get(1).error());
+        assertTrue(
+                service.planDraftSql("g1", "SELECT amount FROM orders WHERE stat_date IS NULL")
+                        .startsWith("数据库校验未通过"));
+        assertNull(service.planDraftSql("g1", "SELECT amount FROM orders"));
+        assertTrue(wren.connectionFiles.stream().noneMatch(Files::exists));
+    }
+
+    @Test
+    void confirmedQuestionRejectedByExplainIsLeftOutWithoutBlockingPublication()
+            throws IOException {
+        registerGroup("g1");
+        registerDataset("ds_a", "g1", "orders", new String[][] {{"amount", "BIGINT"}});
+        assertTrue(service.publish("g1").ok());
+        write(
+                "knowledge/questions/bad.yml",
+                "question: 十月销售额\n"
+                        + "definition: 金额合计\n"
+                        + "sql: SELECT SUM(amount) AS total FROM orders WHERE stat_date >="
+                        + " '2026-10-01'\n");
+        var questions =
+                new MdlQuestionStore(
+                        new MdlWorkspaceService(
+                                new WrenProperties(
+                                        "wren", mdlHome.toString(), "dataagent", "mysql", 10),
+                                wren));
+        questions.decide("g1", "bad", true, "alice");
+        wren.failDryRunFor = "stat_date";
+
+        var result = service.publish("g1");
+
+        assertTrue(result.ok(), String.valueOf(result.issues()));
+        assertFalse(Files.exists(groupRoot.resolve("published/knowledge/sql/bad.md")));
+        var bad =
+                questions.list("g1").stream()
+                        .filter(r -> r.question().id().equals("bad"))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals("FAILED", bad.status());
+        assertTrue(bad.validation().error().contains("数据库校验未通过"));
+    }
+
+    @Test
     void confirmedQuestionFailingDryPlanIsLeftOutWithoutBlockingPublication() throws IOException {
         registerGroup("g1");
         registerDataset("ds_a", "g1", "orders", new String[][] {{"amount", "BIGINT"}});
@@ -416,6 +476,39 @@ class MdlPublishServiceTest {
         Files.writeString(file, content, StandardCharsets.UTF_8);
     }
 
+    /**
+     * spec149: Cubes ship only when a caliber list generated them and a person reviewed and
+     * verified every row; writes such a list over model {@code orders} with full conclusions.
+     */
+    private void reviewedCaliberCube(String name, String measure) throws IOException {
+        String yaml =
+                "model: orders\nname: "
+                        + name
+                        + "\nscenario:\n  subject: 订单\n  measures:\n    - {column: amount, name: "
+                        + measure
+                        + "}\ncalibers:\n  - {name: 全部订单, where: {id: '1'}}\n";
+        write("calibers/" + name + ".yml", yaml);
+        assertTrue(CaliberCompiler.sync(ws).isEmpty());
+        CaliberList list = CaliberList.parse("calibers/" + name + ".yml", yaml).list();
+        java.util.Map<String, CaliberReviews.RowReview> rows = new java.util.TreeMap<>();
+        for (CaliberList.Caliber c : list.calibers()) {
+            String h = CaliberSources.hash(c);
+            rows.put(
+                    c.name(), new CaliberReviews.RowReview(h, "alice", "t", h, "alice", "t", null));
+        }
+        java.util.Map<String, CaliberReviews.ListReview> all =
+                new java.util.TreeMap<>(CaliberReviews.read(ws));
+        all.put(
+                "calibers/" + name + ".yml",
+                new CaliberReviews.ListReview(
+                        CaliberReviews.scenarioHash(list),
+                        "alice",
+                        "t",
+                        rows,
+                        new java.util.TreeMap<>()));
+        CaliberReviews.write(ws, all);
+    }
+
     private JsonNode manifestModel(JsonNode mdl, String name) {
         for (JsonNode node : mdl.get("models")) {
             if (name.equals(node.get("name").asText())) {
@@ -464,27 +557,20 @@ class MdlPublishServiceTest {
                   join_type: MANY_TO_ONE
                   condition: orders.customer_id = customers.id
                 """);
-        write(
-                "cubes/revenue/metadata.yml",
-                """
-                name: revenue
-                base_object: orders
-                measures:
-                - name: total_valid_revenue
-                  expression: SUM(amount)
-                  type: DECIMAL
-                  description: 有效金额合计
-                dimensions:
-                - name: status
-                  expression: status
-                  type: VARCHAR
-                """);
+        reviewedCaliberCube("revenue", "total_valid_revenue");
+        // A hand-written Cube was never reviewed: it stays out of the version with a warning.
+        write("cubes/manual/metadata.yml", "name: manual\nbase_object: orders\n");
         write("views/monthly/metadata.yml", "name: monthly\nproperties:\n  description: 月度销售额\n");
         write("views/monthly/sql.yml", "statement: >-\n  SELECT 1\n");
 
         MdlTypes.MdlPublishResult second = service.publish("g1");
         assertTrue(second.ok(), String.valueOf(second.issues()));
         assertEquals(2, second.mdlVersion());
+        assertTrue(
+                second.issues().stream().anyMatch(i -> i.message().contains("cubes/manual")),
+                String.valueOf(second.issues()));
+        assertFalse(Files.exists(groupRoot.resolve("published/cubes/manual")));
+        assertTrue(Files.exists(groupRoot.resolve("published/cubes/revenue_metrics/metadata.yml")));
 
         // ADR 0033 D6: the cube dry-run used the official pure-SQL argv.
         assertTrue(
@@ -492,7 +578,7 @@ class MdlPublishServiceTest {
                         .anyMatch(
                                 c ->
                                         c.equals(
-                                                "cube query --cube revenue --measures"
+                                                "cube query --cube revenue_metrics --measures"
                                                         + " total_valid_revenue --sql-only")),
                 String.valueOf(wren.calls));
         assertTrue(wren.calls.stream().anyMatch(c -> c.equals("context validate --strict")));
@@ -531,12 +617,17 @@ class MdlPublishServiceTest {
         assertEquals("customer_id", relation.get("sourceColumn").asText());
         assertEquals("id", relation.get("targetColumn").asText());
         JsonNode cube = mdl.get("cubes").get(0);
-        assertEquals("revenue", cube.get("name").asText());
+        assertEquals("revenue_metrics", cube.get("name").asText());
         assertEquals("total_valid_revenue", cube.get("measures").get(0).get("name").asText());
-        assertEquals(1, mdl.get("views").size());
+        assertEquals(2, mdl.get("views").size());
 
-        // The diff card converges after publishing.
+        // The held-back hand-written Cube keeps the draft different from the publication; once it
+        // is removed the diff card converges.
         MdlTypes.MdlPreview preview = service.preview("g1");
+        assertTrue(preview.changed());
+        Files.delete(ws.resolve("cubes/manual/metadata.yml"));
+        Files.delete(ws.resolve("cubes/manual"));
+        preview = service.preview("g1");
         assertFalse(preview.changed());
         assertTrue(
                 preview.publishedFiles().stream().noneMatch(f -> f.path().startsWith("target/")));
@@ -556,23 +647,15 @@ class MdlPublishServiceTest {
                 "orders",
                 new String[][] {{"id", "bigint", null}, {"amount", "decimal", "金额"}});
         assertTrue(seeder.reconcile("g1").issues().isEmpty());
-        write(
-                "cubes/broken/metadata.yml",
-                """
-                name: broken
-                base_object: orders
-                measures:
-                - name: total
-                  expression: SUM(amount)
-                  type: DECIMAL
-                """);
+        reviewedCaliberCube("broken", "total");
         wren.failCubeQuery = true;
 
         MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(
-                result.issues().stream().anyMatch(i -> i.message().contains("Cube「broken」试跑失败")),
+                result.issues().stream()
+                        .anyMatch(i -> i.message().contains("Cube「broken_metrics」试跑失败")),
                 String.valueOf(result.issues()));
         assertEquals("FAILED", result.mdlState());
         assertFalse(Files.exists(groupRoot.resolve("published")));
@@ -589,16 +672,7 @@ class MdlPublishServiceTest {
         assertTrue(service.publishBaseline("g1").ok());
         assertFalse(Files.exists(groupRoot.resolve("published").resolve("cubes")));
 
-        write(
-                "cubes/broken/metadata.yml",
-                """
-                name: broken
-                base_object: orders
-                measures:
-                - name: total
-                  expression: SUM(amount)
-                  type: DECIMAL
-                """);
+        reviewedCaliberCube("broken", "total");
         wren.failCubeQuery = true;
 
         MdlTypes.MdlPublishResult result = service.publish("g1");
@@ -613,7 +687,7 @@ class MdlPublishServiceTest {
                 Files.exists(groupRoot.resolve("published").resolve("target").resolve("mdl.json")));
         DatasetGroupEntity group = groupsById.get("g1");
         assertNotNull(group.getMdlLastError());
-        assertTrue(group.getMdlLastError().contains("Cube「broken」"));
+        assertTrue(group.getMdlLastError().contains("Cube「broken_metrics」"));
     }
 
     @Test

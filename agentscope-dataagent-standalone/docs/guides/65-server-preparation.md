@@ -103,7 +103,7 @@ sudo -u dataagent /opt/dataagent/wren-venv/bin/python \
   /opt/dataagent/wren-venv/bin/wren
 ```
 
-固定依赖以合并后随包requirements为准；本次源码为wrenai0.15.0、wren-core-py0.8.0、mcp1.30.0。联网安装与离线wheelhouse由运维按网络条件选择；pip依赖检查失败先修复，不能继续启动。
+固定依赖以合并后随包requirements为准；本次源码为wrenai0.18.0、wren-core-py0.8.2、mcp1.30.0（2026-11-24由0.15.0升级，66环境须重新安装并回归）。联网安装与离线wheelhouse由运维按网络条件选择；pip依赖检查失败先修复，不能继续启动。
 
 开发交付与65同CPU架构的沙箱镜像归档，运维导入并核对imageId：
 

@@ -211,3 +211,4 @@ ADR 记录"为什么这样做"。规则：
 | [0152](0152-configurable-table-sync-boundary.md) | 管理员单表同步的执行与权限边界 | 已接受，2026-11-18；对应 spec148 | |
 | [0153](0153-table-sync-ui-connection-settings.md) | 管理员在页面填写表同步连接 | 已接受，2026-11-18；部分取代 ADR0152 | |
 | [0154](0154-table-sync-manual-ddl.md) | 表同步 DDL 由 BI 数据开发执行 | 已接受，2026-11-18；部分取代 ADR0152、ADR0153 | |
+| [0155](0155-caliber-assets-view-plus-cube.md) | 文档口径以 View + Cube 作为可核查口径资产，问数优先 query_cube；多表时以每表口径清单为唯一事实源 | 已接受，2026-11-24；实施 spec149（P0 实施中），P1 实施后取代 ADR0107 资产轮次 cubes/ 部分并收窄实施 ADR0138 第 2 条；扩展 ADR0072 补丁至 0.18.0 | |

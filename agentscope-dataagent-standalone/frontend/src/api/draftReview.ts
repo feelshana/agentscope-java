@@ -1,7 +1,7 @@
 import { apiFetch, getToken } from './auth';
 
 /** Where a draft change came from (spec092); "platform" means no recorded writer. */
-export type ChangeSource = 'auto' | 'document' | 'question' | 'chat' | 'confirm' | 'asset' | 'edit' | 'upload' | 'platform';
+export type ChangeSource = 'auto' | 'document' | 'question' | 'chat' | 'confirm' | 'asset' | 'caliber' | 'edit' | 'upload' | 'platform';
 
 export interface DraftChange {
   path: string;
@@ -81,7 +81,7 @@ export async function deleteDocument(groupId: string, name: string): Promise<voi
 
 export const SOURCE_LABEL: Record<ChangeSource, string> = {
   auto: '自动建模', document: '文档更新', question: '问题处理', chat: '你的对话', confirm: '你的确认',
-  asset: '语义资产', edit: '你的编辑', upload: '上传', platform: '平台',
+  asset: '语义资产', caliber: '口径清单', edit: '你的编辑', upload: '上传', platform: '平台',
 };
 
 /** The user's own edit of a drafted text file in the review page. */

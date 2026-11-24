@@ -147,11 +147,11 @@ sudo -u dataagent -H /opt/dataagent/wren-venv/bin/python \
   /opt/dataagent/wren-venv/bin/wren
 ```
 
-当前固定入口依赖：wrenai[mcp,mysql,memory-onnx]0.15.0、wren-core-py0.8.0、mcp1.30.0，以本次材料requirements内容为准。MCP/MySQL/ONNX/LanceDB依赖随pip安装；LanceDB为本地嵌入式存储，不另装Chroma或一整套WrenAI网站。应用负责调用Wren/MCP进程，不在这里另启动一个常驻HTTP服务。Python头文件缺失、pkg-config找不到mysqlclient等错误须先修复系统依赖，不为过门禁更换固定Wren版本。
+当前固定入口依赖：wrenai[mcp,mysql,memory-onnx]0.18.0、wren-core-py0.8.2、mcp1.30.0（2026-11-24由0.15.0升级；duckdb等原生依赖随之升级，66的glibc兼容性尚未重新核对），以本次材料requirements内容为准。MCP/MySQL/ONNX/LanceDB依赖随pip安装；LanceDB为本地嵌入式存储，不另装Chroma或一整套WrenAI网站。应用负责调用Wren/MCP进程，不在这里另启动一个常驻HTTP服务。Python头文件缺失、pkg-config找不到mysqlclient等错误须先修复系统依赖，不为过门禁更换固定Wren版本。
 
 ## E. 向量模型缓存：联网准备一次，再离线验证
 
-使用与启动脚本一致的运行账号和HOME。下面的get_embedding_function来自当前Wren0.15.0代码；首次调用可能联网下载向量模型。它不是公司提供的聊天大模型。
+使用与启动脚本一致的运行账号和HOME。下面的get_embedding_function在Wren0.15.0与0.18.0中相同（0.18.0本机核对仍为384维）；首次调用可能联网下载向量模型。它不是公司提供的聊天大模型。
 
 ```bash
 sudo -u dataagent env HOME=/opt/dataagent/data/home \

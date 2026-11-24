@@ -187,6 +187,40 @@ public class TableProvisioner {
         }
     }
 
+    /**
+     * spec149: the distinct values of an uploaded table's column, measured by the platform (like
+     * {@link #dateRange}) so caliber lists can be checked without the modeling agent querying
+     * data. Returns null when the column has more than {@code limit} values or cannot be read.
+     */
+    public java.util.List<String> distinctValues(String table, String column, int limit) {
+        if (table == null
+                || !table.matches("[A-Za-z0-9_]{1,128}")
+                || column == null
+                || !column.matches("[A-Za-z0-9_]{1,128}")
+                || limit < 1) return null;
+        String sql =
+                "SELECT DISTINCT `"
+                        + column
+                        + "` FROM `"
+                        + table
+                        + "` WHERE `"
+                        + column
+                        + "` IS NOT NULL LIMIT "
+                        + (limit + 1);
+        try (Connection c = connect();
+                Statement st = c.createStatement()) {
+            st.setQueryTimeout(30);
+            java.util.List<String> values = new java.util.ArrayList<>();
+            try (var rs = st.executeQuery(sql)) {
+                while (rs.next()) values.add(rs.getString(1));
+            }
+            return values.size() > limit ? null : values;
+        } catch (SQLException e) {
+            log.warn("Values of {}.{} unavailable: {}", table, column, e.getMessage());
+            return null;
+        }
+    }
+
     public void dropTable(String table) {
         String sql = "DROP TABLE IF EXISTS `" + table + "`";
         try (Connection c = connect();
