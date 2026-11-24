@@ -55,6 +55,9 @@ public class DemoDataService {
     private static final int BATCH = 1000;
     private static final int LEGACY_CUSTOMER_COUNT = 2000;
     private static final int LEGACY_ORDER_COUNT = 48000;
+    // Bundled briefly before the samples shrank to the current size; such seeds stay usable.
+    private static final int BUNDLED_V1_CUSTOMER_COUNT = 200;
+    private static final int BUNDLED_V1_ORDER_COUNT = 10000;
 
     private record DemoTable(
             String name, String file, int rows, List<String> columns, String ddl) {}
@@ -63,7 +66,7 @@ public class DemoDataService {
             new DemoTable(
                     "demo_customers",
                     SAMPLE_FILES.get(1),
-                    200,
+                    20,
                     List.of(
                             "customer_id",
                             "customer_name",
@@ -81,7 +84,7 @@ public class DemoDataService {
             new DemoTable(
                     "demo_orders",
                     SAMPLE_FILES.get(0),
-                    10000,
+                    1000,
                     List.of(
                             "order_id",
                             "customer_id",
@@ -215,6 +218,15 @@ public class DemoDataService {
         }
     }
 
+    /** Row count the seeding step requires for a bundled sample file. */
+    static int expectedRows(String file) {
+        return List.of(CUSTOMERS, ORDERS).stream()
+                .filter(table -> table.file().equals(file))
+                .findFirst()
+                .orElseThrow()
+                .rows();
+    }
+
     static boolean usesCurrentSchema(String url) {
         return url != null && url.matches("jdbc:mysql://[^/]+/" + SCHEMA + "(?:\\?.*)?");
     }
@@ -322,8 +334,10 @@ public class DemoDataService {
         }
     }
 
-    private boolean completeCounts(long customers, long orders) {
+    /** Whether the tables hold one complete batch: the current template or an earlier one. */
+    static boolean completeCounts(long customers, long orders) {
         return (customers == CUSTOMERS.rows() && orders == ORDERS.rows())
+                || (customers == BUNDLED_V1_CUSTOMER_COUNT && orders == BUNDLED_V1_ORDER_COUNT)
                 || (customers == LEGACY_CUSTOMER_COUNT && orders == LEGACY_ORDER_COUNT);
     }
 

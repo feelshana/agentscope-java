@@ -53,6 +53,16 @@ class DemoDataServiceTest {
     }
 
     @Test
+    void currentAndEarlierCompleteBatchesAreAcceptedButPartialOnesAreNot() {
+        assertThat(DemoDataService.completeCounts(20, 1000)).isTrue();
+        assertThat(DemoDataService.completeCounts(200, 10000)).isTrue();
+        assertThat(DemoDataService.completeCounts(2000, 48000)).isTrue();
+        assertThat(DemoDataService.completeCounts(20, 10000)).isFalse();
+        assertThat(DemoDataService.completeCounts(200, 1000)).isFalse();
+        assertThat(DemoDataService.completeCounts(20, 0)).isFalse();
+    }
+
+    @Test
     void legacyFilesAreNotOfferedAndOldSchemaIsNotAccepted() {
         assertThatThrownBy(() -> service(true, "pw").sample("演示订单.xlsx"))
                 .isInstanceOf(DatasetException.class);

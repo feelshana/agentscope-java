@@ -34,6 +34,8 @@ class DemoSampleFilesTest {
         var customerBytes = controller.sample("示例客户.xlsx").block().getBody();
         var customers = parser.parse(new ByteArrayInputStream(customerBytes), "示例客户.xlsx", 21);
         assertThat(customers.totalRows()).isEqualTo(20);
+        // The read-only source seeds from the same files and rejects any other row count.
+        assertThat(DemoDataService.expectedRows("示例客户.xlsx")).isEqualTo(customers.totalRows());
         var keys = new HashSet<String>();
         var names = new HashSet<String>();
         for (var row : customers.rows()) {
@@ -47,6 +49,7 @@ class DemoSampleFilesTest {
         var bytes = controller.sample("示例订单.xlsx").block().getBody();
         var orders = parser.parse(new ByteArrayInputStream(bytes), "示例订单.xlsx", 1001);
         assertThat(orders.totalRows()).isEqualTo(1000);
+        assertThat(DemoDataService.expectedRows("示例订单.xlsx")).isEqualTo(orders.totalRows());
         assertThat(orders.columns().get(2).sqlType()).isEqualTo("DATETIME");
         var orderIds = new HashSet<String>();
         var buyers = new HashSet<String>();
