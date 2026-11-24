@@ -62,6 +62,8 @@ public final class ModelingConfirmationTool {
                     List<String> questionIds) {
         try {
             var project = access.resolve(context);
+            if (project.questionId() != null)
+                return "error: 本轮只处理选中的问题。请在回复中询问需要知道的单题口径；如果要补共享规则，请提议方案。";
             List<String> labels = withoutPageOptions(optionLabels, optionRules);
             boolean relationship =
                     "relationship".equalsIgnoreCase(topic == null ? "" : topic.trim());

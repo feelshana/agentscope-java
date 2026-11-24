@@ -172,6 +172,133 @@ class SemanticAssetServiceTest {
     }
 
     @Test
+    void publishedCatalogAndEvidenceSurviveDraftChangesAndDraftRemoval() throws Exception {
+        review();
+        run();
+        service.verdict(
+                USER,
+                GROUP,
+                AssetReviewStore.KIND_VIEW,
+                VIEW,
+                Map.of("sql:" + sqlKey(), "EXPECTED"));
+        var published = group.resolve("published");
+        store.writeWindows(GROUP, Files.createDirectories(published));
+        var snapshots = reader.read(GROUP);
+        var sourcePath = "views/" + VIEW + "/metadata.yml";
+        write(published.resolve(sourcePath), "name: sales_valid\n");
+        write(
+                draft.resolve(sourcePath),
+                "name: sales_valid\nproperties: { description: edited }\n");
+        when(reader.read(GROUP, draft, false)).thenReturn(snapshots);
+        when(reader.read(GROUP, published, false)).thenReturn(snapshots);
+
+        var beforeRemoval = service.catalog(USER, GROUP);
+        assertThat(beforeRemoval.draft())
+                .singleElement()
+                .extracting(AssetReviewStore.Asset::status)
+                .isEqualTo(AssetReviewStore.REVIEW_PENDING);
+        assertThat(beforeRemoval.published())
+                .singleElement()
+                .extracting(AssetReviewStore.Asset::status)
+                .isEqualTo(AssetReviewStore.PUBLISHED);
+        assertThat(service.get(USER, GROUP, AssetReviewStore.KIND_VIEW, VIEW, true).files())
+                .containsExactly(
+                        new SemanticAssetService.SourceFile(sourcePath, "name: sales_valid\n"));
+        assertThat(beforeRemoval.published().get(0).review().evidence())
+                .singleElement()
+                .extracting(AssetReviewStore.Evidence::question)
+                .isEqualTo("总量");
+
+        when(reader.read(GROUP, draft, false))
+                .thenReturn(
+                        new MdlWorkspaceReader.Snapshot(
+                                List.of(), List.of(), List.of(), List.of(), List.of(), List.of()));
+        assertThat(service.catalog(USER, GROUP).draft()).isEmpty();
+        assertThat(service.catalog(USER, GROUP).published())
+                .containsExactlyElementsOf(beforeRemoval.published());
+    }
+
+    @Test
+    void reviewAndRemovalRejectOutdatedViewRevisions() throws Exception {
+        var hash = asset().hash();
+        var impact = service.impact(USER, GROUP, AssetReviewStore.KIND_VIEW, VIEW);
+        var file = draft.resolve("views/" + VIEW + "/metadata.yml");
+        write(file, "name: sales_valid\nproperties: { description: changed }\n");
+        assertThatThrownBy(
+                        () ->
+                                service.review(
+                                        USER,
+                                        GROUP,
+                                        AssetReviewStore.KIND_VIEW,
+                                        VIEW,
+                                        List.of(),
+                                        hash))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("草稿已变化");
+        assertThatThrownBy(
+                        () ->
+                                service.delete(
+                                        USER,
+                                        GROUP,
+                                        AssetReviewStore.KIND_VIEW,
+                                        VIEW,
+                                        impact.revision()))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("引用已变化");
+        assertThat(file).exists();
+        assertThat(asset().review()).isNull();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void verdictAndSavingAQuestionAreSeparateAndAnOlderRunCannotSubmit() {
+        var questions = mock(MdlQuestionService.class);
+        var saving =
+                new SemanticAssetService(
+                        groups, store, publisher, workspace, reader, windows, gateway, generator,
+                        questions);
+        when(publisher.beforeNextPublish(eq(GROUP), any()))
+                .thenAnswer(call -> ((Supplier<Object>) call.getArgument(1)).get());
+        review();
+        run();
+        String hash = asset().hash();
+        var first =
+                saving.verify(USER, GROUP, AssetReviewStore.KIND_VIEW, VIEW, cases(), hash).get(0);
+        var second =
+                saving.verify(USER, GROUP, AssetReviewStore.KIND_VIEW, VIEW, cases(), hash).get(0);
+        assertThatThrownBy(
+                        () ->
+                                saving.verdict(
+                                        USER,
+                                        GROUP,
+                                        AssetReviewStore.KIND_VIEW,
+                                        VIEW,
+                                        Map.of(first.key(), "EXPECTED"),
+                                        List.of(),
+                                        hash))
+                .isInstanceOf(DatasetException.class);
+        saving.verdict(
+                USER,
+                GROUP,
+                AssetReviewStore.KIND_VIEW,
+                VIEW,
+                Map.of(second.key(), "EXPECTED"),
+                List.of(),
+                hash);
+        org.mockito.Mockito.verifyNoInteractions(questions);
+        saving.saveVerifiedQuestion(
+                USER, GROUP, AssetReviewStore.KIND_VIEW, VIEW, hash, second.key(), null);
+        verify(questions)
+                .confirmVerified(
+                        any(DatasetScope.class),
+                        eq(GROUP),
+                        eq("总量"),
+                        org.mockito.ArgumentMatchers.contains(VIEW),
+                        eq(SQL),
+                        org.mockito.ArgumentMatchers.isNull());
+    }
+
+    @Test
     void problemVerdictKeepsTheAssetUnverified() {
         review();
         run();
@@ -228,6 +355,62 @@ class SemanticAssetServiceTest {
         assertThatThrownBy(
                         () -> service.delete(USER, GROUP, AssetReviewStore.KIND_REF_SQL, "orders"))
                 .isInstanceOf(DatasetException.class);
+    }
+
+    @Test
+    void incompleteViewRemovalRequiresCurrentImpactAndPreservesOtherDraftFiles() throws Exception {
+        Path incomplete = draft.resolve("views/incomplete");
+        Path sql = incomplete.resolve("sql.yml");
+        write(sql, "statement: SELECT 1\n");
+        Path rules = draft.resolve("knowledge/rules/general.md");
+        write(rules, "## Canonical tables\n- use incomplete\n- use sales_valid\n");
+        Path example = draft.resolve("knowledge/sql/example.md");
+        write(example, "preserve the example\n");
+
+        var before = service.inspectIncompleteView(USER, GROUP, "incomplete");
+        assertThat(before.files())
+                .containsExactly(
+                        new SemanticAssetService.SourceFile(
+                                "views/incomplete/sql.yml", "statement: SELECT 1\n"));
+        assertThat(before.impact().rules()).containsExactly("- use incomplete");
+        write(sql, "statement: SELECT 2\n");
+        assertThatThrownBy(
+                        () ->
+                                service.removeIncompleteView(
+                                        USER, GROUP, "incomplete", before.revision()))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("已更新");
+        assertThat(Files.exists(sql)).isTrue();
+
+        var current = service.inspectIncompleteView(USER, GROUP, "incomplete");
+        service.removeIncompleteView(USER, GROUP, "incomplete", current.revision());
+        assertThat(Files.exists(incomplete)).isFalse();
+        assertThat(Files.readString(rules))
+                .contains("- use sales_valid")
+                .doesNotContain("- use incomplete");
+        assertThat(Files.readString(example)).isEqualTo("preserve the example\n");
+        verify(groups).markMdlDirty(USER, GROUP);
+    }
+
+    @Test
+    void incompleteViewRecoveryRejectsUnauthorizedUsersAndRepairedViews() throws Exception {
+        Path dir = draft.resolve("views/incomplete");
+        write(dir.resolve("sql.yml"), "statement: SELECT 1\n");
+        doThrow(new DatasetException("禁止访问", 403)).when(groups).getGroup("other", GROUP);
+        assertThatThrownBy(() -> service.inspectIncompleteView("other", GROUP, "incomplete"))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("禁止访问");
+        String revision = service.inspectIncompleteView(USER, GROUP, "incomplete").revision();
+        assertThatThrownBy(
+                        () -> service.removeIncompleteView("other", GROUP, "incomplete", revision))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("禁止访问");
+
+        write(dir.resolve("metadata.yml"), "name: incomplete\n");
+        assertThatThrownBy(() -> service.removeIncompleteView(USER, GROUP, "incomplete", revision))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("已修复");
+        assertThat(Files.isRegularFile(dir.resolve("sql.yml"))).isTrue();
     }
 
     /** spec112: expected verification cases can become confirmed questions, only as they ran. */

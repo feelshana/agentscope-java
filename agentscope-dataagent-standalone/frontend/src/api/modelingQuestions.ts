@@ -27,7 +27,7 @@ export interface QuestionReview {
   revision: string;
   question: ModelingQuestion;
   /** REVIEW (spec112): confirmed, but what its SQL depends on changed in the draft since. */
-  status: 'DRAFT' | 'EXECUTED' | 'CONFIRMED' | 'REVIEW' | 'STALE' | 'FAILED' | 'REJECTED';
+  status: 'DRAFT' | 'EXECUTED' | 'CONFIRMED' | 'REVIEW' | 'STALE' | 'FAILED' | 'REJECTED' | 'REMOVAL_PENDING';
   /** Why a REVIEW question needs review; empty otherwise. */
   reviewReasons?: string[];
   /** spec114 §8: the assistant's per-question analysis — reusable items (ok) and gaps. */
@@ -54,7 +54,8 @@ async function request<T>(groupId: string, suffix = '', body?: unknown): Promise
   return response.json() as Promise<T>;
 }
 
-export const getModelingQuestions = (groupId: string) => request<QuestionReview[]>(groupId);
+export const getModelingQuestions = (groupId: string, includePendingRemoval = false) =>
+  request<QuestionReview[]>(groupId, includePendingRemoval ? '?includePendingRemoval=true' : '');
 export const validateModelingQuestion = (groupId: string, id: string) =>
   request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/validate`, {});
 /** spec091: confirmation needs no prior trial run; the server re-checks SQL policy and time window. */
@@ -62,8 +63,16 @@ export const validateModelingQuestion = (groupId: string, id: string) =>
 export interface DraftPlan { sql: string; expanded: string | null; error: string | null }
 export const planModelingQuestion = (groupId: string, id: string) =>
   request<DraftPlan>(groupId, `/${encodeURIComponent(id)}/plan`, {});
-export const decideModelingQuestion = (groupId: string, id: string, accepted: boolean) =>
-  request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/decision`, { accepted });
+export const decideModelingQuestion = (groupId: string, id: string, accepted: boolean, revision: string) =>
+  request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/decision`, { accepted, revision });
+export type CoachConversationAction = 'CHAT' | 'CONFIRM_SQL' | 'REVIEW_PUBLICATION';
+export type CoachConversationTurn = { user: string; assistant: string };
+export const interpretCoachConversation = (groupId: string, id: string, input: {
+  revision: string;
+  phase: 'PREPARING' | 'REVIEW_SQL' | 'CONFIRMED';
+  message: string;
+  recentTurns: CoachConversationTurn[];
+}) => request<{ action: CoachConversationAction }>(groupId, `/${encodeURIComponent(id)}/conversation-intent`, input);
 /** spec103: the knowledge base's recommended question; {@code manual} once the modeler edited it. */
 export interface RecommendedQuestion { question: string | null; manual: boolean }
 export const getRecommendedTrialQuestion = (groupId: string) =>
@@ -79,5 +88,5 @@ export const getQuestionSuggestions = (groupId: string) =>
 
 export const correctModelingQuestionSql = (groupId: string, id: string, revision: string, sql: string) =>
   request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/sql`, { revision, sql });
-export const archiveModelingQuestion = (groupId: string, id: string, revision: string) =>
-  request<{ archived: boolean }>(groupId, `/${encodeURIComponent(id)}/archive`, { revision });
+export const archiveModelingQuestion = (groupId: string, id: string, revision: string, published: boolean) =>
+  request<{ archived: boolean }>(groupId, `/${encodeURIComponent(id)}/archive`, { revision, published });

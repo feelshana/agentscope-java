@@ -18,7 +18,7 @@ export type IconName =
   | 'globe'
   | 'zoomIn'
   | 'zoomOut'
-  | 'fit'
+  | 'fit' | 'minimize'
   | 'refresh'
   | 'close'
   | 'trash'
@@ -115,6 +115,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <circle cx="11" cy="11" r="7" />
       <path d="M21 21l-4.35-4.35M8 11h6" />
     </>
+  ),
+  minimize: (
+    <path d="M4 9h5V4m11 5h-5V4M4 15h5v5m11-5h-5v5" />
   ),
   fit: (
     <>

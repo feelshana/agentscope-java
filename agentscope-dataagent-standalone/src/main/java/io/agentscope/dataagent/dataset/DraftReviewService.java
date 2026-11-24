@@ -252,8 +252,22 @@ public class DraftReviewService {
 
     private static Map<String, String> fileContents(List<MdlTypes.MdlFile> files) {
         Map<String, String> result = new LinkedHashMap<>();
-        files.forEach(file -> result.put(file.path(), file.content()));
+        for (var file : files) {
+            if (file.path().startsWith("knowledge/questions/") && archivedQuestion(file.content()))
+                continue;
+            result.put(file.path(), file.content());
+        }
         return result;
+    }
+
+    private static boolean archivedQuestion(String content) {
+        try {
+            var node = YAML.readTree(content);
+            return node != null && node.path("archived").asBoolean(false);
+        } catch (IOException e) {
+            // Malformed files still belong in the draft diff.
+            return false;
+        }
     }
 
     /** A user-directed write later rewritten by an automatic or document turn. */
@@ -357,6 +371,15 @@ public class DraftReviewService {
                 Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             } else {
                 Files.deleteIfExists(target);
+                Path parent = target.getParent();
+                if (root.resolve("views").equals(parent.getParent())
+                        && Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
+                    try {
+                        Files.delete(parent);
+                    } catch (java.nio.file.DirectoryNotEmptyException ignored) {
+                        // Another source file still belongs to this view.
+                    }
+                }
             }
         } catch (IOException e) {
             throw new DatasetException("撤销修改失败：" + e.getMessage(), e);

@@ -162,7 +162,10 @@ public class MdlWorkspaceReader {
 
     /** Lists every publishable workspace file; empty when no workspace exists. */
     public List<MdlTypes.MdlFile> listFiles(String groupId) {
-        Path root = workspace.workspaceRoot(groupId);
+        return listFiles(workspace.workspaceRoot(groupId), groupId);
+    }
+
+    private List<MdlTypes.MdlFile> listFiles(Path root, String groupId) {
         if (!Files.isDirectory(root)) {
             return List.of();
         }
@@ -187,8 +190,11 @@ public class MdlWorkspaceReader {
 
     /** Parses the whole workspace; parse failures become error issues, never exceptions. */
     public Snapshot read(String groupId) {
+        return read(groupId, workspace.workspaceRoot(groupId), true);
+    }
+
+    Snapshot read(String groupId, Path root, boolean includeFiles) {
         List<MdlTypes.MdlIssue> issues = new ArrayList<>();
-        Path root = workspace.workspaceRoot(groupId);
         if (!Files.isDirectory(root)) {
             return new Snapshot(List.of(), issues, List.of(), List.of(), List.of(), List.of());
         }
@@ -284,15 +290,17 @@ public class MdlWorkspaceReader {
         for (Path dir : subDirs(root.resolve("views"))) {
             Path meta = dir.resolve("metadata.yml");
             Path sqlFile = dir.resolve("sql.yml");
-            if (!Files.isRegularFile(meta)) {
-                issues.add(
-                        issue(
-                                "error",
-                                "views/" + dir.getFileName() + " 缺少 metadata.yml，该视图已被跳过",
-                                "local"));
-                continue;
-            }
             try {
+                if (!Files.isRegularFile(meta)) {
+                    try (var entries = Files.list(dir)) {
+                        if (entries.findAny().isEmpty()) continue;
+                    }
+                    String name = dir.getFileName().toString();
+                    issues.add(
+                            new MdlTypes.MdlIssue(
+                                    "error", "视图「" + name + "」缺少 metadata.yml", "local", name));
+                    continue;
+                }
                 Map<String, Object> parsed =
                         yaml.readValue(Files.readString(meta, StandardCharsets.UTF_8), MAP_TYPE);
                 // Official layout: an inline statement, overridden by sql.yml when that file
@@ -323,7 +331,13 @@ public class MdlWorkspaceReader {
                                 "local"));
             }
         }
-        return new Snapshot(listFiles(groupId), issues, models, relations, cubes, views);
+        return new Snapshot(
+                includeFiles ? listFiles(root, groupId) : List.of(),
+                issues,
+                models,
+                relations,
+                cubes,
+                views);
     }
 
     /**
@@ -554,7 +568,7 @@ public class MdlWorkspaceReader {
         }
     }
 
-    private static boolean isInternal(String rel) {
+    static boolean isInternal(String rel) {
         return rel.equals(".platform")
                 || rel.startsWith(".platform/")
                 || rel.equals("target")

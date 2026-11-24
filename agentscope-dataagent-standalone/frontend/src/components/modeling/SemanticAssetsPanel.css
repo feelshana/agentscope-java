@@ -1,0 +1,59 @@
+.sa-pane.va-pane .va-grid[data-catalog-open="false"] { grid-template-columns: 44px minmax(0, 1fr); }
+.va-pane .mo-material-catalog .qc-queue-list li > button { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.va-pane .mo-material-catalog .qc-queue-list li > button > small {
+  display: block; font-family: var(--da-mono, monospace); overflow-wrap: anywhere;
+}
+.va-pane .va-empty { width: min(100%, 840px); margin: clamp(12px, 4vh, 36px) auto 0; }
+.va-tabs, .va-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.va-tabs { gap: clamp(6px, 1vw, 18px); border-bottom: 1px solid var(--da-border); }
+.va-tabs button { padding: 9px 4px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  background: transparent; color: var(--da-text-2); font: inherit; font-size: 13px; cursor: pointer; }
+.va-tabs button[aria-current="page"] { color: var(--da-primary); border-color: var(--da-primary); font-weight: 600; }
+.va-tabs button:disabled { color: var(--da-text-muted); cursor: default; }
+.va-tabs button:not(:disabled):hover, .va-tabs button:focus-visible { color: var(--da-primary); }
+.va-next { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  border: 1px solid var(--da-primary-line); background: var(--da-primary-soft); border-radius: 10px; padding: 11px 14px; margin: 0 0 10px; }
+.va-next p, .va-section-heading p { margin: 4px 0 0; color: var(--da-text-2); font-size: 13px; }
+.va-time-column { display: flex; gap: 7px; align-items: center; font-size: 12px; }
+.va-time-column .da-input { width: auto; min-width: 0; max-width: 210px; }
+.va-content { max-width: 980px; padding-block: 18px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.va-content h4, .va-content h5 { margin: 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.va-content p { margin: 5px 0 0; line-height: 1.65; }
+.va-purpose p, .va-notes p, .va-limits p, .va-facts dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+.va-purpose p { max-width: 68ch; color: var(--da-text-2); }
+.va-facts { display: flex; flex-wrap: wrap; margin: 0;
+  background: var(--da-surface); border: 1px solid var(--da-border); border-radius: 10px; overflow: hidden; }
+.va-facts > div { flex: 1 1 min(230px, 100%); padding: 11px 13px; min-width: 0;
+  box-shadow: -1px -1px 0 0 var(--da-border); }
+.va-facts dt { color: var(--da-text-muted); font-size: 12px; }
+.va-facts dd { margin: 4px 0 0; font-size: 13px; line-height: 1.55; }
+.va-limits { border: 1px solid var(--da-border); border-left: 3px solid var(--da-warn); border-radius: 8px;
+  background: var(--da-surface-sunken); padding: 11px 13px; }
+.va-limits h4 { display: flex; align-items: center; gap: 7px; }
+.va-notes p, .va-limits p { font-size: 13px; color: var(--da-text-2); }
+.va-notes p { max-width: 86ch; }
+.va-section-heading { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.va-case { display: flex; flex-direction: column; gap: 9px; min-width: 0; padding: 12px 14px; border: 1px solid var(--da-border); border-radius: 10px; }
+.va-case .qc-detail-fold { margin: 0; }
+.va-case textarea { width: 100%; }
+.va-case .sa-verdict { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.va-case .sa-verdict label { display: inline-flex; align-items: center; gap: 5px; }
+.va-case-verdict { font-weight: 600; }
+.va-actions { justify-content: flex-end; }
+.va-actions small { margin-inline-end: auto; }
+.va-suggestions { display: flex; gap: 6px; flex-wrap: wrap; }
+.va-suggestions button { white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.va-dialog { overscroll-behavior: contain; }
+.va-dialog .mo-dialog-head h2 { font-size: 17px; margin: 0; }
+.va-dialog .mo-dialog-body > p { margin: 0; }
+.va-dialog .mo-dialog-body textarea { width: 100%; }
+.va-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
+  border-top: 1px solid var(--da-border); padding: 11px 16px; }
+.va-guide { display: grid; gap: 14px; padding-inline-start: 22px; margin: 0; }
+.va-guide li span { display: block; margin-top: 3px; color: var(--da-text-2); }
+.va-impact { background: var(--da-surface-sunken); border-radius: 8px; padding: 10px 12px; overflow-wrap: anywhere; }
+.va-impact p { margin: 0; }
+@media (max-width: 680px) {
+  .va-content { padding-block: 12px 18px; }
+  .va-case { padding: 9px; }
+}

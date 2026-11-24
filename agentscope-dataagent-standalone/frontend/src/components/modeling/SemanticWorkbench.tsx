@@ -4,7 +4,10 @@ import { editDraftFile, editDraftItem, getDocumentContent, getDraftItems, listDo
 import type { DraftItem, DraftItemEdit } from '../../api/draftReview';
 import type { DraftSummary } from './DraftBar';
 import Icon from '../Icon';
-import YamlContent from './YamlContent';
+import ReadableCode from '../ReadableCode';
+import { WorkspaceMenu } from '../KnowledgeWorkspace';
+import EngineeringDialog from './EngineeringDialog';
+import SourceFileEditor from './SourceFileEditor';
 import { joinLabel, modelTag, relationsOf, unrelatedModels } from './semanticSnapshot';
 import type { SemanticColumn, SemanticModel, SemanticRelation, SemanticSnapshot } from './semanticSnapshot';
 import { NODE_H, NODE_W, ROLE_HINT, ROLE_LABEL, focusOf, joinEnds, layoutOverview, roleOf } from './workbenchLayout';
@@ -810,7 +813,7 @@ function Drawer({ groupId, snapshot, selection, files, views, rules, problems, e
     return <>
       {column ? <FieldDrawer {...{ model, column, snapshot, rules, editable, canEdit, disabledTitle, onSelect, onAsk, busy, editGuard }}
         onEditCalculated={openCalc} onClearFeedback={clearFeedback} onSave={saveField} feedback={calcOpen ? null : feedback} />
-        : <ModelDrawer {...{ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule }}
+        : <ModelDrawer {...{ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule, onSave }}
           onAddCalculated={openCalc} feedback={calcOpen ? null : feedback} />}
       {calcOpen && editable && <Suspense fallback={null}><CalculatedColumnDialog model={model} column={column} relations={snapshot.relations}
         busy={busy} blocked={blocked} feedback={feedback} onClose={() => { setError(''); setCalcOpen(false); }}
@@ -845,14 +848,21 @@ function Gone({ onSelect }: { onSelect: (s: Selection) => void }) {
 
 type FieldGroupKey = 'plain' | 'time' | 'calculated' | 'related';
 
-function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule, onAddCalculated, feedback }: {
+function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule, onAddCalculated, feedback, onSave }: {
   groupId: string; model: SemanticModel; snapshot: SemanticSnapshot; files: Map<string, string>; rules: RuleItem[];
   editable: boolean; canEdit: boolean; blocked: string | null; onSelect: (s: Selection) => void; onChanged: () => void; onAsk?: (text: string) => void;
   changedColumn: (model: string, column: SemanticColumn) => MarkTone; newRule: (rule: RuleItem) => MarkTone;
   onAddCalculated: () => void; feedback: ReactNode;
+  onSave: (edit: DraftItemEdit) => Promise<void>;
 }) {
-  const [tab, setTab] = useState<'fields' | 'rules' | 'info' | 'yaml'>('fields');
+  const [tab, setTab] = useState<'fields' | 'rules' | 'info'>('fields');
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const editingBase = useRef<string>();
+  const [savedSource, setSavedSource] = useState<{ base: string | undefined; content: string } | null>(null);
+  const [description, setDescription] = useState<string | null>(null);
+  const [descriptionBusy, setDescriptionBusy] = useState(false);
+  const [descriptionError, setDescriptionError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -873,7 +883,9 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
       return open ? previous.filter(group => group !== key) : [...previous, key];
     }),
   });
-  const text = model.path ? files.get(model.path) : undefined;
+  const source = model.path ? files.get(model.path) : undefined;
+  const text = savedSource && savedSource.base === source ? savedSource.content : source;
+  const sourceChanged = editing !== null && text !== editingBase.current;
   const plainAll = model.columns.filter(c => !c.calculated);
   const times = plainAll.filter(c => roleOf(model, c, snapshot.relations).role === 'TIME');
   const plain = plainAll.filter(c => !times.includes(c));
@@ -882,9 +894,23 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
   const related = rules.filter(r => ruleRefs(r.text, snapshot.models).some(ref => ref.startsWith(`${model.name}.`)) || r.text.includes(model.name));
   const tag = modelTag(model, false);
   const saveYaml = async () => {
-    if (editing === null || !model.path) return;
+    if (editing === null || !model.path || !canEdit || editing === text || sourceChanged) return;
     setBusy(true); setError(''); setSaved(false);
-    try { await editDraftFile(groupId, model.path, editing); setEditing(null); setSaved(true); onChanged(); } catch (e) { setError(message(e)); } finally { setBusy(false); }
+    try {
+      await editDraftFile(groupId, model.path, editing);
+      setSavedSource({ base: source, content: editing }); setEditing(null); setSaved(true); onChanged();
+    } catch (e) { setError(message(e)); } finally { setBusy(false); }
+  };
+  const closeSource = () => {
+    setSourceOpen(false); setEditing(null); setError(''); setSaved(false); setSavedSource(null);
+  };
+  const saveDescription = async () => {
+    if (!model.path || description === null || !canEdit) return;
+    setDescriptionBusy(true); setDescriptionError('');
+    try {
+      await onSave({ category: 'MODEL', model: model.name, tableDescription: description.trim() });
+      setDescription(null);
+    } catch (e) { setDescriptionError(message(e)); } finally { setDescriptionBusy(false); }
   };
   // Columns business rules rely on: renaming or dropping them changes what the rules mean.
   const ruleUse = new Map<string, RuleItem[]>();
@@ -903,9 +929,11 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
   return <>
     <div className="sw-dh sw-dh-tabs">
       <div className="sw-dh-row"><span className={`sw-ico ${model.tableRole === 'FACT' ? 'sw-ico-fact' : model.derived ? 'sw-ico-sql' : 'sw-ico-dim'}`}>{model.tableRole === 'FACT' ? '事' : model.derived ? '算' : '维'}</span>
-        <strong title={model.name}>{model.name}</strong><span className="sw-chip">{tag.label}</span><span className="sw-grow" /><CloseButton onSelect={onSelect} /></div>
+        <strong title={model.name}>{model.name}</strong><span className="sw-chip">{tag.label}</span><span className="sw-grow" />
+        {text !== undefined && <WorkspaceMenu label="模型更多" items={[{ label: editable ? '查看或编辑模型 YAML' : '查看模型 YAML', icon: 'code', onClick: () => setSourceOpen(true) }]} />}
+        <CloseButton onSelect={onSelect} /></div>
       <div role="tablist" className="sw-dtabs">
-        {([['fields', '字段'], ['rules', `规则与原文 ${related.length}`], ['info', '表信息'], ['yaml', 'YAML']] as const).map(([k, l]) =>
+        {([['fields', '字段'], ['info', '表属性'], ['rules', `关联规则 ${related.length}`]] as const).map(([k, l]) =>
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
       </div>
     </div>
@@ -939,24 +967,34 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
       </>}
       {tab === 'info' && <dl className="sw-dl">
         <dt>表角色</dt><dd>{model.tableRole === 'FACT' ? '事实表：记录发生的事（订单、访问）' : model.tableRole === 'DIMENSION' ? '维度表：描述对象（客户、商品）' : model.derived ? '由 SQL 定义的模型' : '未标注'}</dd>
-        <dt>说明</dt><dd>{model.description || '—'}</dd>
+         <dt>说明</dt><dd>{description === null ? <>{model.description || '—'}{editable && <div><button type="button" className="sw-link" disabled={!canEdit || !model.path} onClick={() => setDescription(model.description ?? '')}>编辑表说明</button></div>}</>
+           : <form onSubmit={event => { event.preventDefault(); void saveDescription(); }}>
+             <textarea className="da-input" aria-label="表说明" rows={4} value={description} disabled={descriptionBusy} onChange={event => setDescription(event.target.value)} />
+             <div className="sw-actions"><button type="button" className="da-btn da-btn-sm" disabled={descriptionBusy} onClick={() => { setDescription(null); setDescriptionError(''); }}>取消</button>
+               <button type="submit" className="da-btn da-btn-sm da-btn-primary" disabled={!canEdit || descriptionBusy || description.trim() === (model.description ?? '')}>保存到草稿</button></div>
+             {descriptionError && <p role="alert" className="sw-error">{descriptionError}</p>}
+           </form>}</dd>
         <dt>字段</dt><dd>{plain.length} 个普通列，{times.length} 个日期列，{calc.length} 个衍生列</dd>
         <dt>文件</dt><dd className="sw-mono">{model.path ?? '—'}</dd>
-        {editable && <dd className="sw-hint" style={{ gridColumn: '1 / -1' }}>表说明与表角色请在 YAML 页修改，或让建模助手修改。</dd>}
+         {editable && <dd className="sw-hint" style={{ gridColumn: '1 / -1' }}>可从「模型更多」打开 YAML 修改表角色，也可交给建模助手。</dd>}
       </dl>}
       {tab === 'rules' && <RuleSources groupId={groupId} model={model} rules={related} editable={editable} onSelect={onSelect} newRule={newRule} />}
-      {tab === 'yaml' && (text === undefined ? <div className="sw-empty">这个版本没有可显示的 YAML。</div> : <>
-        <div className="sw-dh-row"><span className="sw-mono sw-muted">{model.path}</span><span className="sw-grow" />
-          {editable && <button type="button" className="da-btn da-btn-sm" disabled={!canEdit || busy} title={blocked ?? undefined}
-            onClick={() => { setEditing(editing === null ? text : null); setError(''); setSaved(false); }}>{editing === null ? '编辑' : '取消编辑'}</button>}</div>
-        {editing === null ? <div className="sw-yaml"><YamlContent text={text} /></div>
-          : <textarea className="sw-yaml-edit" aria-label="编辑 YAML" spellCheck={false} value={editing} onChange={e => setEditing(e.target.value)} />}
-        {editing !== null && <div className="sw-actions"><button type="button" className="da-btn da-btn-primary da-btn-sm" disabled={busy} onClick={() => void saveYaml()}>{busy ? 'Wren 校验中…' : '校验并保存到草稿'}</button></div>}
-        {error && <div role="alert" className="sw-error">{error}</div>}
-        {saved && <div className="sw-ok">已通过 Wren 校验并保存到草稿，记为"你的编辑"。</div>}
-        <p className="sw-hint">这就是 Wren 读取的文件。{editable ? '有管理权限的成员可以直接编辑，保存前会跑与助手相同的写入校验（YAML、validate、build、dry-plan），不通过不写入。' : '只读。'}</p>
-      </>)}
     </div>
+    {sourceOpen && text !== undefined && <EngineeringDialog title="模型 YAML" context={model.name} onClose={closeSource}
+      canClose={() => !busy && (editing === null || editing === text || window.confirm('放弃尚未保存的 YAML 修改？'))}
+      footer={<><span className="eng-message" role="status">{saved ? '已通过 Wren 校验并保存到草稿。' : editable ? '当前草稿 · 修改经 Wren 校验后保存。' : '线上版本 · 只读'}</span>
+        {editable && <div className="eng-buttons">{editing === null
+          ? <button type="button" className="da-btn da-btn-primary da-btn-sm" disabled={!canEdit} title={blocked ?? undefined} onClick={() => { editingBase.current = text; setEditing(text); setSaved(false); }}>编辑草稿</button>
+          : <><button type="button" className="da-btn da-btn-sm" disabled={busy} onClick={() => { if (editing !== text && !window.confirm('放弃尚未保存的 YAML 修改？')) return; setEditing(null); setError(''); }}>取消编辑</button>
+            <button type="button" className="da-btn da-btn-primary da-btn-sm" disabled={busy || !canEdit || editing === text || sourceChanged} onClick={() => void saveYaml()}>{busy ? 'Wren 校验中…' : '校验并保存到草稿'}</button></>}</div>}
+      </>}>
+      {editing === null ? <ReadableCode fill text={text} title={model.path ?? '模型 YAML'} /> : <>
+        <div className="eng-filebar"><strong title={model.path ?? undefined}>{model.path}</strong></div>
+        <SourceFileEditor label="编辑 YAML" value={editing} onChange={setEditing} disabled={busy || !canEdit} />
+      </>}
+      {error && <p role="alert" className="eng-inline-error">{error}</p>}
+      {sourceChanged && <p role="alert" className="eng-inline-error">源文件草稿已更新。请复制尚未保存的内容，再重新打开编辑。</p>}
+    </EngineeringDialog>}
     {onAsk && <div className="sw-df"><button type="button" className="da-btn da-btn-sm" onClick={() => onAsk(`请调整模型 ${model.name}：`)}>问助手修改这张表</button></div>}
   </>;
 }

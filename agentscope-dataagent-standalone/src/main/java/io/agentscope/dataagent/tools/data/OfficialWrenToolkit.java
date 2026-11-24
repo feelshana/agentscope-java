@@ -650,7 +650,7 @@ public final class OfficialWrenToolkit {
     static void refuseQueryInQuestionTurn(RuntimeContext context, List<String> command) {
         if (context == null || command.isEmpty() || !command.get(0).equals("query")) return;
         var purpose = context.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class);
-        if (purpose != null && purpose.question())
+        if (purpose != null && (purpose.question() || purpose.coach()))
             throw new DatasetException(
                     "试问不查询数据，未执行查询。请用 dry-plan 检查 SQL 能否生成，写入问题文件后由用户在试问面板核对。", 403);
     }
@@ -676,6 +676,10 @@ public final class OfficialWrenToolkit {
     private void validateQueryBoundary(
             RuntimeContext context, Project project, List<String> command) {
         if (command.isEmpty() || command.contains("--help")) return;
+        if (project.questionId() != null
+                && Set.of("query", "dry-run", "memory").contains(command.get(0))) {
+            throw new DatasetException("单题优化只用 dry-plan 检查 SQL，不查询数据或写入问答记忆", 403);
+        }
         // spec090: Q&A pairs are written only by the platform after the user confirms a question.
         if (command.get(0).equals("memory") && command.size() > 1 && command.get(1).equals("store"))
             throw new IllegalArgumentException(

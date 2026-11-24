@@ -36,6 +36,7 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, pendingO
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [references, setReferences] = useState<ScreeningReference[] | null>(null);
+  const [discarding, setDiscarding] = useState(false);
   /** A join-key column waiting for the modeler to confirm its exclusion. */
   const [asking, setAsking] = useState<string | null>(null);
   const [savingDescription, setSavingDescription] = useState(false);
@@ -121,7 +122,12 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, pendingO
       const value = snapshot.drafts[f.name];
       return value && (value.included !== f.included || (mode === 'adjust' && value.description.trim() !== (f.description ?? '').trim()));
     });
-    return !changed || window.confirm('当前表还有未确认的修改，离开后这些修改不会保留。确定离开吗？');
+    if (!changed) return true;
+    if (mode === 'adjust') {
+      setDiscarding(open => !open);
+      return false;
+    }
+    return window.confirm('当前表还有未确认的修改，离开后这些修改不会保留。确定离开吗？');
   };
   useEffect(() => {
     if (leaveGuard) leaveGuard.current = canLeave;
@@ -193,10 +199,12 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, pendingO
     update(f.name, { included: include });
   };
 
-  const saveLabel = busy === 'save' ? '保存中…' : mode === 'adjust' ? '保存' : table?.confirmed ? '保存修改' : othersPending ? '确认，下一张表' : '确认此表';
+  const saveLabel = busy === 'save' ? '保存中…' : mode === 'adjust' ? (table?.confirmed ? '保存字段修改' : '确认字段范围')
+    : table?.confirmed ? '保存修改' : othersPending ? '确认，下一张表' : '确认此表';
 
   return <section aria-label="字段整理" className={`fs fs-redesign${mode === 'adjust' ? ' fs-adjust' : ''}`}>
-    {mode === 'adjust' && <header className="fs-adjust-head"><strong>调整字段 · {table?.name ?? ''}</strong>{onClose && <button type="button" className="mp-button" onClick={() => void canLeave().then(ok => { if (ok) onClose(); })}>关闭</button>}</header>}
+    {mode === 'adjust' && <header className="fs-adjust-head"><strong>{table && !table.confirmed ? '确认' : '调整'}字段范围{table && ` · ${table.name}`}</strong>
+      {onClose && <button type="button" autoFocus className="mp-button" disabled={busy === 'save'} onClick={() => void canLeave().then(ok => { if (ok) onClose(); })}>关闭</button>}</header>}
     <div className="fs-layout">
       {mode === 'setup' && <nav aria-label="数据表" className="fs-nav">
         <div className="fs-nav-head"><span>数据表</span><span>{confirmedCount} / {status.length} 已确认</span></div>
@@ -264,10 +272,17 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, pendingO
         {error && <div role="alert" className="fs-error">{error}{!table
           ? <button type="button" className="mp-text-button" onClick={() => { void loadStatus().catch(e => setError(message(e))); setReloadTable(n => n + 1); }}>重新读取</button>
           : mode === 'setup' && <button type="button" className="mp-text-button" disabled={savingDescription} onClick={() => void flushDescriptions()}>重试保存说明</button>}</div>}
+        {discarding && <div role="group" aria-label="未保存的字段修改" className="fs-refs">
+          <strong>当前字段修改尚未保存。</strong>
+          <div><button type="button" autoFocus className="mp-button" onClick={() => setDiscarding(false)}>继续编辑</button>
+            <button type="button" className="mp-button" disabled={busy !== null} onClick={onClose}>放弃并关闭</button></div>
+        </div>}
         <footer className="fs-foot">
           {table && <span>纳入 <strong>{included}</strong> / {fields.length}</span>}
           <span className="fs-foot-divider" />
-          <span className="fs-foot-status" title="用户说明为已保存的人工补充；待确认表示 AI 尚不能明确判断的字段。">{table && included === 0 ? '每张表至少纳入 1 个字段' : mode === 'setup' ? `用户说明 ${fields.filter(f => f.userDescribed).length} 条 · ${counts.UNKNOWN} 待确认` : '保存后会让助手按新字段重新建模这张表'}</span>
+          <span className="fs-foot-status" title={mode === 'setup' ? '用户说明为已保存的人工补充，待确认表示 AI 尚不能明确判断的字段。' : undefined}>
+            {table && included === 0 ? '每张表至少纳入 1 个字段' : mode === 'setup'
+              ? `用户说明 ${fields.filter(f => f.userDescribed).length} 条 · ${counts.UNKNOWN} 待确认` : '字段范围供建模使用，模型改动通过草稿发布。'}</span>
           <span className="fs-autosave" role="status">{descriptionState}</span>
           {table && <button type="button" data-tour="screening-confirm" className="mp-button mp-primary" disabled={busy !== null || included === 0} onClick={() => void save()}>
             {saveLabel}<Icon name="chevron" size="sm" /></button>}

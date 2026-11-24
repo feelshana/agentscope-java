@@ -123,6 +123,39 @@ class ModelingConfirmationServiceTest {
     }
 
     @Test
+    void archivedQuestionsLeaveOnlyTheActiveLinksInConfirmationCards() throws Exception {
+        var archived =
+                service.create(
+                        "g1",
+                        "旧题口径？",
+                        "",
+                        List.of("a", "b"),
+                        List.of("规则甲", "规则乙"),
+                        List.of("old"));
+        var shared =
+                service.create(
+                        "g1",
+                        "共同口径？",
+                        "",
+                        List.of("a", "b"),
+                        List.of("规则甲", "规则乙"),
+                        List.of("old", "active"));
+        Path root = workspace.workspaceRoot("g1");
+        Path source = root.resolve("knowledge/questions/old.yml");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, "question: 已下架\narchived: true\n");
+        var pending = service.list("alice", "g1");
+        assertEquals(1, pending.size());
+        assertEquals(shared.id(), pending.get(0).id());
+        assertEquals(List.of("active"), pending.get(0).questionIds());
+        assertEquals(
+                java.util.Set.of("active"), ModelingConfirmationService.awaitingQuestions(root));
+        assertTrue(
+                Files.isRegularFile(
+                        root.resolve(".platform/confirmations/" + archived.id() + ".json")));
+    }
+
+    @Test
     void resolvingReturnsDecisionsAndRemovesQuestions() {
         var chosen = ask("一般统计是否排除外协人員？");
         var dismissed = ask("报表是否只算报表类型？");

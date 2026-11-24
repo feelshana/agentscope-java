@@ -73,7 +73,7 @@ public final class SemanticAssetProposalTool {
                             need,
                             outline,
                             reason,
-                            questionIds,
+                            purpose == null ? questionIds : purpose.proposalQuestions(questionIds),
                             !coach && asked);
             return coach
                     ? "已提议（"

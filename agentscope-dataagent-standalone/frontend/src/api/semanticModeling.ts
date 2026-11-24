@@ -308,6 +308,8 @@ export interface MdlFile {
 
 /** A validation finding; `source` is "local" (pre-flight) or "wren" (CLI diagnostics). */
 export interface MdlIssue {
+  incompleteView?: string | null;
+  assetReview?: { kind: 'view' | 'ref_sql'; name: string; step: 'REVIEW_PENDING' | 'VERIFY_PENDING' } | null;
   severity: string;
   message: string;
   source: string;

@@ -1,272 +1,461 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { assetExamples, assetImpact, deleteAsset, generateAssetSql, getAsset, judgeAsset, listAssets, reviewAsset, saveAsset, verifyAsset } from '../../api/semanticAssets';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { assetExamples, assetImpact, deleteAsset, getAsset, getAssetCatalog, reviewAsset, saveAsset } from '../../api/semanticAssets';
+import type { AssetCatalog, AssetDetail, AssetExample, AssetImpact, SemanticAsset } from '../../api/semanticAssets';
+import AssetActionDialog from './AssetActionDialog';
+import AssetVerificationPanel from './AssetVerificationPanel';
+import { assetDescription, assetKey, assetRows, assetTask } from './assetCatalog';
+import type { ViewRow } from './assetCatalog';
+import IncompleteViewDialog from './IncompleteViewDialog';
 import ReadableCode from '../ReadableCode';
 import Icon from '../Icon';
-import ModelingMethodFlow from './ModelingMethodFlow';
+import { MaterialsCatalog, WorkspaceBatchInput, WorkspaceBatchToggle, WorkspaceBatchTools, WorkspaceEmpty, WorkspaceObjectTools, WorkspaceToolbar } from './ModelingWorkspace';
+import { WorkspaceMenu } from '../KnowledgeWorkspace';
+import { removeWorkspaceItems, updateWorkspaceSelection } from './workspaceRemoval';
+import EngineeringDialog from './EngineeringDialog';
+import SourceFileEditor from './SourceFileEditor';
+import { fileLanguage } from './ModelSnapshotPanel';
 import './ModelingOptimization.css';
-import type { AssetCheck, AssetDetail, AssetExample, AssetStatus, SemanticAsset, Verdict, VerifyCase } from '../../api/semanticAssets';
-import { getModelingQuestions } from '../../api/modelingQuestions';
-import type { QuestionReview } from '../../api/modelingQuestions';
+import './SemanticAssetsPanel.css';
 
-/** Business names for the two kinds; the technical terms stay out of the page (spec111). */
+type Group = 'pending' | 'library';
+type Version = 'draft' | 'published';
+type Stage = 'overview' | 'verify' | 'status';
+type RemovalEntry = { row: ViewRow; impact?: AssetImpact; error?: string };
+type RemovalRequest = { entries: RemovalEntry[]; batch: boolean; finished?: { total: number; staged: number } };
 const KIND_LABEL = { view: '查询模板', ref_sql: '加工表' } as const;
-const STATUS: Record<AssetStatus, { label: string; tone: string }> = {
-  PUBLISHED: { label: '已发布', tone: 'sm-tag-plain' },
-  REVIEW_PENDING: { label: '待核查', tone: 'sm-tag-warn' },
-  VERIFY_PENDING: { label: '待验证', tone: 'sm-tag-warn' },
-  VERIFIED: { label: '验证通过', tone: 'sm-tag-fact' },
+const STATUS = {
+  PUBLISHED: '已发布', REVIEW_PENDING: '待核查', VERIFY_PENDING: '待验证', VERIFIED: '待发布',
+  INCOMPLETE: '草稿未完成', REMOVAL_PENDING: '待下架',
 };
-const message = (e: unknown) => e instanceof Error ? e.message : String(e);
-const isTimeColumn = (c: { name: string; type: string }) => /date|time/i.test(c.type) || /date|time|日期|时间/i.test(c.name);
-/** Sent as a declared asset turn: only this purpose opens views/ for the assistant (ADR0128). */
-const assetRequest = (need: string) => `请建设语义资产。需求或已有 SQL 如下：\n${need}`;
+const isTimeColumn = (c: { name: string; type: string }) => /date|time|月份|日期|时间/i.test(c.name + ' ' + c.type);
+const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
+const fileName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
+const canRemove = (row: ViewRow) => !!row.draft && !row.incomplete;
 
-/** spec111: reviews and verifies Views and ref_sql models the assistant or a developer drafted. */
-export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }: {
+export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, publishedVersion, onDraft, onAsk, onPublish }: {
   groupId: string;
   assistantIdle: boolean;
+  paired: boolean;
+  publishedVersion: number;
+  onAsk: (asset: SemanticAsset, version: Version, published?: SemanticAsset) => void;
+  onPublish: () => void;
   onDraft: (text: string, label: string) => boolean;
 }) {
-  const [assets, setAssets] = useState<SemanticAsset[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [detail, setDetail] = useState<AssetDetail | null>(null);
-  const [need, setNeed] = useState('');
-  const [planningOpen, setPlanningOpen] = useState(true);
+  const [params, setParams] = useSearchParams();
+  const [catalog, setCatalog] = useState<AssetCatalog>();
+  const loadSequence = useRef(0);
+  const [detail, setDetail] = useState<{ version: Version; value: AssetDetail }>();
+  const [loadError, setLoadError] = useState('');
+  const [detailError, setDetailError] = useState('');
+  const [detailAttempt, setDetailAttempt] = useState(0);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('');
+  const [directoryOpen, setDirectoryOpen] = useState(true);
+  const [batchGroup, setBatchGroup] = useState<Group>();
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [helpOpen, setHelpOpen] = useState(false);
   const [draftOpen, setDraftOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState(0);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const draftDialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => { if (!draftDialog.current) return; if (draftOpen && !draftDialog.current.open) draftDialog.current.showModal(); else if (!draftOpen && draftDialog.current.open) draftDialog.current.close(); }, [draftOpen]);
-  const [examples, setExamples] = useState<AssetExample[] | null>(null);
+  const [need, setNeed] = useState('');
+  const [examples, setExamples] = useState<AssetExample[]>();
+  const [timeColumn, setTimeColumn] = useState<{ context: string; value: string }>();
   const [file, setFile] = useState('');
-  const [content, setContent] = useState('');
-  const [timeColumns, setTimeColumns] = useState('');
-  const [questions, setQuestions] = useState<QuestionReview[]>([]);
-  const [question, setQuestion] = useState('');
-  const [cases, setCases] = useState<VerifyCase[]>([]);
-  const [checks, setChecks] = useState<AssetCheck[]>([]);
-  const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
-  // spec112: expected cases are saved as questions unless the user unticks them.
-  const [skipSave, setSkipSave] = useState<Record<string, boolean>>({});
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [sourceEdit, setSourceEdit] = useState<string>();
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [incompleteOpen, setIncompleteOpen] = useState(false);
+  const [removal, setRemoval] = useState<RemovalRequest>();
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const detailScroller = useRef<HTMLDivElement>(null);
 
-  const show = useCallback((next: AssetDetail) => {
-    setDetail(next);
-    setFile(current => next.files.some(f => f.path === current) ? current : next.files[0]?.path ?? '');
-    // A column from an earlier review may no longer exist; fall back to the likely time column.
-    const kept = next.asset.review?.timeColumns.find(c => !next.outputColumns.length || next.outputColumns.some(o => o.name === c));
-    setTimeColumns(kept ?? (next.needsTimeColumn ? next.outputColumns.find(isTimeColumn)?.name ?? '' : ''));
-  }, []);
-  const refresh = useCallback(async () => {
-    const list = await listAssets(groupId);
-    setAssets(list);
-    setSelected(current => current ?? (list[0] ? `${list[0].kind}:${list[0].name}` : null));
-    return list;
+  const rows = useMemo(() => catalog ? assetRows(catalog) : [], [catalog]);
+  const pending = rows.filter(row => assetTask(row) !== 'PUBLISHED');
+  const library = rows.filter(row => row.published);
+  const selected = params.get('viewItem');
+  const group: Group = params.get('viewGroup') === 'library' ? 'library'
+    : params.get('viewGroup') === 'pending' || pending.length > 0 || library.length === 0 ? 'pending' : 'library';
+  const requestedVersion = params.get('viewVersion');
+  const stage: Stage = params.get('viewStage') === 'verify' ? 'verify' : params.get('viewStage') === 'status' ? 'status' : 'overview';
+  const candidates = group === 'library' ? library : pending;
+  const search = query.trim().toLowerCase();
+  const matching = candidates.filter(row => {
+    const description = group === 'library' ? row.published?.description : row.draft?.description ?? row.published?.description;
+    return (!filter || assetTask(row) === filter)
+      && (row.name.toLowerCase().includes(search) || !!assetDescription(description).title?.toLowerCase().includes(search));
+  });
+  const batchActive = !paired && candidates.length > 0 && batchGroup === group;
+  const pickedRows = matching.filter(row => canRemove(row) && picked.has(assetKey(row)));
+  const clearPicked = () => setPicked(new Set());
+  const current = (paired ? rows : matching).find(row => assetKey(row) === selected) ?? matching[0];
+  const version: Version = current?.published && (requestedVersion === 'published' || (!current.draft && !current.incomplete)
+    || (group === 'library' && requestedVersion !== 'draft')) ? 'published' : 'draft';
+  const selectedAsset = version === 'published' ? current?.published : current?.draft;
+  const currentKey = current ? assetKey(current) : '';
+  const currentName = current?.name;
+  const currentKind = current?.kind;
+  const assetHash = selectedAsset?.hash;
+  const task = current ? assetTask(current) : undefined;
+  const readOnly = version === 'published';
+  const value = detail?.version === version && detail.value.asset.hash === assetHash
+    && assetKey(detail.value.asset) === currentKey ? detail.value : undefined;
+  const asset = value?.asset;
+  const currentStage = stage === 'verify' && asset?.status === 'REVIEW_PENDING' ? 'overview' : stage;
+  const source = value?.files.find(item => item.path === file) ?? value?.files[0];
+  const edited = sourceEdit !== undefined && !!source && sourceEdit !== source.content;
+  const selectedTimeContext = currentKey + ':' + assetHash;
+  const selectedTime = timeColumn?.context === selectedTimeContext ? timeColumn.value
+    : asset?.review?.timeColumns[0] ?? value?.outputColumns.find(isTimeColumn)?.name ?? '';
+  const waiting = !assistantIdle || !!busy;
+
+  const reload = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    try {
+      const next = await getAssetCatalog(groupId);
+      if (sequence === loadSequence.current) { setCatalog(next); setLoadError(''); }
+    } catch (error) {
+      if (sequence === loadSequence.current) setLoadError(errorText(error));
+    }
   }, [groupId]);
   useEffect(() => {
-    void refresh().catch(e => setError(message(e)));
-    void getModelingQuestions(groupId).then(setQuestions).catch(() => setQuestions([]));
-    // Examples come from this knowledge base's own model, so they never mention unrelated tables.
-    setExamples(null);
-    void assetExamples(groupId).then(setExamples).catch(() => setExamples([]));
-  }, [groupId, refresh]);
+    if (!filesOpen) void reload();
+    const changed = (event: Event) => {
+      if ((event as CustomEvent<{ groupId: string }>).detail?.groupId !== groupId || filesOpen) return;
+      void reload();
+      setDetailAttempt(value => value + 1);
+    };
+    window.addEventListener('modeling:updated', changed);
+    return () => window.removeEventListener('modeling:updated', changed);
+  }, [groupId, reload, filesOpen]);
   useEffect(() => {
-    const onUpdated = () => void refresh().catch(() => undefined);
-    window.addEventListener('modeling:updated', onUpdated);
-    return () => window.removeEventListener('modeling:updated', onUpdated);
-  }, [refresh]);
+    if (!currentName || !currentKind || !assetHash) return;
+    let active = true;
+    setDetailError('');
+    void getAsset(groupId, { kind: currentKind, name: currentName }, version === 'published')
+      .then(next => { if (active) setDetail({ version, value: next }); })
+      .catch(error => { if (active) setDetailError(errorText(error)); });
+    return () => { active = false; };
+  }, [groupId, currentKind, currentName, assetHash, version, detailAttempt]);
   useEffect(() => {
-    const asset = assets?.find(a => `${a.kind}:${a.name}` === selected);
-    if (!asset) { setDetail(null); return; }
-    let cancelled = false;
-    setChecks([]); setVerdicts({}); setSkipSave({}); setCases([]); setQuestion(''); setDetailTab(0); setDetail(null); setDetailLoading(true);
-    void getAsset(groupId, asset).then(next => { if (!cancelled) show(next); }).catch(e => { if (!cancelled) setError(message(e)); }).finally(() => { if (!cancelled) setDetailLoading(false); });
-    return () => { cancelled = true; };
-    // Reload only when the selection changes; actions below update the detail themselves.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, groupId, show]);
-  useEffect(() => { setContent(detail?.files.find(f => f.path === file)?.content ?? ''); }, [detail, file]);
+    if (!draftOpen || examples) return;
+    let active = true;
+    void assetExamples(groupId).then(value => { if (active) setExamples(value); })
+      .catch(() => { if (active) setExamples([]); });
+    return () => { active = false; };
+  }, [draftOpen, examples, groupId]);
 
-  const run = async (name: string, action: () => Promise<void>) => {
-    setBusy(name); setError('');
-    try { await action(); } catch (e) { setError(message(e)); } finally { setBusy(''); }
+  const locate = (nextGroup: Group, item?: ViewRow | SemanticAsset, nextVersion?: Version, nextStage: Stage = 'overview') => {
+    detailScroller.current?.scrollTo({ top: 0 });
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.set('viewGroup', nextGroup);
+      if (item) next.set('viewItem', assetKey(item)); else next.delete('viewItem');
+      if (nextVersion) next.set('viewVersion', nextVersion); else next.delete('viewVersion');
+      if (nextStage !== 'overview') next.set('viewStage', nextStage); else next.delete('viewStage');
+      return next;
+    }, { replace: true });
   };
-  const apply = async (next: AssetDetail) => { show(next); await refresh(); };
-  const asset = detail && selected === `${detail.asset.kind}:${detail.asset.name}` ? detail.asset : undefined;
-  const fileName = file.slice(file.lastIndexOf('/') + 1);
-  const edited = !!detail && detail.files.find(f => f.path === file)?.content !== content;
-  const reviewed = !!asset?.review;
-  const changeCases = (next: VerifyCase[]) => { setCases(next); setChecks([]); setVerdicts({}); setSkipSave({}); };
-  const allJudged = checks.length > 0 && checks.every(c => !c.error && verdicts[c.key]);
-  const caseQuestion = (check: AssetCheck) => cases.find(c => c.sql === check.sql)?.question.trim() ?? '';
-  const toSave = checks.filter(c => verdicts[c.key] === 'EXPECTED' && !skipSave[c.key] && caseQuestion(c))
-    .map(c => ({ question: caseQuestion(c), sql: c.sql }));
-
-  return <section className="sm-pane sa-pane mo-optimization" aria-label="公共视图">
-    <header className="mo-page-head"><div><h2>公共视图</h2><p>把需要固定复用的取数逻辑整理成公共视图，经核查和问题验证后用于问数。</p></div><button type="button" className="da-btn da-btn-primary" onClick={() => setDraftOpen(true)}><Icon name="plus" size="sm" />起草公共视图</button></header>
-    <section className="mo-planning-panel"><details open={planningOpen} onToggle={event => setPlanningOpen(event.currentTarget.open)}>
-      <summary><Icon name="model" size="sm" /><span className="mo-grow"><strong>自动整理功能正在建设中</strong><small>当前可明确提出需求，由助手起草，经过人工核查和问题验证后发布。</small></span><span className="mo-planning-toggle">{planningOpen ? '收起规划' : '了解规划'}<Icon name="chevron" size="sm" /></span></summary>
-      <div className="mo-planning-body"><ModelingMethodFlow kind="views" compact /></div>
-    </details></section>
-    <dialog ref={draftDialog} className="mo-form-dialog" aria-labelledby="mo-asset-draft-title" onClose={() => setDraftOpen(false)}>
-      <header className="mo-dialog-head"><strong id="mo-asset-draft-title">交给助手起草公共视图</strong><button type="button" className="da-btn" onClick={() => { draftDialog.current?.close(); setDraftOpen(false); }}>关闭</button></header>
-      <div className="mo-dialog-body"><p className="da-small">用业务语言描述要建的视图，或粘贴已有 SQL；起草后在本页核查并用问题验证。</p>
-      <details className="sa-where da-small"><summary>什么情况下需要建视图？</summary>
-        <table className="da-table">
-          <thead><tr><th>需求</th><th>助手怎么处理</th></tr></thead>
-          <tbody>
-            <tr><td>表和字段的含义、指标口径、业务术语、表之间的关系</td><td>直接写入草稿，不需要建视图</td></tr>
-            <tr><td>默认排除或只保留部分数据，如"默认排除用户列表里找不到的账号"</td><td>写成一条默认过滤规则，问数时自动加条件，不需要建视图</td></tr>
-            <tr><td>一列按规则换个说法，如"账号以 wx 结尾的算外协"</td><td>加计算字段，不需要建视图</td></tr>
-            <tr><td>明确要把几张表固定拼好，或先用多步计算算好结果</td><td>起草视图，再在本页下方核查和验证</td></tr>
-          </tbody>
-        </table></details>
-        <div className="sa-examples" aria-label="需求示例">{examples === null
-          ? <span className="da-small">正在根据当前模型生成示例…</span>
-          : examples.map(e => <button key={e.kind} type="button" className="da-btn da-btn-sm"
-            title={e.text} onClick={() => setNeed(e.text)}>示例·{e.kind}</button>)}</div>
-        <textarea className="da-input" rows={3} aria-label="资产需求或已有 SQL" value={need} onChange={e => setNeed(e.target.value)}
-          placeholder="用业务语言描述要建的视图，或粘贴已有 SQL；也可以点上面的示例" />
-        <div><button className="da-btn da-btn-primary da-btn-sm" disabled={!need.trim() || !assistantIdle}
-          title={assistantIdle ? undefined : '助手空闲后可发送'}
-          onClick={() => { if (onDraft(assetRequest(need.trim()), `建设语义资产：${need.trim()}`)) { setNeed(''); setDraftOpen(false); } }}>交给助手起草</button></div>
-      </div>
-    </dialog>
-    {error && <div role="alert" className="da-alert da-alert-error">{error}</div>}
-    {assets !== null && assets.length === 0 ? <div className="da-card sm-empty">还没有已建的视图。建好后会出现在这里，核查并用问题验证通过后才能发布。</div> : <>
-    <div className="sa-layout">
-      <nav className="sa-list" aria-label="资产列表"><header className="mo-asset-list-head"><strong>已建视图与加工表</strong><span className="da-small">{assets?.length ?? '…'} 项</span></header>
-        {assets === null ? <div className="da-small">{error ? '读取失败' : '加载中…'}{error && <button type="button" className="da-btn" onClick={() => { setError(''); void refresh().catch(e => setError(message(e))); }}>重试</button>}</div>
-          : assets.map(a => { const key = `${a.kind}:${a.name}`; return <button key={key} type="button"
-            className={`sa-item ${selected === key ? 'sa-item-on' : ''}`} aria-current={selected === key ? 'true' : undefined} disabled={!!busy} onClick={() => { if (!edited || window.confirm('有尚未保存的文件修改，是否放弃并切换？')) setSelected(key); }}>
-            <span className="sa-item-name">{a.name}</span>
-            <span className="sm-tag sm-tag-plain">{KIND_LABEL[a.kind]}</span>
-            <span className={`sm-tag ${STATUS[a.status].tone}`}>{STATUS[a.status].label}</span>
-          </button>; })}
-      </nav>
-      <div className="sa-detail">
-        {!asset || !detail ? <div className="sm-empty">{detailLoading ? '正在读取视图详情…' : '选择一个资产进行核查和验证'}</div> : <>
-          <header className="mo-asset-head">
-            <h3>{asset.name} <span className={`sm-tag ${STATUS[asset.status].tone}`}>{STATUS[asset.status].label}</span>
-              <button type="button" className="da-btn da-btn-sm sa-delete" disabled={!!busy} onClick={() => void run('delete', async () => {
-                // spec113: rule entries naming the asset go with it; questions using it need review.
-                const impact = await assetImpact(groupId, asset);
-                const lines = [
-                  `确认从草稿中删除${KIND_LABEL[asset.kind]}「${asset.name}」？发布后才在线上生效。`,
-                  impact.rules.length ? `\n将一并删除这些默认使用规则：\n${impact.rules.join('\n')}` : '',
-                  impact.questions.length ? `\n这些问答用到了它，删除后需要复核：\n${impact.questions.map(q => `- ${q}`).join('\n')}` : '',
-                ];
-                if (!window.confirm(lines.join('\n'))) return;
-                await deleteAsset(groupId, asset);
-                setSelected(null);
-                await refresh();
-                window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
-              })}>{busy === 'delete' ? '删除中…' : '删除'}</button></h3>
-          </header><nav className="mo-asset-tabs" aria-label="视图详情">{['用途与核查', '工程文件', '问题验证'].map((label, index) => <button key={label} type="button" aria-current={detailTab === index ? 'page' : undefined} onClick={() => setDetailTab(index)}>{label}</button>)}</nav>
-          <div className="da-card sa-section" hidden={detailTab !== 0}>
-            <div className="sa-description">{asset.description?.trim() || '助手尚未写说明，请核查用途、粒度和口径。'}</div>
-            <ReadableCode text={asset.sql} language="sql" title="视图 SQL" />
-            {detail.warnings?.map(w => <div key={w} role="alert" className="sm-warn">{w}</div>)}
-            {detail.fixedDates.length > 0 && <div role="alert" className="sm-warn">资产里写了固定日期 {detail.fixedDates.join('、')}，所有查询都只能看到这段时间。除非这是业务口径，否则请去掉。</div>}
-          </div>
-          <div className="da-card sa-section" hidden={detailTab !== 1}>
-            <h3>工程文件</h3>
-            <div className="sa-files">{detail.files.map(f => <button key={f.path} type="button" className={`da-btn da-btn-sm ${f.path === file ? 'da-btn-primary' : ''}`}
-              onClick={() => setFile(f.path)}>{f.path.slice(f.path.lastIndexOf('/') + 1)}</button>)}</div>
-            <textarea className="da-input sa-editor sm-code" rows={12} aria-label={`编辑 ${fileName}`} spellCheck={false}
-              value={content} onChange={e => setContent(e.target.value)} />
-            <div className="sa-actions">
-              <button className="da-btn da-btn-sm" disabled={!edited || !!busy} onClick={() => void run('save', async () => { setChecks([]); setVerdicts({}); await apply(await saveAsset(groupId, asset, fileName, content)); })}>
-                {busy === 'save' ? '保存中…' : '保存到草稿'}</button>
-              <span className="da-small">保存后需要重新核查和验证。</span>
-            </div>
-          </div>
-          <div className="da-card sa-section" hidden={detailTab !== 0}>
-            <h3>核查用途、粒度、JOIN 与口径</h3>
-            {asset.review && <div className="da-small">已由 {asset.review.reviewedBy} 核查。</div>}
-            <div className="da-small">确认上面的用途、粒度、JOIN 和口径是否正确，通过后才能用问题验证。</div>
-            {detail.needsTimeColumn && <>
-              <label className="da-small" htmlFor="sa-time">时间列（必选）：这个资产依赖有查询时间限制的事实表，平台用这一列检查每次查询的日期范围。</label>
-              {detail.outputColumns.length > 0
-                ? <select id="sa-time" className="da-input" value={timeColumns} onChange={e => setTimeColumns(e.target.value)}>
-                  <option value="">请选择</option>
-                  {detail.outputColumns.map(c => <option key={c.name} value={c.name}>{c.name}{c.type ? `（${c.type}）` : ''}</option>)}
-                </select>
-                : <input id="sa-time" className="da-input" value={timeColumns} onChange={e => setTimeColumns(e.target.value)} placeholder="资产输出的时间列" />}
-            </>}
-            <div className="sa-actions"><button className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || edited || asset.status === 'PUBLISHED' || (detail.needsTimeColumn && !timeColumns.trim())}
-              title={edited ? '请先保存修改' : detail.needsTimeColumn && !timeColumns.trim() ? '请先选择时间列' : undefined}
-              onClick={() => void run('review', async () => { await apply(await reviewAsset(groupId, asset, detail.needsTimeColumn && timeColumns.trim() ? [timeColumns.trim()] : [])); setDetailTab(2); })}>
-              {busy === 'review' ? '提交中…' : '核查通过'}</button></div>
-          </div>
-          <div className="da-card sa-section" hidden={detailTab !== 2}>
-            <h3>用业务问题验证</h3>
-            {!reviewed ? <div className="da-small">{asset.status === 'PUBLISHED' ? '这个资产已发布且没有修改，不需要验证。' : '核查通过后才能验证。'}</div> : <>
-              <div className="da-small">输入业务问题，助手只用这个资产写 SQL；平台在草稿上展开 SQL 给你核对，不执行查询，不影响线上。</div>
-              <div className="sa-ask">
-                <input className="da-input" aria-label="验证问题" value={question} onChange={e => setQuestion(e.target.value)} placeholder="输入一个要用这个资产回答的业务问题" />
-                <button className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || edited || !question.trim()}
-                  title={edited ? '请先保存修改' : undefined}
-                  onClick={() => void run('generate', async () => {
-                    const { sql } = await generateAssetSql(groupId, asset, question.trim());
-                    changeCases([...cases, { question: question.trim(), sql }]);
-                    setQuestion('');
-                  })}>{busy === 'generate' ? '生成中…' : '生成 SQL'}</button>
-                <button className="da-btn da-btn-sm" disabled={!!busy} onClick={() => changeCases([...cases, { question: question.trim(), sql: `SELECT * FROM ${asset.name} LIMIT 20` }])}>手写 SQL</button>
-              </div>
-              {questions.length > 0 && <div className="sa-suggest"><span className="da-small">已确认问题：</span>
-                {questions.map(q => <button key={q.question.id} type="button" className="sm-text-link" onClick={() => setQuestion(q.question.question)}>{q.question.question}</button>)}
-              </div>}
-              {cases.map((item, index) => <div key={index} className="sa-case">
-                <div className="sa-case-head"><strong>{item.question || `SQL ${index + 1}`}</strong>
-                  <button type="button" className="sm-text-link" onClick={() => changeCases(cases.filter((_, i) => i !== index))}>移除</button></div>
-                <textarea className="da-input sm-code" rows={4} aria-label={`验证 SQL ${index + 1}`} spellCheck={false} value={item.sql}
-                  onChange={e => changeCases(cases.map((c, i) => i === index ? { ...c, sql: e.target.value } : c))} />
-              </div>)}
-              {cases.length > 0 && <div className="sa-actions"><button className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || edited || cases.some(c => !c.sql.trim())}
-                onClick={() => void run('verify', async () => {
-                  setVerdicts({}); setSkipSave({});
-                  setChecks(await verifyAsset(groupId, asset, cases));
-                })}>{busy === 'verify' ? '展开中…' : '展开并核对 SQL'}</button></div>}
-              {checks.map(check => <div key={check.key} className="sa-check">
-                <strong>{check.label}</strong>
-                {check.error ? <div role="alert" className="sm-issue">{check.error}</div> : <>
-                  {/* spec114: nothing runs; the reviewer reads the SQL as Wren would expand it. */}
-                  {check.expanded && <ReadableCode text={check.expanded} language="sql" title="展开后的 SQL（Wren 实际发给数据库的语句，未执行）" />}
-                  <div className="sa-verdict" role="radiogroup" aria-label={`判定：${check.label}`}>
-                    {(['EXPECTED', 'PROBLEM'] as Verdict[]).map(v => <label key={v}><input type="radio" name={check.key} checked={verdicts[check.key] === v}
-                      onChange={() => setVerdicts(all => ({ ...all, [check.key]: v }))} />{v === 'EXPECTED' ? 'SQL 符合预期' : '有问题'}</label>)}
-                  </div>
-                  {verdicts[check.key] === 'EXPECTED' && (caseQuestion(check)
-                    ? <label className="da-small sa-save"><input type="checkbox" checked={!skipSave[check.key]}
-                        onChange={e => setSkipSave(all => ({ ...all, [check.key]: !e.target.checked }))} />
-                        同时保存为问答（发布后问数可参考）
-                        {questions.some(q => q.question.question.trim() === caseQuestion(check)) && '，将替换已有同名问答的 SQL'}</label>
-                    : <span className="da-small">没有问题文字，不能保存为问答</span>)}
-                </>}
-              </div>)}
-              {checks.length > 0 && <div className="sa-actions"><button className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || !allJudged}
-                title={allJudged ? undefined : '全部问题执行成功并判定后才能提交'}
-                onClick={() => void run('verdict', async () => {
-                  try { await apply(await judgeAsset(groupId, asset, verdicts, toSave)); }
-                  finally {
-                    // Verdicts are kept even when saving a question fails; show the stored state.
-                    void getAsset(groupId, asset).then(show).catch(() => undefined);
-                    void refresh().catch(() => undefined);
-                    // Saved questions show up in the trial panel and the question list.
-                    if (toSave.length) {
-                      void getModelingQuestions(groupId).then(setQuestions).catch(() => undefined);
-                      window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
-                    }
-                  }
-                })}>提交判定</button></div>}
-              {asset.review?.verifiedBy && <div className="da-small">{asset.review.passed ? '已通过验证，可以在草稿栏发布。' : '判定有问题，请修改后重新核查。'}</div>}
-            </>}
-          </div>
-        </>}
-      </div>
-    </div>
+  const switchGroup = (next: Group) => {
+    if (busy || group === next) return;
+    setQuery(''); setFilter(''); setError(''); setNotice(''); setBatchGroup(undefined); clearPicked(); locate(next);
+  };
+  const run = async (name: string, action: () => Promise<void>) => {
+    setBusy(name); setError(''); setNotice('');
+    try { await action(); return true; } catch (reason) { setError(errorText(reason)); return false; }
+    finally { setBusy(''); }
+  };
+  const apply = (next: AssetDetail) => {
+    loadSequence.current++;
+    setDetail({ version: 'draft', value: next });
+    setCatalog(previous => previous && { ...previous, draft: previous.draft.map(row => assetKey(row) === assetKey(next.asset) ? next.asset : row) });
+  };
+  const updated = () => window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
+  const closeFiles = () => { setFilesOpen(false); setSourceEdit(undefined); setConfirmDiscard(false); setDetailAttempt(n => n + 1); };
+  const requestCloseFiles = () => { if (edited) setConfirmDiscard(true); else closeFiles(); };
+  const draftAction = <button type="button" className="da-btn da-btn-primary" onClick={() => setDraftOpen(true)}><Icon name="plus" size="sm" />起草公共视图</button>;
+  const openRemoval = (targets: ViewRow[], batch = false, finished?: RemovalRequest['finished']) => {
+    const request: RemovalRequest = { entries: targets.map(row => ({ row })), batch, finished };
+    setRemoval(request);
+    const inspect = async () => {
+      const entries: RemovalEntry[] = await Promise.all(targets.map(async row => {
+        try { return { row, impact: await assetImpact(groupId, row) }; }
+        catch (error) { return { row, error: errorText(error) }; }
+      }));
+      if (entries.every(entry => entry.error)) return entries;
+      // Resolve the displayed publication status against the same or a later catalog read.
+      const latest = new Map(assetRows(await getAssetCatalog(groupId)).map(row => [assetKey(row), row]));
+      return entries.map(entry => {
+        const row = latest.get(assetKey(entry.row));
+        if (entry.error) return entry;
+        return row && canRemove(row) ? { ...entry, row } : { row: entry.row, error: '视图状态已变化，请重新选择。' };
+      });
+    };
+    void inspect().then(entries => setRemoval(state => state === request ? { ...request, entries } : state))
+      .catch(error => setRemoval(state => state === request
+        ? { ...request, entries: targets.map(row => ({ row, error: errorText(error) })) } : state));
+  };
+  const confirmRemoval = (request: RemovalRequest) => run('delete', async () => {
+    const { removed, failures } = await removeWorkspaceItems(request.entries, async ({ row, impact }) => {
+      if (!impact?.revision) throw new Error('请先检查移除影响。');
+      await deleteAsset(groupId, row, impact.revision);
+    });
+    const finished = { total: (request.finished?.total ?? 0) + removed.length,
+      staged: (request.finished?.staged ?? 0) + removed.filter(({ row }) => row.published).length };
+    if (removed.length) {
+      const keys = new Set(removed.map(({ row }) => assetKey(row)));
+      setCatalog(previous => previous && { ...previous, draft: previous.draft.filter(item => !keys.has(assetKey(item))) });
+      setPicked(previous => new Set([...previous].filter(key => !keys.has(key))));
+      if (!request.batch) {
+        const { row } = removed[0];
+        setFilter(''); setQuery('');
+        if (row.published) locate(group, row, 'published'); else locate(group);
+      } else if (keys.has(currentKey)) {
+        locate(group);
+      }
+    }
+    if (failures.length) {
+      setRemoval({ batch: request.batch, finished,
+        entries: failures.map(({ target, message }) => ({ row: target.row, error: message })) });
+    } else {
+      setRemoval(undefined);
+      setNotice(request.batch ? `已处理 ${finished.total} 项视图${finished.staged ? `，其中 ${finished.staged} 项待发布下架` : ''}。`
+        : finished.staged ? '已标记为待下架，发布后生效。' : '已移除视图草稿。');
+    }
+    updated();
+  });
+  const objectName = current && (assetDescription(selectedAsset?.description ?? current.published?.description).title || current.name);
+  const objectTools = current && <>
+    {current.published && (current.draft || current.incomplete) && task !== 'PUBLISHED' &&
+      <div className="mo-work-segment" role="group" aria-label="查看视图版本">
+        <button type="button" className="da-btn" disabled={!!busy} aria-pressed={readOnly}
+          onClick={() => locate(group, current, 'published')}>线上 v{publishedVersion}</button>
+        <button type="button" className="da-btn" disabled={!!busy} aria-pressed={!readOnly}
+          onClick={() => locate(group, current, 'draft')}>当前草稿</button>
+      </div>}
+    {asset && value && <>
+      {!paired && task !== 'REMOVAL_PENDING' && <button type="button" className="da-btn" disabled={!!busy}
+        onClick={() => onAsk(asset, version, current.published)}><Icon name="chat" size="sm" />边聊边核对</button>}
+      {value.files.length > 0 && <button type="button" className="da-btn" disabled={!!busy}
+        onClick={() => { setFile(value.files[0].path); setFilesOpen(true); }}><Icon name="code" size="sm" />工程文件</button>}
+      {canRemove(current) && <WorkspaceMenu label="视图更多操作" items={[
+        { label: current.published ? '下架视图' : '移除草稿', icon: 'trash', danger: true, disabled: waiting || !!loadError,
+          onClick: () => openRemoval([current]) },
+      ]} />}
     </>}
+  </>;
+
+  return <section className={'sm-pane sa-pane mo-optimization mo-workspace va-pane' + (paired ? ' mo-work-paired' : '')} aria-label="公共视图">
+    {paired ? <WorkspaceObjectTools compact context={objectName}>{objectTools}</WorkspaceObjectTools>
+      : <WorkspaceToolbar label="公共视图范围" active={group} onSelect={switchGroup} tabs={[
+      { id: 'pending', label: '待处理', icon: 'list', count: pending.length },
+      { id: 'library', label: '视图库', icon: 'model', count: library.length },
+    ]} objectActions={batchActive ? <WorkspaceBatchTools count={pickedRows.length}
+      label={pickedRows.every(row => row.published) ? '下架选中的视图' : '移除选中的视图'}
+      disabled={waiting || !!loadError} onClear={clearPicked} onRemove={() => openRemoval(pickedRows, true)} />
+      : objectTools} context={!batchActive && !directoryOpen ? objectName : undefined}>
+      <button type="button" className="da-btn mo-work-quiet" onClick={() => setHelpOpen(true)}><Icon name="info" size="sm" />使用指南</button>
+      {rows.length > 0 && draftAction}
+    </WorkspaceToolbar>}
+    {helpOpen && <AssetActionDialog title="公共视图使用指南" onClose={() => setHelpOpen(false)}>
+      <p>当多个业务问题需要复用固定的表关联、窗口计算或多步 SQL，可以起草公共视图。字段含义、简单分类或默认过滤可在建模对话中处理。</p>
+      <ol className="va-guide">
+        <li><strong>起草</strong><span>描述需求或粘贴已有 SQL，助手写入知识库草稿。</span></li>
+        <li><strong>核查用途与口径</strong><span>检查粒度、来源、关联和过滤，依赖受限事实表时确认输出时间列。</span></li>
+        <li><strong>验证业务问题</strong><span>展开 SQL 后逐题判定。通过的题可另存为问答。</span></li>
+        <li><strong>检查并发布</strong><span>确认本次知识库草稿范围后发布，线上问数使用新版本。</span></li>
+      </ol>
+    </AssetActionDialog>}
+    {draftOpen && <AssetActionDialog title="起草公共视图" onClose={() => setDraftOpen(false)}
+      actions={<><button type="button" className="da-btn" onClick={() => setDraftOpen(false)}>取消</button>
+        <button type="button" className="da-btn da-btn-primary" disabled={!need.trim() || waiting}
+          onClick={() => { if (onDraft('请建设语义资产。需求或已有 SQL 如下：\n' + need.trim(), '起草公共视图：' + need.trim())) { setNeed(''); setDraftOpen(false); } }}>交给助手起草</button></>}>
+      <p>说明视图要回答哪些问题、一行代表什么。也可以粘贴已有 SQL。</p>
+      <textarea className="da-input" rows={5} aria-label="视图需求或已有 SQL" value={need}
+        onChange={e => setNeed(e.target.value)} spellCheck={false} placeholder="例如，按统计月份和会员类型汇总在订会员数…" />
+      {!!examples?.length && <div className="va-suggestions">{examples.map(item => <button key={item.kind + item.text} type="button"
+        className="da-btn da-btn-sm" title={item.text} onClick={() => setNeed(item.text)}>{item.kind}</button>)}</div>}
+    </AssetActionDialog>}
+    {!catalog ? <p className="mo-work-loading" role="status">{loadError || '正在读取视图…'}
+      {loadError && <button type="button" className="da-btn" onClick={() => void reload()}>重试</button>}</p>
+      : !paired && !candidates.length ? <div className="va-empty"><WorkspaceEmpty icon={library.length ? 'check' : 'model'}
+        title={group === 'pending' ? '暂无待处理视图' : '暂无已发布视图'}
+        description={group === 'pending' && library.length ? '线上问数可继续使用已发布视图。'
+          : rows.length ? '通过用途核查和问题验证后，视图可随知识库草稿发布。'
+            : '将多个问题反复使用的关联或计算整理成一个公共视图。'}>
+        {group === 'pending' && library.length > 0 ? <button type="button" className="da-btn da-btn-primary"
+          onClick={() => switchGroup('library')}>查看 {library.length} 个已发布视图</button>
+          : group === 'library' && pending.length > 0 ? <button type="button" className="da-btn da-btn-primary"
+            onClick={() => switchGroup('pending')}>查看待处理视图</button> : draftAction}
+      </WorkspaceEmpty></div> : <div className="sa-layout mo-work-grid va-grid" data-catalog-open={directoryOpen}>
+      {!paired && <MaterialsCatalog title="视图目录" count={`${matching.length} 项`} open={directoryOpen}
+        actions={(batchActive || matching.some(canRemove)) && <WorkspaceBatchToggle active={batchActive}
+          onClick={() => { setBatchGroup(batchActive ? undefined : group); clearPicked(); setNotice(''); }} />}
+        onToggle={() => setDirectoryOpen(value => !value)} filters={<>
+          <input type="search" className="da-input" aria-label="搜索视图" placeholder="搜索视图…" value={query}
+            disabled={!!busy} onChange={e => { setQuery(e.target.value); clearPicked(); }} />
+          {group === 'pending' && <select className="da-input" aria-label="筛选视图状态" value={filter} disabled={!!busy}
+            onChange={e => { setFilter(e.target.value); clearPicked(); }}>
+            <option value="">全部状态</option>{[...new Set(candidates.map(assetTask))].map(key => <option key={key} value={key}>{STATUS[key]}</option>)}
+          </select>}
+        </>}>
+        {matching.map(row => {
+          const key = assetKey(row);
+          const label = assetDescription((group === 'library' ? row.published : row.draft ?? row.published)?.description).title;
+          const status = assetTask(row);
+          return <li key={key} className={key === currentKey ? 'qc-queue-selected' : ''}>
+            <button type="button" aria-current={key === currentKey || undefined} disabled={!!busy} onClick={() => { setError(''); setNotice(''); locate(group, row); }}>
+              <strong>{label || row.name}</strong>{label && <small translate="no">{row.name}</small>}
+              <span className="mo-item-meta"><span className={'qc-status-pill qc-status-' + (group === 'library' ? 'done' : status === 'REMOVAL_PENDING' ? 'removal' : 'review')}>
+                {group === 'library' ? '已发布' : STATUS[status]}</span>
+                {group === 'library' && status !== 'PUBLISHED' ? STATUS[status] : KIND_LABEL[row.kind]}</span>
+            </button>
+            {batchActive && canRemove(row) && <WorkspaceBatchInput label={label || row.name} checked={picked.has(key)}
+              disabled={!!busy} onChange={checked => setPicked(previous => updateWorkspaceSelection(previous, key, checked))} />}
+          </li>;
+        })}
+      </MaterialsCatalog>}
+      <div ref={detailScroller} className="mo-work-detail sa-detail va-detail" aria-label={objectName}>
+        {loadError && <p role="alert">{loadError} <button type="button" className="da-btn da-btn-sm" onClick={() => void reload()}>重新读取</button></p>}
+        {error && <p role="alert" className="da-alert da-alert-error">{error}</p>}
+        {notice && <p role="status" className="da-small">{notice}</p>}
+        {!current ? <WorkspaceEmpty icon="search" title="没有匹配的视图">
+          <button type="button" className="da-btn" onClick={() => { setQuery(''); setFilter(''); clearPicked(); }}>清除筛选</button>
+        </WorkspaceEmpty> : current.incomplete && !readOnly ? <WorkspaceEmpty icon="circleAlert" title={current.name}
+          description="草稿缺少视图定义。可先查看剩余文件，再决定是否移除草稿。">
+          <button type="button" className="da-btn da-btn-primary" onClick={() => setIncompleteOpen(true)}>查看草稿文件</button>
+          {current.published && <button type="button" className="da-btn" onClick={() => locate(group, current, 'published')}>查看线上版本</button>}
+        </WorkspaceEmpty> : !asset || !value ? <p role={detailError ? 'alert' : 'status'} className="mo-work-loading">{detailError || '正在读取视图详情…'}
+          {detailError && <button type="button" className="da-btn" onClick={() => setDetailAttempt(n => n + 1)}>重试</button>}</p>
+          : <>
+          {(task === 'REMOVAL_PENDING' || (readOnly ? task !== 'PUBLISHED' : asset.status !== 'PUBLISHED')) && <div className="va-next">
+            <div><strong>{task === 'REMOVAL_PENDING' ? '待下架' : readOnly ? `有草稿 · ${STATUS[task ?? 'REVIEW_PENDING']}`
+              : { REVIEW_PENDING: '核查视图用途与口径', VERIFY_PENDING: '用业务问题核对 SQL', VERIFIED: '验证通过，待发布', PUBLISHED: '' }[asset.status]}</strong>
+              <p>{task === 'REMOVAL_PENDING' ? '下架将在下一次发布后生效，线上当前仍可使用。'
+                : readOnly ? '线上使用此版本，可以切换到当前草稿继续处理。'
+                  : asset.status === 'REVIEW_PENDING' ? '核对粒度、来源、关联和过滤条件。'
+                    : asset.status === 'VERIFY_PENDING' ? (asset.review?.verifiedAt ? '上次核对发现问题，修改后可重新验证。' : '展开 SQL，逐题判定取数逻辑是否符合预期。')
+                      : '检查本次知识库草稿包含的改动，再确认发布。'}</p></div>
+            <div className="mo-work-actions">
+              {task === 'REMOVAL_PENDING' || !readOnly && asset.status === 'VERIFIED'
+                ? <button type="button" className="da-btn da-btn-primary" disabled={waiting} onClick={onPublish}>检查并发布</button>
+                : readOnly && task !== 'PUBLISHED' ? <button type="button" className="da-btn da-btn-primary" disabled={!!busy}
+                  onClick={() => locate(group, current, 'draft', task === 'VERIFY_PENDING' ? 'verify' : 'overview')}>
+                  {task === 'INCOMPLETE' ? '处理草稿' : task === 'REVIEW_PENDING' ? '去核查' : task === 'VERIFY_PENDING' ? '继续验证' : '查看当前草稿'}
+                </button>
+                : !readOnly && asset.status === 'REVIEW_PENDING' ? <>
+                  {value.needsTimeColumn && <label className="va-time-column"><span>输出时间列</span>
+                    {value.outputColumns.length ? <select className="da-input" value={selectedTime} disabled={waiting}
+                      onChange={e => setTimeColumn({ context: selectedTimeContext, value: e.target.value })}>
+                      <option value="">请选择</option>{value.outputColumns.map(c => <option key={c.name} value={c.name}>{c.name}{c.type ? ' · ' + c.type : ''}</option>)}
+                    </select> : <input className="da-input" value={selectedTime} disabled={waiting}
+                      onChange={e => setTimeColumn({ context: selectedTimeContext, value: e.target.value })} />}</label>}
+                  <button type="button" className="da-btn da-btn-primary" disabled={waiting || !asset.sql?.trim() || value.needsTimeColumn && !selectedTime.trim()}
+                    onClick={() => void run('review', async () => {
+                      const next = await reviewAsset(groupId, asset, value.needsTimeColumn ? [selectedTime.trim()] : []);
+                      setFilter(''); apply(next); locate('pending', current, 'draft', 'verify'); updated();
+                    })}>{busy === 'review' ? '提交中…' : '核查通过'}</button>
+                </> : !readOnly && asset.status === 'VERIFY_PENDING' && currentStage !== 'verify'
+                  ? <button type="button" className="da-btn da-btn-primary" onClick={() => locate(group, current, version, 'verify')}>继续验证</button> : null}
+            </div>
+          </div>}
+          <nav className="va-tabs" aria-label="视图详情">
+            {([['overview', '用途与口径'], ['verify', '问题验证'], ['status', '核查与发布状态']] as const).map(([key, label]) =>
+              <button key={key} type="button" disabled={!!busy || key === 'verify' && asset.status === 'REVIEW_PENDING'}
+                aria-current={currentStage === key ? 'page' : undefined} onClick={() => locate(group, current, version, key)}>{label}</button>)}
+          </nav>
+          {currentStage === 'overview' && <ViewOverview detail={value} />}
+          {currentStage === 'status' && <section className="va-content"><dl className="va-facts">
+            <div><dt>当前版本</dt><dd>{readOnly ? `线上 v${publishedVersion}` : '当前草稿'}</dd></div>
+            <div><dt>状态</dt><dd>{task === 'REMOVAL_PENDING' ? '待下架' : STATUS[asset.status]}</dd></div>
+            {asset.review?.reviewedAt && <div><dt>用途核查</dt><dd>{asset.review.reviewedBy} · {new Date(asset.review.reviewedAt).toLocaleString('zh-CN')}</dd></div>}
+            {asset.review?.verifiedAt && <div><dt>问题验证</dt><dd>{asset.review.passed ? '通过' : '有问题'} · {asset.review.verifiedBy} · {new Date(asset.review.verifiedAt).toLocaleString('zh-CN')}</dd></div>}
+            {!!asset.review?.timeColumns.length && <div><dt>输出时间列</dt><dd>{asset.review.timeColumns.join('、')}</dd></div>}
+          </dl></section>}
+          {currentStage === 'verify' && <AssetVerificationPanel key={currentKey + version + asset.hash} groupId={groupId}
+            detail={value} published={readOnly} locked={!assistantIdle} busy={busy} run={run} onChange={next => {
+              setFilter(''); apply(next); updated();
+              if (next.asset.status === 'VERIFIED') detailScroller.current?.scrollTo({ top: 0 });
+            }} />}
+          {filesOpen && source && <EngineeringDialog title="视图工程文件" context={asset.name} canClose={() => !busy}
+            onClose={requestCloseFiles} toolbar={value.files.length > 1 ? <select className="da-input" aria-label="选择视图文件" value={source.path}
+              disabled={!!busy || sourceEdit !== undefined} onChange={e => setFile(e.target.value)}>
+              {value.files.map(f => <option key={f.path} value={f.path}>{fileName(f.path)}</option>)}
+            </select> : undefined}
+            footer={<><span className="eng-message">{sourceEdit === undefined && readOnly ? `线上 v${publishedVersion} · 工程文件` : '当前草稿 · 保存后重新核查和验证。'}</span>
+              <div className="eng-buttons">{sourceEdit !== undefined ? <>
+                <button type="button" className="da-btn da-btn-sm" disabled={!!busy} onClick={requestCloseFiles}>取消编辑</button>
+                <button type="button" className="da-btn da-btn-primary" disabled={!edited || waiting}
+                  onClick={() => void run('save', async () => {
+                    const next = await saveAsset(groupId, asset, fileName(source.path), sourceEdit);
+                    closeFiles(); setQuery(''); setFilter(''); apply(next); locate('pending', current, 'draft'); updated();
+                  })}>{busy === 'save' ? '保存中…' : '保存到草稿'}</button>
+              </> : current.draft && !current.incomplete && <button type="button" className="da-btn" disabled={waiting}
+                onClick={() => {
+                  if (readOnly && current.draft?.hash !== asset.hash) { closeFiles(); locate(group, current, 'draft'); return; }
+                  setError(''); setSourceEdit(source.content);
+                }}>{readOnly && current.draft.hash !== asset.hash ? '查看当前草稿' : '编辑草稿'}</button>}</div></>}>
+            {sourceEdit === undefined ? <ReadableCode key={source.path} fill text={source.content} title={source.path} language={fileLanguage(source.path)} />
+              : <SourceFileEditor label={`编辑 ${fileName(source.path)}`} value={sourceEdit} onChange={setSourceEdit} disabled={waiting} />}
+            {error && <p className="eng-inline-error" role="alert">{error}</p>}
+          </EngineeringDialog>}
+        </>}
+        {incompleteOpen && current?.incomplete && <IncompleteViewDialog key={currentKey} groupId={groupId} name={current.name}
+          disabled={waiting} onClose={() => setIncompleteOpen(false)}
+          onRemoved={() => { setIncompleteOpen(false); setNotice('已移除未完成的视图草稿。'); updated(); }} />}
+      </div>
+    </div>}
+    {confirmDiscard && <AssetActionDialog title="放弃文件修改" onClose={() => setConfirmDiscard(false)}
+      actions={<><button type="button" className="da-btn" onClick={() => setConfirmDiscard(false)}>继续编辑</button>
+        <button type="button" className="da-btn da-btn-primary" onClick={closeFiles}>放弃修改</button></>}>
+      <p>关闭编辑窗口会放弃本次未保存的修改。</p>
+    </AssetActionDialog>}
+    {removal && <AssetActionDialog title={removal.batch ? '批量移除视图' : removal.entries[0]?.row.published ? '下架视图' : '移除草稿'} busy={busy === 'delete'}
+      onClose={() => setRemoval(undefined)} actions={<>
+        <button type="button" className="da-btn" disabled={!!busy} onClick={() => setRemoval(undefined)}>{removal.finished?.total ? '返回列表' : '取消'}</button>
+        {removal.entries.some(entry => entry.error) && <button type="button" className="da-btn" disabled={waiting}
+          onClick={() => openRemoval(removal.entries.map(entry => entry.row), removal.batch, removal.finished)}>重新检查</button>}
+        <button type="button" className="da-btn da-btn-danger" disabled={waiting || removal.entries.some(entry => !entry.impact?.revision || entry.error)}
+          onClick={() => void confirmRemoval(removal)}>{busy === 'delete' ? '处理中…' : removal.batch ? '确认批量移除'
+            : removal.entries[0]?.row.published ? '确认下架' : '确认移除'}</button>
+      </>}>
+      {!!removal.finished?.total && <p role="status">已处理 {removal.finished.total} 项。以下 {removal.entries.length} 项仍需检查。</p>}
+      <ul className="mo-removal-targets">{removal.entries.map(({ row, impact, error }) => <li key={assetKey(row)}>
+        <strong>{assetDescription((row.draft ?? row.published)?.description).title || row.name}</strong>
+        <p className="da-small">{row.published ? '待发布下架。线上问数在新版本发布后停止使用此视图。' : '移除草稿视图及引用规则。'}</p>
+        {!impact && !error && <p role="status">正在检查引用…</p>}
+        {error && <p className="mo-error" role="alert">{error}</p>}
+        {impact && <div className="va-impact">
+          <p>涉及 {impact.rules.length} 条规则、{impact.questions.length} 道问答。引用问答需复核。</p>
+          {!!impact.rules.length && <ul aria-label="将移除的规则">{impact.rules.map((rule, index) => <li key={index}>{rule}</li>)}</ul>}
+          {!!impact.questions.length && <ul aria-label="引用该视图的问答">{impact.questions.map((question, index) => <li key={index}>{question}</li>)}</ul>}
+        </div>}
+      </li>)}</ul>
+    </AssetActionDialog>}
+  </section>;
+}
+
+function ViewOverview({ detail }: { detail: AssetDetail }) {
+  const { asset } = detail;
+  const { title, sections } = assetDescription(asset.description);
+  const summaryLabels = ['适用范围', '数据粒度', '指标', '时间列', '时间范围', '数据来源', '关联'];
+  const purpose = sections.find(section => section.heading === '业务用途');
+  const limits = sections.filter(section => section.heading === '使用限制');
+  const facts = sections.filter(section => summaryLabels.includes(section.heading));
+  const notes = sections.filter(section => section.heading !== '业务用途' && section.heading !== '使用限制' && !summaryLabels.includes(section.heading));
+  return <section className="va-content" aria-label="用途与口径">
+    {purpose && purpose.text !== title && <section className="va-purpose"><h4>业务用途</h4><p>{purpose.text}</p></section>}
+    {!!facts.length && <dl className="va-facts">{facts.map((fact, index) => <div key={index}><dt>{fact.heading}</dt><dd>{fact.text}</dd></div>)}</dl>}
+    {(limits.length > 0 || detail.fixedDates.length > 0 || detail.warnings.length > 0) && <section className="va-limits">
+      <h4><Icon name="info" size="sm" />使用限制</h4>
+      {limits.map((limit, index) => <p key={index}>{limit.text}</p>)}
+      {detail.warnings.map(warning => <p key={warning}>{warning}</p>)}
+      {!!detail.fixedDates.length && <p>SQL 含固定日期 {detail.fixedDates.join('、')}，请核对是否为固定业务口径。</p>}
+    </section>}
+    {!sections.length && <p className="da-small">还没有业务说明。可以在建模对话中补充用途、粒度和口径。</p>}
+    {notes.map((note, index) => <section className="va-notes" key={index}><h4>{note.heading}</h4><p>{note.text}</p></section>)}
+    {asset.sql?.trim() ? <details className="qc-detail-fold" open={asset.status === 'REVIEW_PENDING' || undefined}>
+      <summary>查看视图 SQL</summary><ReadableCode text={asset.sql} language="sql" title="视图 SQL" />
+    </details> : <p className="da-small">草稿尚未写入 SQL。请在建模对话中补齐定义后再核查。</p>}
   </section>;
 }

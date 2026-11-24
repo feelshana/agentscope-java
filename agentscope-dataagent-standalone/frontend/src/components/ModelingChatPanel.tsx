@@ -13,8 +13,10 @@ import ReadableCode from './ReadableCode';
 import { confirmModeling, currentSession, stream } from '../api/chat';
 import type { ChatEvent, HitlToolCall, TurnPurpose } from '../api/chat';
 import { messagePage } from '../api/sessions';
-import { confirmationReceipt, restoreModelingHistory } from './modeling/modelingHistory';
+import { confirmationReceipt, recentCoachTurns, restoreModelingHistory } from './modeling/modelingHistory';
 import type { PanelMessage, PendingHitl, Segment, ToolFrame } from './modeling/modelingHistory';
+import type { CoachRequest } from './modeling/queryCoachScope';
+import type { CoachConversationTurn } from '../api/modelingQuestions';
 import type { ModelingPrompt } from './modeling/modelingPrompts';
 import { getModelingOverview } from '../api/semanticModeling';
 import type { ModelingOverview } from '../api/semanticModeling';
@@ -382,13 +384,20 @@ export default function ModelingChatPanel({
   onDraftSubmitted,
   onTurnDone,
   draftPurpose,
+  draftQuestionId,
   draftLabel,
   onActivityChange,
   renderTurnResult,
+  renderQuestionResult,
+  resolveCoachRequest,
+  resolveCoachAction,
+  coachScope,
+  onChooseCoachQuestion,
   intro,
   quickPrompts,
   composerNotice,
   composerHint,
+  composerFocus = 0,
   composerSuggestion,
   composerLocked = false,
   onCompose,
@@ -410,16 +419,23 @@ export default function ModelingChatPanel({
   onTurnDone?: (awaitingConfirmation: boolean) => void;
   /** Sent with the draft so the server can label and gate the turn (spec092). */
   draftPurpose?: TurnPurpose;
+  draftQuestionId?: string;
   /** What the conversation shows for a platform-written draft; the full text goes to the assistant. */
   draftLabel?: string;
   /** Running turn or undecided confirmation card; drafts sent meanwhile queue behind it. */
   onActivityChange?: (state: AssistantState) => void;
   /** spec092 §7: "AI 建模结果" under a finished reply, given the turn's start time. */
   renderTurnResult?: (startedAt: string) => ReactNode;
+  renderQuestionResult?: (id: string) => ReactNode;
+  resolveCoachRequest?: (text: string) => CoachRequest | 'handled' | null | undefined;
+  resolveCoachAction?: (id: string, text: string, recentTurns: CoachConversationTurn[]) => Promise<string | null>;
+  coachScope?: ReactNode;
+  onChooseCoachQuestion?: () => void;
   intro?: ReactNode;
   quickPrompts?: ModelingPrompt[];
   composerNotice?: ReactNode;
   composerHint?: string;
+  composerFocus?: number;
   composerSuggestion?: string;
   composerLocked?: boolean;
   /** Handle a preparation command before sending anything to the agent. */
@@ -439,6 +455,7 @@ export default function ModelingChatPanel({
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [resolvingCoachAction, setResolvingCoachAction] = useState(false);
   const decisionInFlight = useRef(false);
   const [overview, setOverview] = useState<ModelingOverview | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -453,6 +470,10 @@ export default function ModelingChatPanel({
   const consumedSubmission = useRef<string | null>(null);
   const sessionKeyRef = useRef<string>(`modeling-${groupId}`);
   const awaitingDecision = messages.some(message => message.hitl);
+
+  useEffect(() => {
+    if (composerFocus > 0) inputRef.current?.focus();
+  }, [composerFocus]);
 
   useEffect(() => {
     const key = `${groupId}:${draftPromptId ?? draftPrompt}`;
@@ -676,10 +697,10 @@ export default function ModelingChatPanel({
   }
 
   /** Sends a user message and reconciles persisted native confirmation state. */
-  async function sendText(raw: string, purpose?: TurnPurpose, label?: string) {
+  async function sendText(raw: string, purpose?: TurnPurpose, label?: string, questionId?: string, fromQueue = false) {
     const text = raw.trim();
     if (!text || busy || awaitingDecision) return;
-    setInput('');
+    if (!fromQueue) setInput('');
     setPromptsOpen(false);
     setSelectedPrompt(null);
     insertedPrompt.current = null;
@@ -693,6 +714,7 @@ export default function ModelingChatPanel({
       role: 'assistant',
       segments: [],
       pending: true,
+      questionId,
       // A little earlier than now, so writes are never missed through clock skew.
       startedAt: new Date(Date.now() - 2000).toISOString(),
     };
@@ -700,12 +722,20 @@ export default function ModelingChatPanel({
     try {
       for await (const evt of stream(
         MODELING_AGENT_ID,
-        { message: text, sessionKey: sessionKeyRef.current, groupIds: [groupId], purpose },
+        { message: text, sessionKey: sessionKeyRef.current, groupIds: [groupId], purpose, modelingQuestionId: questionId },
       )) {
         applyEvent(replyMsg.id, evt);
+        if (evt.type === 'error' && questionId) {
+          if (!fromQueue) setInput(previous => previous || label || '');
+          notifyUpdated();
+        }
       }
       await finishTurn(replyMsg.id);
     } catch (e) {
+      if (questionId) {
+        if (!fromQueue) setInput(previous => previous || label || '');
+        notifyUpdated();
+      }
       const msg = e instanceof Error ? e.message : '连接中断';
       setMessages(previous =>
         previous.map(message =>
@@ -795,23 +825,53 @@ export default function ModelingChatPanel({
     }
   }
 
+  async function sendCoach(coach: CoachRequest) {
+    const { questionId, label } = coach;
+    if (coach.interpretAction && questionId && resolveCoachAction) {
+      setResolvingCoachAction(true);
+      setPromptsOpen(false);
+      setSelectedPrompt(null);
+      insertedPrompt.current = null;
+      try {
+        const reply = await resolveCoachAction(questionId, label, recentCoachTurns(messages, questionId));
+        if (reply !== null) {
+          pinned.current = true;
+          setInput('');
+          setMessages(previous => [...previous,
+            { id: nextId(), role: 'user', segments: [{ kind: 'text', text: label }] },
+            { id: nextId(), role: 'assistant', questionId, segments: [{ kind: 'text', text: reply }] },
+          ]);
+          return;
+        }
+      } finally {
+        setResolvingCoachAction(false);
+      }
+    }
+    await sendText(coach.text, coach.purpose, label, questionId);
+  }
+
   function handleSend() {
+    if (busy || resolvingCoachAction || awaitingDecision) return;
     if (input.trim() && onCompose?.(input.trim())) {
       setInput('');
       return;
     }
     if (composerLocked || !sessionReady) return;
-    void sendText(input);
+    const coach = input.trim() ? resolveCoachRequest?.(input.trim()) : undefined;
+    if (coach === 'handled') { setInput(''); return; }
+    if (coach === null) return;
+    if (coach) void sendCoach(coach);
+    else void sendText(input);
   }
 
   useEffect(() => {
     const key = `${groupId}:${draftPromptId ?? draftPrompt}`;
-    if (submitDraft && draftPrompt && !composerLocked && sessionReady && !busy && !awaitingDecision && consumedSubmission.current !== key) {
+    if (submitDraft && draftPrompt && !composerLocked && sessionReady && !busy && !resolvingCoachAction && !awaitingDecision && consumedSubmission.current !== key) {
       consumedSubmission.current = key;
       onDraftSubmitted?.();
-      void sendText(draftPrompt, draftPurpose, draftLabel);
+      void sendText(draftPrompt, draftPurpose, draftLabel, draftQuestionId, true);
     }
-  }, [submitDraft, draftPrompt, draftPromptId, draftPurpose, draftLabel, sessionReady, busy, awaitingDecision, groupId, composerLocked]);
+  }, [submitDraft, draftPrompt, draftPromptId, draftPurpose, draftQuestionId, draftLabel, sessionReady, busy, resolvingCoachAction, awaitingDecision, groupId, composerLocked]);
 
   // Lets the page show that a request will queue behind the running turn or pending cards.
   const activity = useRef(onActivityChange);
@@ -819,7 +879,7 @@ export default function ModelingChatPanel({
   const state: AssistantState = awaitingDecision ? 'awaiting' : busy ? 'running' : 'idle';
   useEffect(() => { activity.current?.(state); }, [state]);
 
-  const inputDisabled = busy || awaitingDecision || (!onCompose && (composerLocked || !sessionReady));
+  const inputDisabled = busy || resolvingCoachAction || awaitingDecision || (!onCompose && (composerLocked || !sessionReady));
   const showPrompts = !!quickPrompts?.length && promptsOpen && !inputDisabled;
   useLayoutEffect(() => {
     if (showPrompts) promptPanel.current?.querySelector<HTMLButtonElement>('[data-quick-focus]')?.focus();
@@ -957,7 +1017,8 @@ export default function ModelingChatPanel({
                         />
                       </div>;
                     })}
-                    {m === messages[messages.length - 1] && m.startedAt && !m.pending && !m.hitl && renderTurnResult?.(m.startedAt)}
+                    {!m.pending && !m.hitl && (m.questionId ? renderQuestionResult?.(m.questionId)
+                      : m === messages[messages.length - 1] && m.startedAt && renderTurnResult?.(m.startedAt))}
                     {m.pending && m.segments.length === 0 && !m.hitl && (
                       <span className="da-typing">
                         <span />
@@ -996,9 +1057,15 @@ export default function ModelingChatPanel({
               </div>
             </> : <div className="mc-quick-choices">
               {quickPrompts?.map((prompt, index) => <button type="button" className="mc-quick-choice" key={prompt.title}
-                data-quick-focus={index === 0 ? '' : undefined} onClick={() => choosePrompt(prompt)}>
+                data-quick-focus={index === 0 ? '' : undefined} onClick={() => {
+                  if (onChooseCoachQuestion && prompt.title === '校对问数口径') {
+                    closePrompts(false);
+                    onChooseCoachQuestion();
+                  } else choosePrompt(prompt);
+                }}>
                 <span className="mc-quick-choice-icon"><Icon name={prompt.icon} size="sm" /></span>
-                <span><strong>{prompt.title}</strong><small>{prompt.detail}</small></span>
+                <span><strong>{onChooseCoachQuestion && prompt.title === '校对问数口径' ? '选一道题优化' : prompt.title}</strong>
+                  <small>{onChooseCoachQuestion && prompt.title === '校对问数口径' ? '指定一道业务题，核对或修正口径' : prompt.detail}</small></span>
                 <span className="mc-quick-insert" aria-hidden="true"><Icon name="plus" size="sm" /></span>
               </button>)}
             </div>}
@@ -1007,6 +1074,8 @@ export default function ModelingChatPanel({
 
         <div className="mc-composer" style={S.composer}>
           {composerNotice}
+          {coachScope}
+          {resolvingCoachAction && <div className="da-small" role="status">正在处理这条消息…</div>}
           <div className="da-composer-glow">
             <div className={`da-composer-shell da-composer${quickPrompts?.length ? ' mc-composer-with-prompts' : ''}`}>
               {!!quickPrompts?.length && <button type="button" ref={promptTrigger} className="mc-quick-trigger" aria-label="快捷提示"

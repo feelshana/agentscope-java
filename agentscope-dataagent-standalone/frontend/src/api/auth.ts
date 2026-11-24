@@ -141,6 +141,12 @@ function decodeTokenPayload(): Record<string, unknown> | null {
   }
 }
 
+export function sessionUserId(): string | undefined {
+  const payload = decodeTokenPayload();
+  const id = payload?.sub ?? payload?.userId;
+  return typeof id === 'string' ? id : undefined;
+}
+
 /** Returns true if the current user's JWT contains the 'admin' role. */
 export function isAdmin(): boolean {
   const payload = decodeTokenPayload();

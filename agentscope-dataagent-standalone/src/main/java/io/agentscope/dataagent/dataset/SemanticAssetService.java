@@ -10,6 +10,7 @@ import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -45,9 +46,14 @@ public class SemanticAssetService {
     private final AssetSqlGenerator generator;
     private final MdlQuestionService questions;
     private final AssetProposalStore proposals;
+    private final ModelingActivity activity;
 
     /** spec113: what deleting an asset would touch — rule entries naming it, questions using it. */
-    public record Impact(List<String> rules, List<String> questions) {}
+    public record Impact(List<String> rules, List<String> questions, String revision) {
+        public Impact(List<String> rules, List<String> questions) {
+            this(rules, questions, null);
+        }
+    }
 
     public List<AssetProposalStore.Proposal> proposals(String actor, String groupId) {
         groups.getGroup(actor, groupId);
@@ -63,7 +69,20 @@ public class SemanticAssetService {
     public Impact impact(String actor, String groupId, String kind, String name) {
         groups.getGroup(actor, groupId);
         location(kind, name);
-        reviews.require(groupId, kind, name);
+        return workspace.withWorkspaceLock(
+                groupId, () -> removalImpact(actor, groupId, kind, name));
+    }
+
+    private Impact removalImpact(String actor, String groupId, String kind, String name) {
+        var asset = reviews.require(groupId, kind, name);
+        var impact = draftImpact(actor, groupId, name);
+        String published =
+                AssetReviewStore.hash(reviews.publishedRoot(groupId).resolve(asset.directory()));
+        String revision = sha(asset.hash() + published + impact);
+        return new Impact(impact.rules(), impact.questions(), revision);
+    }
+
+    private Impact draftImpact(String actor, String groupId, String name) {
         List<String> rules = new ArrayList<>();
         for (var line : ruleLines(workspace.workspaceRoot(groupId), name))
             rules.add(line.getValue());
@@ -76,58 +95,129 @@ public class SemanticAssetService {
         return new Impact(rules, used);
     }
 
+    public record IncompleteView(List<SourceFile> files, Impact impact, String revision) {}
+
+    public IncompleteView inspectIncompleteView(String actor, String groupId, String name) {
+        groups.getGroup(actor, groupId);
+        return workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    groups.getGroup(actor, groupId);
+                    return incompleteView(actor, groupId, incompleteViewPath(groupId, name));
+                });
+    }
+
+    public void removeIncompleteView(String actor, String groupId, String name, String revision) {
+        groups.getGroup(actor, groupId);
+        activity.requireIdle(groupId);
+        workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    groups.getGroup(actor, groupId);
+                    activity.requireIdle(groupId);
+                    Path target = incompleteViewPath(groupId, name);
+                    if (!incompleteView(actor, groupId, target).revision().equals(revision))
+                        throw new DatasetException("草稿或引用已更新，请重新查看后再移除", 409);
+                    removeDraftAsset(actor, groupId, target, name);
+                    return null;
+                });
+    }
+
+    private Path incompleteViewPath(String groupId, String name) {
+        Path root = workspace.workspaceRoot(groupId);
+        Path target = root.resolve(location(AssetReviewStore.KIND_VIEW, name));
+        if (!Files.isDirectory(target.getParent(), LinkOption.NOFOLLOW_LINKS)
+                || !Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS)
+                || Files.isRegularFile(target.resolve("metadata.yml")))
+            throw new DatasetException("视图已修复或移除，请重新检查草稿", 409);
+        return target;
+    }
+
+    private IncompleteView incompleteView(String actor, String groupId, Path target) {
+        Path root = workspace.workspaceRoot(groupId);
+        List<SourceFile> files = new ArrayList<>();
+        try (var paths = Files.walk(target)) {
+            List<Path> entries = paths.sorted().toList();
+            if (entries.size() == 1) throw new DatasetException("视图目录已空，请重新检查并发布", 409);
+            for (Path file : entries) {
+                if (Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS)) continue;
+                if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
+                    throw new DatasetException("视图包含无法读取的工程项：" + file.getFileName(), 422);
+                files.add(
+                        new SourceFile(
+                                root.relativize(file).toString().replace('\\', '/'),
+                                Files.readString(file)));
+            }
+            Impact impact = draftImpact(actor, groupId, target.getFileName().toString());
+            return new IncompleteView(
+                    files, impact, sha(JSON.writeValueAsString(List.of(files, impact))));
+        } catch (IOException e) {
+            throw new DatasetException("读取未完成视图失败：" + e.getMessage(), e);
+        }
+    }
+
     /**
      * Deletes an asset from the draft together with the rule entries naming it, so the query
      * assistant is never pointed at a missing model. Questions using it then need review
      * (spec112). Nothing changes online until the draft is published.
      */
     public void delete(String actor, String groupId, String kind, String name) {
+        delete(actor, groupId, kind, name, null);
+    }
+
+    public void delete(String actor, String groupId, String kind, String name, String revision) {
         groups.getGroup(actor, groupId);
         String directory = location(kind, name);
         workspace.withWorkspaceLock(
                 groupId,
                 () -> {
+                    groups.getGroup(actor, groupId);
                     reviews.require(groupId, kind, name);
+                    if (revision != null
+                            && !revision.equals(
+                                    removalImpact(actor, groupId, kind, name).revision()))
+                        throw new DatasetException("视图或引用已变化，请重新检查移除影响", 409);
                     Path root = workspace.workspaceRoot(groupId);
                     Path target = root.resolve(directory).normalize();
                     if (!target.startsWith(
                             root.resolve(
                                     kind.equals(AssetReviewStore.KIND_VIEW) ? "views" : "models")))
                         throw new DatasetException("工程路径越界", 403);
-                    try {
-                        List<Path> files;
-                        try (var walk = Files.walk(target)) {
-                            files = walk.sorted(java.util.Comparator.reverseOrder()).toList();
-                        }
-                        for (Path file : files) {
-                            if (Files.isRegularFile(file))
-                                DraftChangeLog.record(
-                                        root,
-                                        root.relativize(file).toString().replace('\\', '/'),
-                                        ModelingTurnPurpose.EDIT,
-                                        actor);
-                            Files.delete(file);
-                        }
-                        Map<Path, List<String>> keep = new LinkedHashMap<>();
-                        for (var line : ruleLines(root, name))
-                            keep.putIfAbsent(line.getKey(), null);
-                        for (Path file : keep.keySet()) {
-                            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-                            lines.removeIf(l -> isRuleEntry(l) && l.contains(name));
-                            Files.writeString(
-                                    file, String.join("\n", lines) + "\n", StandardCharsets.UTF_8);
-                            DraftChangeLog.record(
-                                    root,
-                                    root.relativize(file).toString().replace('\\', '/'),
-                                    ModelingTurnPurpose.EDIT,
-                                    actor);
-                        }
-                    } catch (IOException e) {
-                        throw new DatasetException("删除语义资产失败：" + e.getMessage(), e);
-                    }
-                    groups.markMdlDirty(actor, groupId);
+                    removeDraftAsset(actor, groupId, target, name);
                     return null;
                 });
+    }
+
+    private void removeDraftAsset(String actor, String groupId, Path target, String name) {
+        Path root = workspace.workspaceRoot(groupId);
+        try {
+            Set<Path> ruleFiles = new LinkedHashSet<>();
+            for (var line : ruleLines(root, name)) ruleFiles.add(line.getKey());
+            for (Path file : ruleFiles) {
+                List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+                lines.removeIf(l -> isRuleEntry(l) && l.contains(name));
+                Files.writeString(file, String.join("\n", lines) + "\n", StandardCharsets.UTF_8);
+                DraftChangeLog.record(
+                        root,
+                        root.relativize(file).toString().replace('\\', '/'),
+                        ModelingTurnPurpose.EDIT,
+                        actor);
+            }
+            try (var walk = Files.walk(target)) {
+                for (Path file : walk.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    if (Files.isRegularFile(file))
+                        DraftChangeLog.record(
+                                root,
+                                root.relativize(file).toString().replace('\\', '/'),
+                                ModelingTurnPurpose.EDIT,
+                                actor);
+                    Files.delete(file);
+                }
+            }
+        } catch (IOException e) {
+            throw new DatasetException("删除语义资产失败：" + e.getMessage(), e);
+        }
+        groups.markMdlDirty(actor, groupId);
     }
 
     /** Rule entries (bullets under knowledge/rules/) that name the asset, with their file. */
@@ -186,7 +276,6 @@ public class SemanticAssetService {
                 new AssetProposalStore(workspace));
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public SemanticAssetService(
             DatasetGroupService groups,
             AssetReviewStore reviews,
@@ -198,7 +287,35 @@ public class SemanticAssetService {
             AssetSqlGenerator generator,
             MdlQuestionService questions,
             AssetProposalStore proposals) {
+        this(
+                groups,
+                reviews,
+                publisher,
+                workspace,
+                reader,
+                windows,
+                gateway,
+                generator,
+                questions,
+                proposals,
+                new ModelingActivity());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SemanticAssetService(
+            DatasetGroupService groups,
+            AssetReviewStore reviews,
+            MdlPublishService publisher,
+            MdlWorkspaceService workspace,
+            MdlWorkspaceReader reader,
+            FactQueryWindowPolicy windows,
+            WrenQueryGateway gateway,
+            AssetSqlGenerator generator,
+            MdlQuestionService questions,
+            AssetProposalStore proposals,
+            ModelingActivity activity) {
         this.proposals = proposals;
+        this.activity = activity;
         this.groups = groups;
         this.reviews = reviews;
         this.publisher = publisher;
@@ -263,14 +380,34 @@ public class SemanticAssetService {
         return workspace.withWorkspaceLock(groupId, () -> reviews.assets(groupId));
     }
 
-    public Detail get(String actor, String groupId, String kind, String name) {
+    public AssetReviewStore.Catalog catalog(String actor, String groupId) {
         groups.getGroup(actor, groupId);
-        return workspace.withWorkspaceLock(groupId, () -> detail(groupId, kind, name));
+        return workspace.withWorkspaceLock(groupId, () -> reviews.catalog(groupId));
+    }
+
+    public Detail get(String actor, String groupId, String kind, String name) {
+        return get(actor, groupId, kind, name, false);
+    }
+
+    public Detail get(String actor, String groupId, String kind, String name, boolean published) {
+        groups.getGroup(actor, groupId);
+        return workspace.withWorkspaceLock(
+                groupId,
+                () ->
+                        published
+                                ? detail(
+                                        reviews.requirePublished(groupId, kind, name),
+                                        reviews.publishedRoot(groupId),
+                                        false)
+                                : detail(groupId, kind, name));
     }
 
     private Detail detail(String groupId, String kind, String name) {
         var asset = reviews.require(groupId, kind, name);
-        Path root = workspace.workspaceRoot(groupId);
+        return detail(asset, workspace.workspaceRoot(groupId), needsTimeColumn(groupId, name));
+    }
+
+    private Detail detail(AssetReviewStore.Asset asset, Path root, boolean limited) {
         List<SourceFile> files = new ArrayList<>();
         for (String file : List.of("metadata.yml", "sql.yml", "ref_sql.sql")) {
             String path = asset.directory() + "/" + file;
@@ -281,7 +418,6 @@ public class SemanticAssetService {
                 throw new DatasetException("读取语义资产失败：" + e.getMessage(), e);
             }
         }
-        boolean limited = needsTimeColumn(groupId, name);
         return new Detail(
                 asset,
                 files,
@@ -352,11 +488,22 @@ public class SemanticAssetService {
 
     public Detail review(
             String actor, String groupId, String kind, String name, List<String> timeColumns) {
+        return review(actor, groupId, kind, name, timeColumns, null);
+    }
+
+    public Detail review(
+            String actor,
+            String groupId,
+            String kind,
+            String name,
+            List<String> timeColumns,
+            String expectedHash) {
         groups.getGroup(actor, groupId);
         return workspace.withWorkspaceLock(
                 groupId,
                 () -> {
                     var asset = reviews.require(groupId, kind, name);
+                    requireHash(asset, expectedHash);
                     List<String> columns =
                             timeColumns == null
                                     ? List.of()
@@ -385,7 +532,8 @@ public class SemanticAssetService {
                                     Map.of(),
                                     null,
                                     null,
-                                    false));
+                                    false,
+                                    List.of()));
                     return detail(groupId, kind, name);
                 });
     }
@@ -433,19 +581,41 @@ public class SemanticAssetService {
             throw new DatasetException("这条 SQL 没有用到资产「" + name + "」，不能作为验证", 422);
     }
 
-    /** Runs each case on the draft and the published version; only outcome keys persist. */
+    /** Plans each case on the draft and records what the reviewer saw. */
     public List<Check> verify(
             String actor, String groupId, String kind, String name, List<VerifyCase> cases) {
+        return verify(actor, groupId, kind, name, cases, null);
+    }
+
+    public List<Check> verify(
+            String actor,
+            String groupId,
+            String kind,
+            String name,
+            List<VerifyCase> cases,
+            String expectedHash) {
         groups.getGroup(actor, groupId);
         var asset =
-                workspace.withWorkspaceLock(groupId, () -> requireReviewed(groupId, kind, name));
+                workspace.withWorkspaceLock(
+                        groupId,
+                        () -> {
+                            var current = requireReviewed(groupId, kind, name);
+                            requireHash(current, expectedHash);
+                            return current;
+                        });
         Map<String, Check> checks = new LinkedHashMap<>();
+        Map<String, String> questionByKey = new LinkedHashMap<>();
+        String runId = expectedHash == null ? null : java.util.UUID.randomUUID().toString();
         for (VerifyCase item : cases == null ? List.<VerifyCase>of() : cases) {
             if (item == null || item.sql() == null || item.sql().isBlank()) continue;
             String sql = item.sql().strip();
-            String key = "sql:" + sha(sql);
             String question = item.question() == null ? "" : item.question().strip();
+            String key =
+                    runId == null
+                            ? "sql:" + sha(sql)
+                            : "case:" + runId + ":" + sha(question + "\0" + sql);
             checks.put(key, check(key, question.isBlank() ? sql : question, sql));
+            questionByKey.put(key, question);
         }
         if (checks.isEmpty()) throw new DatasetException("请至少添加一个验证问题", 400);
         if (checks.size() > MAX_CHECKS)
@@ -491,21 +661,25 @@ public class SemanticAssetService {
             }
         }
         List<Check> done = List.copyOf(checks.values());
-        boolean allRan = done.stream().allMatch(c -> c.error() == null);
+        var evidence =
+                done.stream()
+                        .map(
+                                check ->
+                                        new AssetReviewStore.Evidence(
+                                                check.key(),
+                                                questionByKey.get(check.key()),
+                                                check.sql(),
+                                                check.expanded(),
+                                                check.error()))
+                        .toList();
         return workspace.withWorkspaceLock(
                 groupId,
                 () -> {
                     var current = requireReviewed(groupId, kind, name);
-                    if (!current.hash().equals(asset.hash()))
+                    if (!current.hash().equals(asset.hash())
+                            || !current.review().reviewedAt().equals(asset.review().reviewedAt()))
                         throw new DatasetException("语义资产在验证期间被修改，请重新验证", 409);
-                    reviews.save(
-                            groupId,
-                            current,
-                            current.review()
-                                    .withRun(
-                                            allRan
-                                                    ? done.stream().map(Check::key).toList()
-                                                    : List.of()));
+                    reviews.save(groupId, current, current.review().withRun(evidence));
                     return done;
                 });
     }
@@ -528,6 +702,17 @@ public class SemanticAssetService {
             String name,
             Map<String, String> verdicts,
             List<VerifyCase> save) {
+        return verdict(actor, groupId, kind, name, verdicts, save, null);
+    }
+
+    public Detail verdict(
+            String actor,
+            String groupId,
+            String kind,
+            String name,
+            Map<String, String> verdicts,
+            List<VerifyCase> save,
+            String expectedHash) {
         groups.getGroup(actor, groupId);
         List<VerifyCase> keep = save == null ? List.of() : save;
         for (VerifyCase item : keep) {
@@ -537,9 +722,8 @@ public class SemanticAssetService {
             if (item.question() == null || item.question().isBlank())
                 throw new DatasetException("保存为问答时需要问题文字", 400);
         }
-        Detail detail = recordVerdicts(actor, groupId, kind, name, verdicts);
+        Detail detail = recordVerdicts(actor, groupId, kind, name, verdicts, expectedHash);
         if (keep.isEmpty() || questions == null) return detail;
-        String label = "view".equals(kind) ? "查询模板" : "加工表";
         List<String> failed = new ArrayList<>();
         for (VerifyCase item : keep) {
             try {
@@ -547,15 +731,7 @@ public class SemanticAssetService {
                         new DatasetScope(actor, List.of(groupId)),
                         groupId,
                         item.question(),
-                        "来源："
-                                + label
-                                + "「"
-                                + name
-                                + "」的问题验证，结果符合预期\n口径：按"
-                                + label
-                                + "「"
-                                + name
-                                + "」统计",
+                        verifiedDefinition(kind, name),
                         item.sql());
             } catch (DatasetException e) {
                 failed.add("「" + item.question() + "」：" + e.getMessage());
@@ -566,13 +742,79 @@ public class SemanticAssetService {
         return detail;
     }
 
+    public MdlQuestionStore.Review saveVerifiedQuestion(
+            String actor,
+            String groupId,
+            String kind,
+            String name,
+            String expectedHash,
+            String caseKey,
+            MdlQuestionStore.Replacement replacement) {
+        groups.getGroup(actor, groupId);
+        if (questions == null || publisher == null) throw new DatasetException("问答服务暂不可用", 503);
+        if (expectedHash == null || caseKey == null || caseKey.isBlank())
+            throw new DatasetException("请选定要保存的验证问题", 400);
+        return publisher.beforeNextPublish(
+                groupId,
+                () ->
+                        workspace.withWorkspaceLock(
+                                groupId,
+                                () -> {
+                                    groups.getGroup(actor, groupId);
+                                    var asset = requireReviewed(groupId, kind, name);
+                                    requireHash(asset, expectedHash);
+                                    if (!asset.changed()
+                                            || !asset.review().passed()
+                                            || !EXPECTED.equals(
+                                                    asset.review().verdicts().get(caseKey)))
+                                        throw new DatasetException("请先完成当前草稿的验证判定", 409);
+                                    var evidence =
+                                            asset.review().evidence().stream()
+                                                    .filter(
+                                                            c ->
+                                                                    c.key().equals(caseKey)
+                                                                            && c.question() != null
+                                                                            && !c.question()
+                                                                                    .isBlank())
+                                                    .findFirst()
+                                                    .orElseThrow(
+                                                            () ->
+                                                                    new DatasetException(
+                                                                            "找不到可保存的业务问题，请重新验证",
+                                                                            409));
+                                    return questions.confirmVerified(
+                                            new DatasetScope(actor, List.of(groupId)),
+                                            groupId,
+                                            evidence.question(),
+                                            verifiedDefinition(kind, name),
+                                            evidence.sql(),
+                                            replacement);
+                                }));
+    }
+
+    private static String verifiedDefinition(String kind, String name) {
+        String asset = ("view".equals(kind) ? "查询模板" : "加工表") + "「" + name + "」";
+        return "来源：" + asset + "的问题验证，SQL 符合预期\n口径：按" + asset + "统计";
+    }
+
+    private static void requireHash(AssetReviewStore.Asset asset, String expectedHash) {
+        if (expectedHash != null && (!asset.hash().equals(expectedHash) || !asset.changed()))
+            throw new DatasetException("视图草稿已变化，请刷新后重新核对", 409);
+    }
+
     private Detail recordVerdicts(
-            String actor, String groupId, String kind, String name, Map<String, String> verdicts) {
+            String actor,
+            String groupId,
+            String kind,
+            String name,
+            Map<String, String> verdicts,
+            String expectedHash) {
         groups.getGroup(actor, groupId);
         return workspace.withWorkspaceLock(
                 groupId,
                 () -> {
                     var asset = requireReviewed(groupId, kind, name);
+                    requireHash(asset, expectedHash);
                     var review = asset.review();
                     Set<String> ran = new LinkedHashSet<>(review.ran());
                     if (ran.isEmpty()) throw new DatasetException("请先运行问题验证，且全部执行成功", 409);

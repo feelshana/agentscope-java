@@ -198,7 +198,6 @@ public final class MdlReadService {
         try (Stream<Path> walk = Files.walk(published)) {
             List<Path> files =
                     walk.filter(Files::isRegularFile)
-                            .filter(p -> !p.startsWith(published.resolve("target")))
                             .filter(
                                     p ->
                                             !Set.of(
@@ -209,6 +208,9 @@ public final class MdlReadService {
                             .toList();
             for (Path p : files) {
                 String rel = published.relativize(p).toString().replace('\\', '/');
+                if (MdlWorkspaceReader.isInternal(rel)) {
+                    continue;
+                }
                 out.add(new MdlFile(rel, Files.readString(p, StandardCharsets.UTF_8)));
             }
         } catch (IOException e) {

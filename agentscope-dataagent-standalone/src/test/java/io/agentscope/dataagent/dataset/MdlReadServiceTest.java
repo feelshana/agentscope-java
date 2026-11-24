@@ -64,6 +64,7 @@ class MdlReadServiceTest {
         put(root.resolve("published/target/mdl.json"), "{}\n");
         put(root.resolve("published/wren-source.properties"), "profile=test\n");
         put(root.resolve("published/" + PublishedAssetWindows.FILE), "{}\n");
+        put(root.resolve("published/.platform/asset-reviews.json"), "{}\n");
         var before = contents();
         int version = group.getMdlVersion();
         var preview = reads.preview("g");
@@ -71,7 +72,7 @@ class MdlReadServiceTest {
         assertThat(preview.publishedFiles())
                 .extracting(MdlTypes.MdlFile::path)
                 .containsExactly("wren_project.yml");
-        reads.view("g");
+        assertThat(reads.view("g").changed()).isFalse();
         reads.compiled("g");
         assertThat(contents()).isEqualTo(before);
         assertThat(group.getMdlVersion()).isEqualTo(version);
@@ -79,6 +80,7 @@ class MdlReadServiceTest {
         verify(groups, never()).save(any());
         put(draft.resolve("wren_project.yml"), "name: changed\n");
         assertThat(reads.preview("g").changed()).isTrue();
+        assertThat(reads.view("g").changed()).isTrue();
     }
 
     @Test

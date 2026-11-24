@@ -1,4 +1,4 @@
-import { tourHoldsQuery, tourSignal, useTour } from '../../state/guidedTour';
+import { tourHoldsQuery, tourLocksDraftDrawer, tourSignal, useTour } from '../../state/guidedTour';
 import { FactQueryWindowSettings } from '../../components/FactQueryWindowSettings';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -10,7 +10,6 @@ import SemanticWorkbench from '../../components/modeling/SemanticWorkbench';
 import { WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import { changeKey } from '../../components/modeling/SemanticWorkbench';
 import type { ChangeMark, WorkbenchView } from '../../components/modeling/SemanticWorkbench';
-import PendingPanel from '../../components/modeling/PendingPanel';
 import { getDraftItems } from '../../api/draftReview';
 import type { DraftItem } from '../../api/draftReview';
 import SemanticReadOnlyWorkspace from '../../components/modeling/SemanticReadOnlyWorkspace';
@@ -26,21 +25,24 @@ import { getScreeningStatus } from '../../api/fieldScreening';
 import type { ScreeningStatus } from '../../api/fieldScreening';
 import ConfirmationCards from '../../components/modeling/ConfirmationCards';
 import { questionRequest } from '../../components/modeling/QuestionIntakeForm';
-import { getModelingQuestions } from '../../api/modelingQuestions';
+import { getModelingQuestions, interpretCoachConversation } from '../../api/modelingQuestions';
+import type { CoachConversationTurn } from '../../api/modelingQuestions';
 import DraftBar from '../../components/modeling/DraftBar';
 import type { DraftSummary } from '../../components/modeling/DraftBar';
 import NextStepCard from '../../components/modeling/NextStepCard';
-import TrialPanel from '../../components/modeling/TrialPanel';
 import TurnResultCard from '../../components/modeling/TurnResultCard';
 import AdvancedModelingPanel from '../../components/modeling/AdvancedModelingPanel';
-import ConfirmedExamplesSection from '../../components/modeling/ConfirmedExamplesSection';
 import AssetProposalCards from '../../components/modeling/AssetProposalCards';
-import QueryCoachPanel from '../../components/modeling/QueryCoachPanel';
-import type { AssetEntry } from '../../components/modeling/AssetYamlBrowser';
+import QueryCoachPanel, { questionState } from '../../components/modeling/QueryCoachPanel';
+import type { CoachReviewActions } from '../../components/modeling/QueryCoachPanel';
+import { useQueryCoachData } from '../../components/modeling/useQueryCoachData';
+import { coachIntent, coachQuestionRequest, isScopedQuestion, newCoachQuestion, resolveCoachTarget } from '../../components/modeling/queryCoachScope';
+import type { CoachQuestion } from '../../components/modeling/queryCoachScope';
 import { listGroupCards } from '../../api/datasets';
 import type { DatasetGroup } from '../../api/datasets';
 import { getKnowledgeBaseBrowse, getMdlView, getMdlPreview } from '../../api/semanticModeling';
-import type { KnowledgeBaseBrowse, MdlView, MdlPreview } from '../../api/semanticModeling';
+import type { KnowledgeBaseBrowse, MdlView, MdlPreview, MdlIssue } from '../../api/semanticModeling';
+import type { AssetKind } from '../../api/semanticAssets';
 import { getModelingWorkflow } from '../../api/modelingWorkflow';
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import { listConfirmations, resolveConfirmations } from '../../api/draftReview';
@@ -95,7 +97,7 @@ const remodelLabel = (c: FieldAdjustment) => {
 };
 
 /** A request waiting for the assistant; requests run one after another in the conversation. */
-type Request = { id: number; text: string; purpose?: TurnPurpose; documents?: string[]; label?: string };
+type Request = { id: number; text: string; purpose?: TurnPurpose; documents?: string[]; label?: string; questionId?: string };
 
 /** spec106: managers get the workbench; a QUERY user gets the published version read-only. */
 /** The guided tour takes the user to the query page itself once querying is ready. */
@@ -166,12 +168,16 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const setupActive = setupFields || setupPhase !== null;
   const setupLeaveGuard = useRef<(() => Promise<boolean>) | null>(null);
   const [adjusting, setAdjusting] = useState<string | null>(null);
+  const adjustmentDialog = useRef<HTMLDialogElement>(null);
+  const adjustmentGuard = useRef<(() => Promise<boolean>) | null>(null);
+  useEffect(() => {
+    const dialog = adjustmentDialog.current;
+    if (adjusting && dialog && !dialog.open) dialog.showModal();
+  }, [adjusting]);
   const [windowSignal, setWindowSignal] = useState(0);
-  // spec092 §7: 试问 opens only when the user asks for it.
-  const [trialOpen, setTrialOpen] = useState(false);
-  const [examples, setExamples] = useState(0);
   const [draftSummary, setDraftSummary] = useState<DraftSummary>({ changes: 0, examples: 0, publishing: false, publishedVersion: null, error: null });
   const [publishSignal, setPublishSignal] = useState(0);
+  const [reviewDraftSignal, setReviewDraftSignal] = useState(0);
   const [prefill, setPrefill] = useState<{ id: number; text: string } | null>(null);
   const [focusRelation, setFocusRelation] = useState<string | null>(null);
   const [changeMark, setChangeMark] = useState<ChangeMark | null>(null);
@@ -180,21 +186,37 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const canLeaveField = () => fieldEditGuard.current?.() ?? true;
   const [browse, setBrowse] = useState<KnowledgeBaseBrowse | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(() => ADVANCED.has(legacyAsset ?? ''));
+  const [draftInspectPath, setDraftInspectPath] = useState<string>();
   useEffect(() => { if (ADVANCED.has(legacyAsset ?? '')) setAdvancedOpen(true); }, [legacyAsset]);
   const publishedVersion = workflow?.publishedVersion ?? group.publishedVersion ?? 0;
   const tab: Tab = explicitTab ?? 'semantic';
   const mode = params.get('mode');
   const inChat = setupActive || mode === 'chat' || (mode !== 'board' && (!explicitTab || asset === 'modeling'));
   const [comparisonOpen, setComparisonOpen] = useState(false);
-  const [pendingOpen, setPendingOpen] = useState(false);
-  const pendingDialog = useRef<HTMLDialogElement>(null);
-  const conversationConfirmation = useRef<HTMLDivElement>(null);
+  const [coachSelection, setCoachSelection] = useState<string | undefined>(() => params.get('question') ?? undefined);
+  const coachReviewActions = useRef<CoachReviewActions>(null);
+  const [coachScope, setCoachScope] = useState<CoachQuestion>();
+  const [coachRemoval, setCoachRemoval] = useState<string>();
+  const clearCoachRemoval = useCallback(() => setCoachRemoval(undefined), []);
+  const [resourceScope, setResourceScope] = useState<{
+    kind: 'view' | 'document' | 'table'; name: string; quote?: string; assetKind?: AssetKind;
+    version?: 'published' | 'draft'; publishedEvidence?: { description: string; sql: string };
+  }>();
+  const [composerFocus, setComposerFocus] = useState(0);
+  const [coachPicker, setCoachPicker] = useState<{ ids?: string[]; hint?: string; request?: string; removal?: boolean }>();
+  const [coachSearch, setCoachSearch] = useState('');
+  const chosenForRequest = useRef<{ text: string; id: string }>();
+  const [coachSplitSide, setCoachSplitSide] = useState<'question' | 'chat'>('question');
+  const coachSplitOrigin = useRef<'board' | 'chat'>('board');
+  const coachDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    const dialog = pendingDialog.current;
+    const dialog = coachDialog.current;
     if (!dialog) return;
-    if (pendingOpen && !dialog.open) dialog.showModal();
-    else if (!pendingOpen && dialog.open) dialog.close();
-  }, [pendingOpen]);
+    if (coachPicker && !dialog.open) { setCoachSearch(''); dialog.showModal(); }
+    else if (!coachPicker && dialog.open) dialog.close();
+  }, [coachPicker]);
+  const [taskSignal, setTaskSignal] = useState(0);
+  const conversationConfirmation = useRef<HTMLDivElement>(null);
   const showBoard = () => {
     if (!canLeaveField()) return;
     setComparisonOpen(false);
@@ -202,7 +224,6 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   };
   const openAssistant = () => {
     if (!canLeaveField()) return;
-    setPendingOpen(false);
     setComparisonOpen(false);
     setParams(previous => { const next = new URLSearchParams(previous); next.set('mode', 'chat'); return next; });
   };
@@ -216,18 +237,20 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const selectTab = (key: Tab) => {
     if (canLeaveField()) {
       setComparisonOpen(false);
+      setCoachScope(undefined); setResourceScope(undefined);
       setParams({ asset: key, mode: 'board' });
     }
   };
   /** {@code label} is what the conversation shows for a request the platform wrote. */
-  const request = (text: string, purpose?: TurnPurpose, label?: string) => {
+  const request = (text: string, purpose?: TurnPurpose, label?: string, questionId?: string) => {
     if (!windowReadyRef.current) { setError('请先完成事实表时间配置，再开始建模。'); return false; }
-    const item = { id: ++sequence.current, text, purpose, label };
+    const item = { id: ++sequence.current, text, purpose, label, questionId };
     setQueue(previous => ({ groupId, items: [...previous.items, item] }));
     return true;
   };
   // Several quick document changes merge into one queued request instead of one turn each.
-  const documentsChanged = (change: string) => {
+  const documentsChanged = (change: string, removedName?: string) => {
+    if (removedName) setResourceScope(scope => scope?.kind === 'document' && scope.name === removedName ? undefined : scope);
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
     // Before modeling starts, the automatic modeling turn reads every document anyway.
     if (setupActive || !windowReady) return;
@@ -282,9 +305,9 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   }, [groupId]);
   useEffect(() => {
     setReadyGroup(null); windowReadyRef.current = false;
-    setTrialOpen(false); setExamples(0);
     setView(null); setPreview(null); setWorkflow(null); setConfirmations([]); setScreening(null); setAdjusting(null);
     setPrefill(null); setFocusRelation(null); setChangeMark(null); setMarked([]); setReveal(null);
+    setDraftInspectPath(undefined);
     try { setSeen(new Set(JSON.parse(localStorage.getItem(`sw-seen:${groupId}`) ?? '[]') as string[])); } catch { setSeen(new Set()); } setVersionChoice('draft'); setBrowse(null);
     void refresh();
     const update = (event: Event) => {
@@ -330,16 +353,84 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     setParams({ asset: 'semantic', mode: 'chat' }, { replace: true });
   };
 
-  const files = preview?.files || [];
-  const published = new Map(preview?.publishedFiles.map(f => [f.path, f.content]) || []);
-  const dirty = (path: string | null) => !!path && files.some(f => f.path === path && published.get(path) !== f.content);
-  const viewEntries: AssetEntry[] = (view?.views || []).map(v => ({ key: v.name, title: v.name, subtitle: v.description || undefined, file: v.path, dirty: dirty(v.path) }));
-  const cubeEntries: AssetEntry[] = (view?.cubes || []).map(c => ({ key: c.name, title: c.name, subtitle: `${c.baseModel} · ${c.measures.length} 个指标`, file: c.path, dirty: dirty(c.path) }));
-  // spec117: rules live in the workbench; the remaining knowledge files stay browsable under 高级.
-  const otherKnowledge: AssetEntry[] = files.filter(f => /^knowledge\/(glossary|metrics|caveats)\//.test(f.path) && !f.path.endsWith('/.gitkeep'))
-    .map(f => ({ key: f.path, title: f.path, file: f.path, dirty: dirty(f.path) }));
   const selected = params.get('selected');
+  const engineeringPath = selected
+    ? view?.views.find(item => item.name === selected)?.path ?? view?.cubes.find(item => item.name === selected)?.path ?? selected
+    : undefined;
   const hasPublished = publishedVersion > 0;
+  const coachData = useQueryCoachData(groupId, hasPublished && !setupActive);
+  const reviewQuestions = useMemo(() => coachData.reviews
+    .filter(review => review.status === 'REVIEW')
+    .map(review => ({ id: review.question.id, question: review.question.question, reasons: review.reviewReasons })), [coachData.reviews]);
+  const questionTitles = useMemo(() => new Map([...coachData.reviews, ...coachData.pendingRemovals]
+    .map(({ question }) => [question.id, question.question])), [coachData.reviews, coachData.pendingRemovals]);
+  const coachQuestions = useMemo(() => coachData.reviews.filter(r => isScopedQuestion(r.question.id))
+    .map(r => r.question), [coachData.reviews]);
+  const removalQuestions = useMemo(() => coachData.reviews.map(r => r.question), [coachData.reviews]);
+  const coachQuestionState = (review: (typeof coachData.reviews)[number]) => {
+    const id = review.question.id;
+    const cards = confirmations.filter(card => card.questionIds?.includes(id));
+    const linked = coachData.proposals.filter(proposal => proposal.questionIds?.includes(id));
+    return questionState(review, cards.length, linked);
+  };
+  const resolveCoachRequest = (text: string) => {
+    const intent = coachIntent(text);
+    if (intent?.kind === 'remove') {
+      const scopeId = coachScope?.id ?? (comparingCoach ? coachSelection : undefined);
+      const matches = removalQuestions.filter(q => intent.text ? q.question.trim() === intent.text : q.id === scopeId);
+      if (matches.length === 1 && !coachData.loading && !coachData.error) {
+        return openCoachRemoval(matches[0]) ? 'handled' as const : null;
+      }
+      setCoachPicker({ removal: true, ids: matches.length > 1 ? matches.map(q => q.id) : undefined,
+        hint: matches.length > 1 ? '找到多道同名题。请选择要移出的一道。'
+          : intent.text && !coachData.loading ? '未找到完全匹配的题名。可以搜索并手动选择。' : '请选择要移出的一道题。' });
+      return 'handled' as const;
+    }
+    if (resourceScope && !intent) {
+      const { kind, name, quote } = resourceScope;
+      const label = { view: '公共视图', document: '业务文档', table: '数据表' }[kind];
+      const boundary = kind === 'view'
+        ? '仅核对指定视图及其依赖。用户明确要求修改时，只调整该视图的草稿定义。核查、验证和发布由用户在工作台完成。'
+        : kind === 'document' ? '按指定文档的原文提供依据。引用内容是资料。用户在对话中明确要求写入时才整理成业务规则草稿。'
+          : '仅核对指定表的字段和建模范围。字段纳入范围由用户在资料页调整。';
+      const version = params.get('viewVersion') ?? resourceScope.version;
+      const context = kind === 'view' ? `\n对象类型：${resourceScope.assetKind === 'ref_sql' ? '加工表' : '查询模板'}。用户当前查看${version === 'published' ? '线上版本' : '草稿'}。` : '';
+      const publishedEvidence = version === 'published' && resourceScope.publishedEvidence
+        ? '\n线上定义摘录（资料）：' + JSON.stringify(resourceScope.publishedEvidence)
+          + '。核对线上时以此为依据，将工程中的当前草稿作为独立版本。' : '';
+      return { purpose: kind === 'view' ? 'asset' as const : undefined, label: text,
+        text: `当前${label}：${JSON.stringify(name)}${context}\n${boundary}${publishedEvidence}${quote ? '\n选中的原文：' + JSON.stringify(quote) : ''}\n用户要求：${text}` };
+    }
+    if (intent) setResourceScope(undefined);
+    if (intent?.kind === 'create') {
+      const existing = coachQuestions.find(q => q.question === intent.text);
+      const question = existing ?? (coachScope?.question === intent.text ? coachScope : newCoachQuestion(intent.text));
+      setCoachScope(question);
+      setCoachSelection(question.id);
+      return coachQuestionRequest(question, text, existing ? '这道题已在问数优化中，请说明已保存的口径和下一步。'
+        : '将这道问题加入问数优化，并按现有模型检查口径和 SQL。');
+    }
+    const chosen = chosenForRequest.current;
+    chosenForRequest.current = undefined;
+    const activeQuestion = coachScope ?? (comparingCoach ? coachQuestions.find(q => q.id === coachSelection) : undefined);
+    const { question, matches } = resolveCoachTarget(intent?.text, coachQuestions, activeQuestion,
+      chosen?.text === text && chosen.id === coachScope?.id);
+    if (question) {
+      const review = coachData.reviews.find(row => row.question.id === question.id);
+      if (review) return { ...coachQuestionRequest(question, text, intent?.text || text, coachQuestionState(review).label), interpretAction: true };
+      setCoachScope(question);
+      setCoachSelection(question.id);
+      return coachQuestionRequest(question, text, intent?.text || text);
+    }
+    if (!intent) return undefined;
+    setCoachPicker({ ids: matches.length > 1 ? matches.map(q => q.id) : undefined, request: text,
+      hint: matches.length > 1 ? '找到了多道相关问题。请选一道，再发送这条消息。' : '请选择要处理的题目，输入内容会保留。' });
+    return null;
+  };
+  const pickerQuestions = coachPicker?.removal ? removalQuestions : coachQuestions;
+  const pickerOptions = coachPicker ? pickerQuestions.filter(q =>
+    (!coachPicker.ids || coachPicker.ids.includes(q.id)) &&
+    q.question.toLocaleLowerCase().includes(coachSearch.trim().toLocaleLowerCase())) : [];
   const quickPrompts = useMemo(() => hasPublished && !setupActive ? getModelingPrompts(view) : undefined, [hasPublished, setupActive, view]);
   const version = hasPublished && versionChoice === 'published' ? 'published' : 'draft';
   const comparing = hasPublished && versionChoice === 'compare';
@@ -385,15 +476,20 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     try { localStorage.setItem(`sw-seen:${groupId}`, JSON.stringify([...next].slice(-500))); } catch { /* per-browser only */ }
     return next;
   });
-  const unseenCount = changeMark ? marked.filter(i => !isSeen(i)).length : 0;
-  const pendingCount = confirmations.length + unseenCount;
+  const markedKeys = useMemo(() => new Set(marked.map(changeKey)), [marked]);
   const revealChange = (item: DraftItem) => {
-    if (!canLeaveField()) return;
-    setPendingOpen(false);
+    if (!canLeaveField()) return false;
     setComparisonOpen(false);
     setVersionChoice('draft');
     setParams({ mode: 'board', asset: 'semantic', view: item.category === 'MODEL' || item.category === 'RELATIONSHIP' ? 'graph' : 'rules' });
     setReveal({ id: ++sequence.current, item });
+    return true;
+  };
+  const inspectChange = (path: string) => {
+    if (!canLeaveField()) return false;
+    setDraftInspectPath(path);
+    setAdvancedOpen(true);
+    return true;
   };
   /** Fills the conversation's input; the user reads it and decides whether to send. */
   const askAssistant = (text: string) => {
@@ -435,7 +531,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const turnDone = () => {
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
   };
-  const locateConfirmations = () => { if (canLeaveField()) setPendingOpen(true); };
+  const locateConfirmations = () => { if (canLeaveField()) setTaskSignal(n => n + 1); };
 
   const exitSetup = async (destination: string) => {
     if (confirmingScreening) return;
@@ -457,11 +553,122 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   };
 
   const comparingConversation = inChat && comparisonOpen && !setupActive;
+  const comparingCoach = comparingConversation && tab === 'coach';
+  const coachRoute = `${groupId}:${params}:${comparingCoach}:${coachScope?.id ?? ''}:${coachSelection ?? ''}`;
+  const currentCoachRoute = useRef(coachRoute);
+  currentCoachRoute.current = coachRoute;
+  const comparingResource = comparingConversation && (tab === 'assets' || tab === 'overview');
+  const chatConfirmations = comparingCoach
+    ? confirmations.filter(card => !coachSelection || !card.questionIds?.includes(coachSelection)) : confirmations;
   const visibleBoard = !inChat || comparingConversation;
-  const pairWithConversation = () => {
-    if (!canLeaveField()) return;
+  const openQuestionReview = (id: string) => {
+    if (!canLeaveField() || coachReviewActions.current?.open(id) === false) return false;
+    setComparisonOpen(false);
+    setCoachScope(undefined);
+    setResourceScope(undefined);
+    setCoachSelection(id);
+    setParams({ asset: 'coach', mode: 'board', question: id });
+    return true;
+  };
+  const openAssetReview = (target: NonNullable<MdlIssue['assetReview']>) => {
+    if (!canLeaveField()) return false;
+    setComparisonOpen(false); setResourceScope(undefined); setCoachScope(undefined);
+    setParams({ asset: 'assets', mode: 'board', viewGroup: 'pending', viewItem: `${target.kind}:${target.name}`,
+      viewVersion: 'draft', viewStage: target.step === 'VERIFY_PENDING' ? 'verify' : 'overview' });
+    return true;
+  };
+  const pairCoachQuestion = (question: CoachQuestion, from: 'board' | 'chat') => {
+    if (!canLeaveField()) return false;
+    if (!comparingCoach) coachSplitOrigin.current = from;
+    setCoachSelection(question.id);
+    setResourceScope(undefined);
+    setCoachScope(question);
+    setCoachSplitSide(from === 'board' ? 'chat' : 'question');
+    if (from === 'board') setComposerFocus(n => n + 1);
     setComparisonOpen(true);
-    setParams(previous => { const next = new URLSearchParams(previous); next.set('mode', 'chat'); return next; });
+    setParams({ asset: 'coach', mode: 'chat', question: question.id });
+    return true;
+  };
+  const resolveCoachAction = async (id: string, text: string, recentTurns: CoachConversationTurn[]) => {
+    const review = coachData.reviews.find(row => row.question.id === id);
+    if (!review || coachData.error) return null;
+    const { group } = coachQuestionState(review);
+    const phase = group === 'done' ? 'CONFIRMED'
+      : review.question.sql && (group === 'sql' || group === 'review') ? 'REVIEW_SQL' : 'PREPARING';
+    const intent = await interpretCoachConversation(groupId, id, { revision: review.revision, phase, message: text, recentTurns })
+      .catch(() => null);
+    if (currentCoachRoute.current !== coachRoute) return '题目或工作区已切换，请在当前页面重新发送。';
+    if (intent?.action === 'REVIEW_PUBLICATION') {
+      if (!canLeaveField()) return '请先完成当前编辑，再检查发布。';
+      if (tourLocksDraftDrawer(tour, groupId)) return '请先完成当前引导，再查看发布改动。';
+      if (!workflow) return '草稿状态尚未就绪，请稍后再试。';
+      setReviewDraftSignal(n => n + 1);
+      return phase === 'CONFIRMED'
+        ? '已打开知识库草稿检查。请核对本次发布的改动，再确认发布。'
+        : '已打开知识库草稿检查。这道题仍待验收，确认后才可随草稿发布。';
+    }
+    if (intent?.action === 'CONFIRM_SQL') {
+      if (!comparingCoach || coachSelection !== id) {
+        return pairCoachQuestion(review.question, 'chat')
+          ? '已打开这道题。请先核对当前 SQL，再确认保存。' : '请结束当前编辑后，再打开题目核对。';
+      }
+      setCoachSplitSide('question');
+      return await coachReviewActions.current?.confirm(id, review.revision) ?? '请打开这道题并核对当前 SQL。';
+    }
+    setCoachScope(review.question);
+    setCoachSelection(id);
+    return null;
+  };
+  const openCoachRemoval = (question: CoachQuestion) => {
+    if (!comparingCoach && !pairCoachQuestion(question, 'chat')) return false;
+    setCoachSplitSide('question');
+    setCoachRemoval(question.id);
+    return true;
+  };
+  const finishCoachRemoval = (id: string, online: boolean) => {
+    setCoachScope(scope => scope?.id === id ? undefined : scope);
+    if (online) return;
+    const close = comparingCoach && coachSelection === id;
+    if (close) setComparisonOpen(false);
+    if (close || params.get('question') === id) setParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (next.get('question') === id) next.delete('question');
+      if (close) next.set('mode', coachSplitOrigin.current);
+      return next;
+    }, { replace: true });
+  };
+  const pairResource = (scope: NonNullable<typeof resourceScope>) => {
+    if (!canLeaveField()) return;
+    coachSplitOrigin.current = 'board';
+    setCoachScope(undefined); setResourceScope(scope);
+    setCoachSplitSide('chat');
+    setComparisonOpen(true); setComposerFocus(n => n + 1);
+    if (scope.kind === 'view') {
+      const next = new URLSearchParams(params);
+      next.set('asset', 'assets'); next.set('mode', 'chat');
+      next.set('viewItem', `${scope.assetKind ?? 'view'}:${scope.name}`);
+      if (scope.version) next.set('viewVersion', scope.version);
+      setParams(next);
+    } else setParams({ asset: 'overview', mode: 'chat' });
+  };
+  const closeComparison = () => {
+    if (!canLeaveField()) return;
+    setComparisonOpen(false);
+    if (comparingCoach || comparingResource) setParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.set('mode', coachSplitOrigin.current);
+      return next;
+    }, { replace: true });
+  };
+  const renderCoachResult = (id: string) => {
+    const review = coachData.reviews.find(row => row.question.id === id);
+    if (!review) return null;
+    const state = coachQuestionState(review);
+    return <div className="qc-turn-result">
+      <span className="qc-next-icon"><Icon name="file" size="sm" /></span>
+      <div><strong>{review.question.question}</strong><small>{state.label}</small></div>
+      <button type="button" className="da-btn da-btn-sm" onClick={() => pairCoachQuestion(review.question, 'chat')}>查看这道题<Icon name="chevron" size="sm" /></button>
+    </div>;
   };
   const inspectTurn = (turn: string, sideBySide = false) => {
     if (!canLeaveField()) return;
@@ -508,7 +715,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     setComparisonOpen(false);
   };
 
-  return <div className={`modeling-workbench mw mw-conversation-workspace ${inChat ? 'mw-conversation' : 'mw-board'}${comparingConversation ? ' mw-comparing' : ''}${setupActive ? ' mw-preparation' : ''}`}>
+  return <div className={`modeling-workbench mw mw-conversation-workspace ${inChat ? 'mw-conversation' : 'mw-board'}${comparingConversation ? ' mw-comparing' : ''}${comparingCoach || comparingResource ? ' mw-coach-comparing' : ''}${setupActive ? ' mw-preparation' : ''}`} data-coach-side={comparingCoach || comparingResource ? coachSplitSide : undefined}>
     <div className="mw-top">
       <header className="mw-head">
         <div className="mw-crumb">
@@ -519,17 +726,17 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
         </div>
         <div className="mw-actions">
           {!setupActive && <>
-            {workflow && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length}
-              checksPending={!confirmationsReady || screening === null} compact onLocate={locateConfirmations}
-              publishSignal={publishSignal} onSummary={setDraftSummary} />}
-            {pendingCount > 0 && <button type="button" className="da-btn da-btn-sm mw-pending-action" onClick={locateConfirmations}
-              aria-haspopup="dialog" aria-label={`查看 ${pendingCount} 项待处理`} title={`查看 ${pendingCount} 项待处理`}>
-              <Icon name="clock" size="sm" /><span>待处理</span><b>{pendingCount}</b>
-            </button>}
-            {comparingConversation && <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={() => { if (canLeaveField()) setComparisonOpen(false); }}>结束对照</button>}
+            {workflow && <DraftBar key={groupId} groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length}
+              checksPending={!confirmationsReady || screening === null || coachData.loading} compact onLocate={locateConfirmations}
+              reviewQuestions={reviewQuestions} questionTitles={questionTitles} pendingRemovals={coachData.pendingRemovals} onReviewQuestion={openQuestionReview}
+              onReviewAsset={openAssetReview} confirmations={confirmations} onAnswer={answers => void answered(answers)}
+              onInspectChange={inspectChange} onLocateChange={revealChange}
+              isUnseen={item => !!changeMark && markedKeys.has(changeKey(item)) && !isSeen(item)} onSeen={markSeen}
+              publishSignal={publishSignal} reviewSignal={reviewDraftSignal} taskSignal={taskSignal} onSummary={setDraftSummary} />}
+            {comparingConversation && <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={closeComparison}>结束对照</button>}
             <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={inChat ? showBoard : openAssistant}
               aria-label={inChat ? '查看模型' : '建模对话'} title={inChat ? '查看模型' : assistantLabel}>
-              <Icon name={inChat ? 'model' : 'chat'} size="sm" /><span>{inChat ? '查看模型' : '建模对话'}</span>
+              <Icon name={inChat ? 'model' : 'chat'} size="sm" /><span>{inChat ? tab === 'coach' ? '问数优化' : '查看模型' : '建模对话'}</span>
               {!idle && !inChat && <i className="mw-dot" aria-label={assistantLabel} />}
             </button>
           </>}
@@ -538,12 +745,18 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           </button> : <WorkspaceMenu label="更多操作" items={[
             ...(!hasPublished && screening?.length ? [{ label: '准备自动建模', icon: 'model' as const, disabled: !idle || draftSummary.publishing, onClick: openFirstBuild }] : []),
             ...(screening !== null ? [{ label: '事实表时间范围', icon: 'clock' as const, disabled: !idle, onClick: () => setWindowSignal(n => n + 1) }] : []),
-            { label: '工程与快照', icon: 'file', onClick: () => { if (canLeaveField()) { setAdvancedOpen(true); selectTab('semantic'); } } },
+            { label: '工程与快照', icon: 'file', onClick: () => setAdvancedOpen(true) },
             ...(toQuery ? [{ label: '去问数', icon: 'chat' as const, disabled: !!preparing || queryHeld, onClick: toQuery }] : []),
             { label: '回到知识库', icon: 'book', onClick: () => { if (canLeaveField()) navigate(`/configure/datasets/${groupId}`); } },
           ]} />}
         </div>
       </header>
+      {!setupActive && advancedOpen && <AdvancedModelingPanel key={`${groupId}:${draftInspectPath ?? ''}`} groupId={groupId}
+        onClose={() => { setAdvancedOpen(false); setDraftInspectPath(undefined); }}
+        initialVersion={draftInspectPath ? 'draft' : version} preview={preview} initialPath={draftInspectPath ?? engineeringPath}
+        initialCompare={!!draftInspectPath}
+        initialDirectory={legacyAsset === 'views' ? 'views/' : legacyAsset === 'cubes' ? 'cubes/' : undefined}
+        initialTab={!draftInspectPath && legacyAsset === 'mdl' ? 'compiled' : 'files'} />}
       {visibleBoard && <nav aria-label="语义建模页面" className="mw-tabs">
         {tabs.map(item => <button key={item.key} type="button" aria-current={tab === item.key ? 'page' : undefined} className={`mw-tab ${tab === item.key ? 'mw-tab-on' : ''}`} onClick={() => selectTab(item.key)}>{item.label}</button>)}
       </nav>}
@@ -559,20 +772,30 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           pendingOnly={fieldEditor?.pendingOnly} leaveGuard={setupLeaveGuard} onDone={finishScreening} />
       </div>
     </div>}
-    {adjusting && <div className="da-modal-overlay" onClick={() => setAdjusting(null)}>
-      <div className="da-modal-shell" style={{ width: 'min(1100px, 96vw)', height: '82vh', display: 'flex' }} onClick={e => e.stopPropagation()}>
-        <FieldScreeningPanel groupId={groupId} mode="adjust" datasetId={adjusting} onClose={() => setAdjusting(null)}
+    {adjusting && <dialog ref={adjustmentDialog} className="mo-form-dialog mo-field-adjust-dialog" aria-label="调整字段范围"
+      onClose={() => setAdjusting(null)} onCancel={event => {
+        event.preventDefault();
+        void adjustmentGuard.current?.().then(ok => { if (ok) adjustmentDialog.current?.close(); });
+      }}>
+      <FieldScreeningPanel groupId={groupId} mode="adjust" datasetId={adjusting} leaveGuard={adjustmentGuard}
+          onClose={() => adjustmentDialog.current?.close()}
           onAdjusted={(change, remodel) => {
-            setAdjusting(null);
+            adjustmentDialog.current?.close();
             void refresh();
-            if (remodel) { request(remodelRequest(change), 'auto', remodelLabel(change)); openAssistant(); }
+            if (remodel && request(remodelRequest(change), 'auto', remodelLabel(change))) openAssistant();
           }} />
-      </div>
+    </dialog>}
+    {(comparingCoach || comparingResource) && <div className="qc-mobile-switch" role="group" aria-label="切换并排区域">
+      <button type="button" className="da-btn da-btn-sm" aria-pressed={coachSplitSide === 'question'} onClick={() => setCoachSplitSide('question')}>{comparingCoach ? '题目详情' : tab === 'assets' ? '视图详情' : '资料详情'}</button>
+      <button type="button" className="da-btn da-btn-sm" aria-pressed={coachSplitSide === 'chat'} onClick={() => setCoachSplitSide('chat')}>建模对话</button>
     </div>}
     <div className="modeling-workbench-body mw-body">
       <div className="mw-main" hidden={!visibleBoard}>
-      {tab === 'overview' && <ModelingMaterials key={groupId} groupId={groupId} tables={screening} idle={idle} showDocuments
-        onManageData={() => navigate(`/configure/datasets/${groupId}`)} onAdjust={setAdjusting} onDocumentsChanged={documentsChanged} onCoach={() => selectTab('coach')} />}
+      {tab === 'overview' && <ModelingMaterials key={groupId} groupId={groupId} tables={screening} idle={idle} paired={comparingResource}
+        onManageData={() => navigate(`/configure/datasets/${groupId}`)} onAdjust={setAdjusting} onDocumentsChanged={documentsChanged}
+        onReference={(name, quote) => pairResource({ kind: 'document', name, quote })}
+        onTable={table => pairResource({ kind: 'table', name: table.name })}
+        onPublish={() => setReviewDraftSignal(n => n + 1)} />}
       {tab === 'semantic' && <section className="sm-pane">
         {!snapshot ? <GraphLoading /> : <SemanticWorkbench key={groupId} groupId={groupId} snapshot={snapshot}
           baseline={baseline} files={snapshotFiles} baselineFiles={baselineFiles} compareWithBaseline={comparing} fieldEditGuard={fieldEditGuard}
@@ -585,66 +808,108 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           publication={version === 'draft' && (draftSummary.changes > 0 || draftSummary.publishing || draftSummary.publishedVersion !== null)
             ? { summary: draftSummary, nextVersion: publishedVersion + 1, pending: confirmations.length, onPublish: publishDraft,
                 onQuery: toQuery, queryReady: preparing === null && !queryHeld, preparing } : null} />}
-        {advancedOpen && <AdvancedModelingPanel key={groupId} groupId={groupId} open={advancedOpen} onOpenChange={setAdvancedOpen} version={version} preview={preview}
-          views={legacyAsset === 'cubes' ? [] : viewEntries} cubes={legacyAsset === 'views' ? [] : cubeEntries} knowledge={otherKnowledge} selected={selected} initialTab={legacyAsset === 'mdl' ? 'compiled' : legacyAsset === 'views' ? 'views' : legacyAsset === 'cubes' ? 'cubes' : 'files'}
-          onSelect={key => setParams({ asset: 'semantic', mode: 'board', selected: key }, { replace: true })} onSelectKnowledge={key => setParams({ asset: 'semantic', mode: 'board', view: 'rules', selected: key }, { replace: true })} />}
       </section>}
-      {tab === 'assets' && <SemanticAssetsPanel key={groupId} groupId={groupId} assistantIdle={idle}
-        onDraft={(text, label) => { const sent = request(text, 'asset', label); if (sent) openAssistant(); return sent; }} />}
+      {tab === 'assets' && <SemanticAssetsPanel key={groupId} groupId={groupId} assistantIdle={idle} paired={comparingResource} publishedVersion={publishedVersion}
+        onAsk={(view, version, published) => pairResource({
+          kind: 'view', name: view.name, assetKind: view.kind, version,
+          publishedEvidence: published ? { description: published.description?.slice(0, 3000) ?? '', sql: published.sql.slice(0, 5000) } : undefined,
+        })} onPublish={() => setReviewDraftSignal(n => n + 1)}
+        onDraft={(text, label) => {
+          const sent = request(text, 'asset', label);
+          if (sent) {
+            setResourceScope(undefined); setCoachScope(undefined); setComparisonOpen(false);
+            setParams({ asset: 'assets', mode: 'chat', viewGroup: 'pending' });
+          }
+          return sent;
+        }} />}
       {tab === 'coach' && <div className="mw-coach-wrap">
       <div className="mw-coach">
-        <QueryCoachPanel key={groupId} groupId={groupId} assistantIdle={idle} available={hasPublished} onRequest={request}
-          onCompare={comparingConversation ? undefined : pairWithConversation}
-          confirmations={confirmations} onAnswer={answers => void answered(answers)} onOpenDocuments={() => selectTab('overview')}
-          trial={<aside className="mw-coach-bar qc-trial-entry" aria-label="试问一个问题">
-          <span className="mw-coach-bar-icon"><Icon name="chat" /></span><div className="mw-coach-bar-copy"><strong>试问一个问题</strong><p>助手按草稿写出 SQL，你确认正确的问答发布后才会在问数中被召回。</p></div>
-          <button type="button" data-tour="trial-open" className={`da-btn ${trialOpen ? 'da-btn-primary' : ''}`} disabled={!windowReady} onClick={() => setTrialOpen(!trialOpen)} aria-expanded={trialOpen}>
-            {trialOpen ? '收起试问' : '试问'}{examples ? <span className="mw-inline-count">已确认 {examples}</span> : null}<Icon name="chevron" size="sm" /></button>
-        </aside>} />
-        <ConfirmedExamplesSection key={groupId} groupId={groupId} initialOpen={asset === 'qa' || asset === 'sql'} />
+        <QueryCoachPanel key={groupId} groupId={groupId} assistantIdle={idle} available={hasPublished} onRequest={request} preview={preview}
+          data={coachData} selection={coachSelection} onSelect={setCoachSelection}
+          onRemove={finishCoachRemoval} removalRequest={coachRemoval} onRemovalRequestHandled={clearCoachRemoval}
+          compact={comparingCoach} onPublish={() => setReviewDraftSignal(n => n + 1)}
+          initialLibrary={asset === 'qa' || asset === 'sql'} draftChanges={draftSummary.changes} reviewActions={coachReviewActions}
+          readyToAsk={windowReady}
+          onCompare={q => pairCoachQuestion(q, 'board')}
+          confirmations={confirmations} onAnswer={answers => void answered(answers)} onOpenDocuments={() => selectTab('overview')} />
       </div>
-      {trialOpen && windowReady && <div className="mw-trial">
-        <TrialPanel groupId={groupId} assistantIdle={idle} open={trialOpen} onClose={() => setTrialOpen(false)} onExamples={setExamples}
-          onAsk={text => request(text, 'question')} onWrong={text => request(text, 'question')} />
-      </div>}
       </div>}
       </div>
       <section className="mw-conversation-pane" aria-label="建模对话" hidden={!inChat}>
         <ModelingChatPanel key={groupId} groupId={groupId} variant="dock" intro={preparation}
           onClose={showBoard} composerLocked={setupActive || !windowReady} onCompose={setupActive ? setupCommand : undefined}
-          composerHint={setupActive ? (setupFields ? '输入「查看字段」' : '输入「开始自动建模」') : undefined}
+          composerFocus={composerFocus}
+          composerHint={setupActive ? (setupFields ? '输入「查看字段」' : '输入「开始自动建模」')
+            : coachScope ? '描述这道题要修改的口径或 SQL…'
+            : resourceScope?.kind === 'document' ? '输入要从这份资料核对的业务口径…'
+              : resourceScope ? '描述要核对或调整的内容…' : undefined}
           composerSuggestion={setupActive && screening?.length ? (setupFields ? '查看字段' : '开始自动建模') : undefined}
-          composerNotice={idle && !setupActive && confirmations.length > 0 ? <button type="button" className="mw-conversation-pending" onClick={() => {
+          composerNotice={idle && !setupActive && chatConfirmations.length > 0 ? <button type="button" className="mw-conversation-pending" onClick={() => {
             const target = conversationConfirmation.current;
             target?.scrollIntoView({ block: 'start' });
             target?.focus({ preventScroll: true });
-          }}><span className="mw-conversation-pending-icon"><Icon name="circleAlert" size="sm" /></span><span className="mw-conversation-pending-label">有 {confirmations.length} 项口径待确认</span><strong>去确认</strong><Icon name="chevron" size="sm" /></button> : undefined}
+          }}><span className="mw-conversation-pending-icon"><Icon name="circleAlert" size="sm" /></span><span className="mw-conversation-pending-label">有 {chatConfirmations.length} 项口径待确认</span><strong>去确认</strong><Icon name="chevron" size="sm" /></button> : undefined}
           quickPrompts={quickPrompts}
+          onChooseCoachQuestion={quickPrompts ? () => setCoachPicker({}) : undefined}
+          resolveCoachRequest={quickPrompts || resourceScope ? resolveCoachRequest : undefined}
+          resolveCoachAction={resolveCoachAction}
+          renderQuestionResult={renderCoachResult}
+          coachScope={coachScope && quickPrompts ? <div className="qc-composer-scope">
+            <Icon name="file" size="sm" /><span>问数优化 · {coachScope.question}</span>
+            <button type="button" aria-label="移除题目范围" onClick={() => setCoachScope(undefined)}><Icon name="close" size="sm" /></button>
+          </div> : resourceScope ? <div className="mo-source-scope">
+            <div className="qc-composer-scope"><Icon name="file" size="sm" /><span>{{ view: '公共视图', document: '业务文档', table: '数据表' }[resourceScope.kind]} · {resourceScope.name}</span>
+              <button type="button" aria-label="移除资料或视图范围" onClick={() => setResourceScope(undefined)}><Icon name="close" size="sm" /></button></div>
+            {resourceScope.quote && <details key={resourceScope.quote} open>
+              <summary onMouseDown={event => { if (event.button === 0) event.preventDefault(); }}>已引用原文</summary>
+              <blockquote>{resourceScope.quote}</blockquote>
+            </details>}
+          </div> : undefined}
           draftPrompt={head?.text ?? prefill?.text} draftPromptId={head?.id ?? prefill?.id} submitDraft={!!head}
           onDraftSubmitted={() => setQueue(previous => ({ groupId, items: previous.items.slice(1) }))}
-          onTurnDone={turnDone} draftPurpose={head?.purpose} draftLabel={head?.label} onActivityChange={setAssistantState}
+          onTurnDone={turnDone} draftPurpose={head?.purpose} draftLabel={head?.label} draftQuestionId={head?.questionId} onActivityChange={setAssistantState}
           renderTurnResult={((hasPublished && draftSummary.changes > 0) || tourStep === 'review') ? since => <TurnResultCard groupId={groupId} since={since} disabled={!idle}
             onView={turn => inspectTurn(turn)} onCompare={turn => inspectTurn(turn, true)} /> : undefined}
           footer={!idle || setupActive ? null : <>
             <AssetProposalCards groupId={groupId} disabled={!idle} refreshKey={assistantState}
               onDraft={(text, label) => request(text, 'asset', label)} />
-            {confirmations.length ? <div ref={conversationConfirmation} className="mw-conversation-confirmation" data-tour="confirm-cards" tabIndex={-1}>
-              <ConfirmationCards key={confirmations.map(c => c.id).join(',')} questions={confirmations} onSubmit={answers => void answered(answers)} />
-            </div> : <NextStepCard summary={draftSummary} nextVersion={publishedVersion + 1}
+            {chatConfirmations.length ? <div ref={conversationConfirmation} className="mw-conversation-confirmation" data-tour="confirm-cards" tabIndex={-1}>
+              <ConfirmationCards key={chatConfirmations.map(c => c.id).join(',')} questions={chatConfirmations} onSubmit={answers => void answered(answers)} />
+            </div> : !comparingCoach && !comparingResource && <NextStepCard summary={draftSummary} nextVersion={publishedVersion + 1}
               firstPublishedVersion={workflow?.publishedVersion === 1 && !workflow.draftChanged ? 1 : null} preparing={preparing}
               onView={showBoard}
               onPublish={publishDraft} onQuery={toQuery} queryHeldHint={queryHeld ? TOUR_QUERY_HINT : undefined} />}
           </>} />
       </section>
     </div>
-    <dialog className="mw-pending-dialog" aria-labelledby="mw-pending-title" ref={pendingDialog}
-      onClick={event => { if (event.target === event.currentTarget) setPendingOpen(false); }}
-      onClose={() => setPendingOpen(false)}>
-      {pendingOpen && <><header><h2 id="mw-pending-title">待处理</h2><button type="button" aria-label="关闭待处理" className="da-btn da-btn-sm mw-pending-close" onClick={() => setPendingOpen(false)}><Icon name="close" size="sm" /></button></header>
-        <PendingPanel groupId={groupId} confirmations={confirmations} onAnswer={answers => void answered(answers)}
-          items={changeMark ? marked : []} isSeen={isSeen} onSeen={item => markSeen([item])} onSeenAll={() => markSeen(marked)}
-          onLocate={revealChange} onChanged={turnDone} disabled={idle ? null : '建模助手正在运行，完成后才能撤销。'} />
-      </>}
+    <dialog ref={coachDialog} className="mo-form-dialog qc-picker" aria-labelledby="qc-picker-title" onClose={() => setCoachPicker(undefined)}>
+      {coachPicker && <><header className="mo-dialog-head"><strong id="qc-picker-title">{coachPicker.removal ? '选择要移出的题目' : '选择要优化的题目'}</strong>
+        <button type="button" className="da-btn da-btn-sm" onClick={() => setCoachPicker(undefined)}>关闭</button></header>
+        <div className="mo-dialog-body">
+          {coachPicker.hint && <p className="da-small">{coachPicker.hint}</p>}
+          {coachData.loading && !pickerQuestions.length ? <p className="da-small" role="status">正在读取业务问题…</p>
+            : coachData.error ? <p className="da-small" role="alert">{coachData.error} <button type="button" className="sm-text-link" onClick={coachData.reload}>重试</button></p>
+            : !pickerQuestions.length ? <p className="da-small">{coachPicker.removal ? '当前没有可移出的业务问题。' : '还没有业务问题，可以先添加一道。'}</p>
+            : <><input type="search" className="da-input" aria-label="搜索题目" placeholder="搜索题目" value={coachSearch} onChange={e => setCoachSearch(e.target.value)} />
+              {!pickerOptions.length && <p role="status" className="da-small">没有匹配的题目，试试其他关键词。</p>}
+              <div className="qc-picker-questions">{pickerOptions.map(q =>
+              <button key={q.id} type="button" className="da-btn" onClick={() => {
+                if (coachPicker.removal) {
+                  if (openCoachRemoval(q)) {
+                    coachDialog.current?.close();
+                    setCoachPicker(undefined);
+                  }
+                  return;
+                }
+                chosenForRequest.current = coachPicker.request ? { text: coachPicker.request, id: q.id } : undefined;
+                setResourceScope(undefined);
+                setCoachScope(q); setCoachSelection(q.id); setCoachPicker(undefined);
+              }}><span>{q.question}{coachPicker.removal && coachPicker.ids && <small className="qc-picker-id">{q.id}</small>}</span><Icon name="chevron" size="sm" /></button>)}</div></>}
+        </div>
+        {!coachPicker.removal && <footer className="mo-dialog-footer"><button type="button" className="da-btn da-btn-sm" onClick={() => {
+          setCoachPicker(undefined); setCoachScope(undefined);
+          setPrefill({ id: ++sequence.current, text: '添加业务问题：' });
+        }}><Icon name="plus" size="sm" />添加一道业务问题</button></footer>}</>}
     </dialog>
     </div>
   </div>;

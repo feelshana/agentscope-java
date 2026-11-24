@@ -38,6 +38,7 @@ import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentState;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
+import io.agentscope.dataagent.dataset.ModelingTurnPurpose;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.gateway.HarnessGateway;
 import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
@@ -315,17 +316,19 @@ class ChatControllerHitlTest {
         when(groupService.queryGroups("alice", List.of("g1"))).thenReturn(List.of(g1));
         when(catalogService.resolveGatewayAgentId("alice", "data-agent")).thenReturn("data-agent");
         Msg message = Msg.builder().role(MsgRole.USER).textContent("问题").build();
-        io.agentscope.harness.agent.gateway.channel.InboundMessage inbound =
-                org.springframework.test.util.ReflectionTestUtils.invokeMethod(
-                        controller,
-                        "buildInbound",
+        var preparation =
+                new io.agentscope.dataagent.web.chat.ChatTurnPreparation(
+                        conversationScopes, groupService, catalogService);
+        var inbound =
+                preparation.buildInbound(
                         "alice",
                         "data-agent",
                         List.of(message),
                         "conv",
                         List.of("g1"),
                         false,
-                        "req");
+                        "req",
+                        ignored -> {});
         verify(conversationScopes, never()).putSelection(anyString(), anyString(), any());
         inbound.runtimeContext().get(io.agentscope.dataagent.dataset.ChatTurnScope.class).accept();
         verify(conversationScopes).putSelection(eq("alice"), eq("conv"), any());
@@ -366,6 +369,64 @@ class ChatControllerHitlTest {
                                 controller.resolveGroupScope(
                                         "alice", MODELING_AGENT_ID, "model", List.of("g2"), false))
                 .isInstanceOf(DatasetException.class);
+    }
+
+    @Test
+    void acceptsExistingTrialAndAssetQuestionIdFormatsOnlyForScopedCoachTurns() {
+        var trial = ModelingTurnPurpose.request("coach", "q-mikgsh5a-1");
+        var asset = ModelingTurnPurpose.request("coach", "q-asset-mikgsh5a-2");
+        assertThat(trial.questionId()).isEqualTo("q-mikgsh5a-1");
+        assertThat(asset.proposalQuestions(java.util.List.of("other")))
+                .containsExactly("q-asset-mikgsh5a-2");
+        assertThatThrownBy(() -> ModelingTurnPurpose.request("question", "q-mikgsh5a-1"))
+                .isInstanceOf(DatasetException.class);
+        assertThatThrownBy(() -> ModelingTurnPurpose.request("coach", "../q-mikgsh5a-1"))
+                .isInstanceOf(DatasetException.class);
+    }
+
+    @Test
+    void scopedQuestionContextBelongsToItsTurnWhileAnotherTurnIsPrepared() {
+        var preparation =
+                new io.agentscope.dataagent.web.chat.ChatTurnPreparation(
+                        conversationScopes, groupService, catalogService);
+        var agent = MODELING_AGENT_ID;
+        when(groupService.queryGroups("alice", List.of("g1")))
+                .thenReturn(List.of(new DatasetGroupEntity("g1", "alice", "KB", null)));
+        when(catalogService.resolveGatewayAgentId("alice", agent)).thenReturn(agent);
+        var message = Msg.builder().role(MsgRole.USER).textContent("修正这道题的条件").build();
+        var scoped =
+                io.agentscope.dataagent.dataset.ModelingTurnPurpose.request("coach", "q-coach-one");
+        var ordinary = io.agentscope.dataagent.dataset.ModelingTurnPurpose.request(null, null);
+        var first =
+                preparation.buildInbound(
+                        "alice",
+                        agent,
+                        List.of(message),
+                        "conv",
+                        List.of("g1"),
+                        false,
+                        "first",
+                        ignored -> {},
+                        scoped);
+        var second =
+                preparation.buildInbound(
+                        "alice",
+                        agent,
+                        List.of(message),
+                        "conv",
+                        List.of("g1"),
+                        false,
+                        "second",
+                        ignored -> {},
+                        ordinary);
+        var type = io.agentscope.dataagent.dataset.ModelingTurnPurpose.class;
+        assertThat(first.runtimeContext().get(type)).isEqualTo(scoped);
+        assertThat(second.runtimeContext().get(type)).isNull();
+        verify(conversationScopes, never()).putModelingTurn(anyString(), anyString(), any());
+        first.runtimeContext().get(io.agentscope.dataagent.dataset.ChatTurnScope.class).accept();
+        verify(conversationScopes).putModelingTurn("alice", "conv", scoped);
+        second.runtimeContext().get(io.agentscope.dataagent.dataset.ChatTurnScope.class).accept();
+        verify(conversationScopes).putModelingTurn("alice", "conv", ordinary);
     }
 
     @Test

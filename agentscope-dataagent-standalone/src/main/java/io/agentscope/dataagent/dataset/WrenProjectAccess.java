@@ -70,13 +70,14 @@ public final class WrenProjectAccess {
             Path root,
             boolean assetTurn,
             // spec114 §8: the coach reads existing query templates to judge reuse, never writes.
-            boolean coachTurn) {
+            boolean coachTurn,
+            String questionId) {
         public Project(String ownerId, String groupId, String name, Path root) {
-            this(ownerId, groupId, name, root, false, false);
+            this(ownerId, groupId, name, root, false, false, null);
         }
 
         public Project(String ownerId, String groupId, String name, Path root, boolean assetTurn) {
-            this(ownerId, groupId, name, root, assetTurn, false);
+            this(ownerId, groupId, name, root, assetTurn, false, null);
         }
     }
 
@@ -107,7 +108,8 @@ public final class WrenProjectAccess {
                 project.name(),
                 project.root(),
                 purpose.asset(),
-                purpose.coach());
+                purpose.coach(),
+                purpose.questionId());
     }
 
     public Project resolve(String owner, String group) {
@@ -163,6 +165,10 @@ public final class WrenProjectAccess {
         if (!resolved.startsWith(project.root())) throw new DatasetException("工程路径越界", 403);
         assertNoLinks(resolved);
         if (write) {
+            if (project.questionId() != null
+                    && !relative.equals("knowledge/questions/" + project.questionId() + ".yml")) {
+                throw new DatasetException("本轮只可修改选中的问数优化题目，需要更新共享口径时请先提议方案", 403);
+            }
             // spec090: Q&A pairs are written by MdlQuestionStore#decide after user confirmation
             // only.
             String sqlDir = relative.toLowerCase(Locale.ROOT);

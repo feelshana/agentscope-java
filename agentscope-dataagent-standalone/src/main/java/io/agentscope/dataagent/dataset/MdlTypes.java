@@ -1,5 +1,6 @@
 package io.agentscope.dataagent.dataset;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 
 /** Shared MDL result contracts; data shapes have no dependency on read or publish orchestration. */
@@ -8,8 +9,24 @@ public final class MdlTypes {
 
     // ------------------------------------------------------------------ public API result types
 
+    /** Draft asset and review step associated with a publish blocker. */
+    public record AssetReviewTarget(String kind, String name, String step) {}
+
     /** One structured problem: {@code severity} = error|warning, {@code source} = local|wren. */
-    public record MdlIssue(String severity, String message, String source) {}
+    public record MdlIssue(
+            String severity,
+            String message,
+            String source,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String incompleteView,
+            @JsonInclude(JsonInclude.Include.NON_NULL) AssetReviewTarget assetReview) {
+        public MdlIssue(String severity, String message, String source) {
+            this(severity, message, source, null, null);
+        }
+
+        public MdlIssue(String severity, String message, String source, String incompleteView) {
+            this(severity, message, source, incompleteView, null);
+        }
+    }
 
     /** One workspace/snapshot file; {@code path} is project-relative with '/' separators. */
     public record MdlFile(String path, String content) {}

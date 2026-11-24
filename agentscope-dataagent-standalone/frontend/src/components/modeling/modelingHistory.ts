@@ -1,6 +1,8 @@
 import type { HitlToolCall } from '../../api/chat';
 import type { TurnEntry } from '../../api/sessions';
 import type { ConfirmationDecision } from '../../api/draftReview';
+import type { CoachConversationTurn } from '../../api/modelingQuestions';
+import { coachReceipt } from './queryCoachScope';
 
 const CONFIRMATION_PROMPT = '我确定了以下口径，请整理后写入草稿：指标定义、默认过滤、术语写入 knowledge/rules/，'
   + '字段含义写入对应模型的列描述，确定建立的关系写入 relationships.yml；不要再次向我确认这些内容，完成后用一两行说明更新了哪些口径。\n';
@@ -44,6 +46,21 @@ export interface PanelMessage {
   hitl?: PendingHitl;
   startedAt?: string;
   confirmation?: ConfirmationDecision[];
+  questionId?: string;
+}
+
+export function recentCoachTurns(messages: PanelMessage[], questionId: string): CoachConversationTurn[] {
+  const turns: CoachConversationTurn[] = [];
+  const text = (message: PanelMessage) => message.segments
+    .flatMap(segment => segment.kind === 'text' ? [segment.text] : []).join('\n').slice(0, 800);
+  for (let i = messages.length - 1; i > 0 && turns.length < 2; i--) {
+    const reply = messages[i];
+    const user = messages[i - 1];
+    if (reply.role === 'assistant' && reply.questionId === questionId && !reply.pending && user.role === 'user') {
+      turns.push({ user: text(user), assistant: text(reply) });
+    }
+  }
+  return turns.reverse();
 }
 
 export function restoreModelingHistory(entries: TurnEntry[], hitl?: PendingHitl): PanelMessage[] {
@@ -59,14 +76,14 @@ export function restoreModelingHistory(entries: TurnEntry[], hitl?: PendingHitl)
       calls = [];
       const content = entry.content ?? '';
       if (content.trim()) messages.push({ id: entry.id, role: 'user', confirmation: confirmationReceipt(content), segments: [{ kind: 'text',
-        text: content.startsWith('请加载官方 Wren 技能，按官方 Auto-pilot') ? '开始自动建模' : content }] });
+        text: coachReceipt(content)?.label ?? (content.startsWith('请加载官方 Wren 技能，按官方 Auto-pilot') ? '开始自动建模' : content) }] });
       continue;
     }
     const narration = entry.role === 'ASSISTANT' ? entry.content : null;
     const tool = entry.role === 'TOOL' ? entry.toolName : null;
     if (!narration?.trim() && !tool) continue;
     if (!reply) {
-      reply = { id: entry.id, role: 'assistant', segments: [] };
+      reply = { id: entry.id, role: 'assistant', segments: [], questionId: coachReceipt(user?.content ?? '')?.id };
       messages.push(reply);
     }
     if (narration?.trim()) reply.segments.push({ kind: 'text', text: narration });

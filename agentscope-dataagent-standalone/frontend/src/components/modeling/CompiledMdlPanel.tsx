@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { getCompiledMdl } from '../../api/semanticModeling';
 import type { CompiledMdl } from '../../api/semanticModeling';
 import ReadableCode from '../ReadableCode';
-import Icon from '../Icon';
 
 type Section = { key: string; label: string; value: unknown };
 
@@ -61,16 +60,12 @@ export default function CompiledMdlPanel({ groupId, version }: { groupId: string
   }, [text]);
   const list = useMemo(() => parsed ? sections(parsed) : [], [parsed]);
   const current = list.find(s => s.key === selected) ?? list[0];
-  return <section className="am-section">
-    <header className="am-section-head"><div><h3>编译后的 MDL</h3><p>Wren 把工程 YAML 编译成的语义模型{version === 'published' ? '，问数读到的就是这一份（wren://mdl）。' : '，展示草稿最近一次编译结果。'}</p></div><span className="am-source">{version === 'published' ? '线上版本' : '当前草稿'}</span></header>
+  return <>
     {loading ? <p className="am-empty" role="status">正在读取编译结果…</p> : error ? <div role="alert" className="am-error"><span>{error}</span><button type="button" className="da-btn" onClick={() => setRetry(n => n + 1)}>重试</button></div> : !text ? <p className="am-empty">{version === 'published' ? '还没有发布过。' : '草稿还没有编译过，让助手校验一次或发布后即可看到。'}</p> : <>
-      <div className="am-notice"><Icon name="info" size="sm" /><span>{builtAt && <>生成于 {time(builtAt)}。 </>}{version === 'draft' && '之后的修改要再次校验或发布才会反映在这里。'}这里只读；要改内容，请在建模对话里说明，或在公共视图页编辑对应视图。</span></div>
-      {parsed ? <>
-        <label className="am-compiled-select">查看部分<select className="da-input" aria-label="查看部分" value={current?.key ?? 'all'} onChange={e => setSelected(e.target.value)}>
-          {list.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-        </select></label>
-        {current && <ReadableCode text={JSON.stringify(current.value, null, 2)} language="json" title={current.label} />}
-      </> : <ReadableCode text={text} language="json" title="编译结果" />}
+      <ReadableCode fill text={current ? JSON.stringify(current.value, null, 2) : text} language="json" title="编译结果"
+        header={<div className="eng-mdl-header">{parsed && <select className="da-input" aria-label="查看 MDL 部分" value={current?.key ?? 'all'} onChange={e => setSelected(e.target.value)}>
+        {list.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+      </select>}{builtAt && <span className="da-small">构建于 {time(builtAt)}</span>}</div>} />
     </>}
-  </section>;
+  </>;
 }

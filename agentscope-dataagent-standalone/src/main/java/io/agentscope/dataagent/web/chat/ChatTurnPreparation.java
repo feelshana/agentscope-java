@@ -6,6 +6,7 @@ import io.agentscope.core.message.MsgRole;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetScope;
+import io.agentscope.dataagent.dataset.ModelingTurnPurpose;
 import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
@@ -47,6 +48,28 @@ public final class ChatTurnPreparation {
                             io.agentscope.dataagent.runtime.session.ConversationScopeRegistry
                                     .Selection>
                     onAccepted) {
+        return buildInbound(
+                userId,
+                agentId,
+                msgs,
+                conversationId,
+                groupIds,
+                allGroups,
+                requestId,
+                onAccepted,
+                null);
+    }
+
+    public InboundMessage buildInbound(
+            String userId,
+            String agentId,
+            List<Msg> msgs,
+            String conversationId,
+            List<String> groupIds,
+            boolean allGroups,
+            String requestId,
+            java.util.function.Consumer<ConversationScopeRegistry.Selection> onAccepted,
+            ModelingTurnPurpose newModelingTurn) {
         List<String> authorized =
                 resolveGroupScope(userId, agentId, conversationId, groupIds, allGroups);
         var groupNames = new java.util.LinkedHashMap<String, String>();
@@ -73,6 +96,9 @@ public final class ChatTurnPreparation {
                                                     false);
                                             conversationScopes.putSelection(
                                                     userId, conversationId, selection);
+                                            if (newModelingTurn != null)
+                                                conversationScopes.putModelingTurn(
+                                                        userId, conversationId, newModelingTurn);
                                             for (Msg msg : msgs)
                                                 if (msg.getRole() == MsgRole.USER)
                                                     conversationScopes.putSelection(
@@ -84,11 +110,14 @@ public final class ChatTurnPreparation {
         if (requestId != null) {
             runtimeContextBuilder.put(ToolEventBus.REQUEST_ID_CONTEXT_KEY, requestId);
         }
-        String purpose = conversationScopes.modelingPurpose(userId, conversationId);
-        if (purpose != null && ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
-            runtimeContextBuilder.put(
-                    io.agentscope.dataagent.dataset.ModelingTurnPurpose.class,
-                    new io.agentscope.dataagent.dataset.ModelingTurnPurpose(purpose));
+        var purpose =
+                newModelingTurn == null
+                        ? conversationScopes.modelingTurn(userId, conversationId)
+                        : newModelingTurn;
+        if (purpose != null
+                && purpose.value() != null
+                && ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
+            runtimeContextBuilder.put(ModelingTurnPurpose.class, purpose);
         }
         var analysis = conversationScopes.analysis(userId, conversationId);
         if (analysis != null && !ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {

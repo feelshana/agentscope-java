@@ -7,7 +7,28 @@ package io.agentscope.dataagent.dataset;
  * {@link #AUTO} turns may write business rules only when the knowledge base has a business
  * document to ground them. A missing purpose means the user typed the request in the chat.
  */
-public record ModelingTurnPurpose(String value) {
+public record ModelingTurnPurpose(String value, String questionId) {
+    public ModelingTurnPurpose(String value) {
+        this(value, null);
+    }
+
+    public static ModelingTurnPurpose request(String value, String questionId) {
+        String purpose = normalize(value);
+        if (questionId != null
+                && (!COACH.equals(purpose)
+                        || questionId.length() > 64
+                        || !questionId.matches(
+                                "q-(?:coach-[A-Za-z0-9_-]{1,56}|(?:asset-)?[a-z0-9]+-[0-9]+)"))) {
+            throw new DatasetException("请从当前知识库选择一道问数优化题目", 400);
+        }
+        return new ModelingTurnPurpose(purpose, questionId);
+    }
+
+    /** A shared change proposed from a scoped turn belongs to that one question. */
+    public java.util.List<String> proposalQuestions(java.util.List<String> suggested) {
+        return questionId == null ? suggested : java.util.List.of(questionId);
+    }
+
     public static final String QUESTION = "question";
     public static final String AUTO = "auto";
     public static final String DOCUMENT = "document";

@@ -281,7 +281,9 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
                                             ? ""
                                             : contextFor(datasets.findByGroupId(project.groupId()));
                             String windowContext = "";
-                            if (windows != null && ModelingTurnRules.writesSql(purpose)) {
+                            if (windows != null
+                                    && (project.questionId() != null
+                                            || ModelingTurnRules.writesSql(purpose))) {
                                 var configured = windows.rules(project.groupId());
                                 if (!configured.isEmpty())
                                     windowContext =
@@ -311,7 +313,10 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
                                     + tableContext
                                     + windowContext
                                     + "\n\n"
-                                    + ModelingTurnRules.forPurpose(purpose);
+                                    + (project.questionId() == null
+                                            ? ModelingTurnRules.forPurpose(purpose)
+                                            : ModelingTurnRules.coachQuestion(
+                                                    project.questionId()));
                         })
                 .subscribeOn(Schedulers.boundedElastic());
     }
