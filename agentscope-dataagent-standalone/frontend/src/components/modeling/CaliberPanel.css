@@ -35,6 +35,8 @@
 .cp-col-state { width: 84px; }
 .cp-tag-problem { background: color-mix(in srgb, var(--da-danger, #c0392b) 10%, var(--da-surface)); color: var(--da-danger, #c0392b); }
 .cp-progress { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--da-warn) 8%, var(--da-surface)); font-size: 12px; }
+.cp-blockers { flex-basis: 100%; margin: 0; color: var(--da-warn); font-size: 12px; }
+.cp-judge { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .cp-progress-ok { background: color-mix(in srgb, var(--da-success) 8%, var(--da-surface)); }
 .cp-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .cp-check { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; }

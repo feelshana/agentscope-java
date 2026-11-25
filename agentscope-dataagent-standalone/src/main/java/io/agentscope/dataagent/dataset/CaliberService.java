@@ -88,6 +88,9 @@ public class CaliberService {
             boolean scenarioReviewed,
             // Whether the draft list ships on the next publish (CaliberReviews#publishable).
             boolean publishable,
+            // NONE: never published, query uses the base model; CURRENT: the published list equals
+            // the draft; OLDER: query still uses an earlier published version of the list.
+            String published,
             String viewYaml,
             String cubeYaml,
             List<String> ruleWarnings,
@@ -116,7 +119,9 @@ public class CaliberService {
             Map<String, String> datasetByModel,
             Map<String, CaliberValues> cachedValues,
             Map<String, CaliberReviews.ListReview> reviews,
-            Map<String, List<String>> ruleWarnings) {}
+            Map<String, List<String>> ruleWarnings,
+            Map<String, String> draftLists,
+            Map<String, String> publishedLists) {}
 
     private Snapshot snapshot(String groupId) {
         Path root = workspace.workspaceRoot(groupId);
@@ -150,7 +155,9 @@ public class CaliberService {
                 datasetMapping(root),
                 readValues(root),
                 CaliberReviews.read(root),
-                ruleWarnings(root));
+                ruleWarnings(root),
+                CaliberCompiler.lists(root),
+                CaliberCompiler.lists(root.getParent().resolve("published")));
     }
 
     private static Map<String, List<String>> ruleWarnings(Path root) {
@@ -216,6 +223,7 @@ public class CaliberService {
                     List.of(),
                     false,
                     false,
+                    "NONE",
                     null,
                     null,
                     List.of(),
@@ -271,11 +279,18 @@ public class CaliberService {
                 list != null
                         && compiled.ok()
                         && CaliberReviews.publishable(review, list, conflicts),
+                publishedState(s, listPath),
                 compiled.view(),
                 compiled.cube(),
                 s.ruleWarnings().getOrDefault(listPath, List.of()),
                 list == null ? null : list.scenario(),
                 list == null ? List.of() : scopeIssues(list, values));
+    }
+
+    private static String publishedState(Snapshot s, String listPath) {
+        String published = s.publishedLists().get(listPath);
+        if (published == null) return "NONE";
+        return published.equals(s.draftLists().get(listPath)) ? "CURRENT" : "OLDER";
     }
 
     // ------------------------------------------------------------------ review and verification

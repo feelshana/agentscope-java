@@ -4,6 +4,9 @@ import { discardDraft, getDraftItems, getDraftReview } from '../../api/draftRevi
 import type { DraftItem, DraftReview } from '../../api/draftReview';
 import { publishMdl } from '../../api/semanticModeling';
 import type { MdlIssue, MdlPublishResult } from '../../api/semanticModeling';
+import { getCalibers } from '../../api/calibers';
+import type { CaliberTable } from '../../api/calibers';
+import { publishBlockers, unfinishedLists } from './caliberPresentation';
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import DraftItemsList from './DraftItemsList';
 import Icon from '../Icon';
@@ -17,13 +20,15 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 /** What the page needs to guide the next step (spec092 §7). */
 export type DraftSummary = { changes: number; examples: number; publishing: boolean; publishedVersion: number | null; error: string | null };
 
-export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, publishSignal = 0, onSummary, terms, editingBlocked = false, checksPending = false }: {
+export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, onCalibers, publishSignal = 0, onSummary, terms, editingBlocked = false, checksPending = false }: {
   groupId: string;
   workflow: ModelingWorkflow | null;
   assistantActive: boolean;
   pendingConfirmations: number;
   /** Scrolls to "需要你确定的部分". */
   onLocate: () => void;
+  /** Opens the caliber page, where unfinished lists are reviewed and verified. */
+  onCalibers?: () => void;
   /** Incremented by the page's "下一步" card to publish through this bar's checks. */
   publishSignal?: number;
   onSummary?: (summary: DraftSummary) => void;
@@ -38,6 +43,9 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<MdlIssue[]>([]);
+  // spec149: unfinished caliber lists block the release; they are fixed on the caliber page, not in chat.
+  const [blockedCalibers, setBlockedCalibers] = useState<MdlIssue[]>([]);
+  const [unfinished, setUnfinished] = useState<CaliberTable[]>([]);
   const [result, setResult] = useState<MdlPublishResult | null>(null);
   const [confirming, setConfirming] = useState<'pending' | 'others' | 'discard' | null>(null);
   const active = useRef(groupId); active.current = groupId;
@@ -54,13 +62,14 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
 
   const load = useCallback(async () => {
     try {
-      const [list, r] = await Promise.all([getDraftItems(groupId), getDraftReview(groupId)]);
+      const [list, r, calibers] = await Promise.all([getDraftItems(groupId), getDraftReview(groupId),
+        getCalibers(groupId).catch(() => [] as CaliberTable[])]);
       if (active.current !== groupId) return;
-      setItems(list); setReview(r);
+      setItems(list); setReview(r); setUnfinished(unfinishedLists(calibers));
     } catch (e) { if (active.current === groupId) setError(message(e)); }
   }, [groupId]);
   useEffect(() => {
-    setItems([]); setReview(null); setOpen(false); setIssues([]); setResult(null); setConfirming(null); setError(null);
+    setItems([]); setReview(null); setOpen(false); setIssues([]); setBlockedCalibers([]); setUnfinished([]); setResult(null); setConfirming(null); setError(null);
     void load();
     const update = (event: Event) => {
       if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void load();
@@ -82,8 +91,8 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   const summary = useRef(onSummary); summary.current = onSummary;
   useEffect(() => {
     summary.current?.({ changes: changes.length, examples, publishing: busy === 'publish',
-      publishedVersion: result?.ok ? result.mdlVersion : null, error: error ?? (issues.length ? issues[0].message : null) });
-  }, [changes.length, examples, busy, result, error, issues]);
+      publishedVersion: result?.ok ? result.mdlVersion : null, error: error ?? (issues.length ? issues[0].message : blockedCalibers.length ? blockedCalibers[0].message : null) });
+  }, [changes.length, examples, busy, result, error, issues, blockedCalibers]);
   const lastSignal = useRef(publishSignal);
   useEffect(() => {
     if (publishSignal === lastSignal.current) return;
@@ -98,12 +107,13 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     setConfirming(null); setBusy('publish'); setError(null); setResult(null);
     try {
       // Publishing runs the full check itself and reports its issues; checking first only doubles it.
-      setIssues([]);
+      setIssues([]); setBlockedCalibers([]);
       const published = await publishMdl(groupId);
       if (active.current !== groupId) return;
       setResult(published);
       if (published.ok) tourSignal('published', { groupId });
-      setIssues(published.issues.filter(i => i.severity === 'error'));
+      setIssues(published.issues.filter(i => i.severity === 'error' && i.source !== 'calibers-blocked'));
+      setBlockedCalibers(published.issues.filter(i => i.severity === 'error' && i.source === 'calibers-blocked'));
       window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
     } catch (e) { if (active.current === groupId) setError(message(e)); }
     finally { if (active.current === groupId) setBusy(null); }
@@ -121,6 +131,8 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   const droppedQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions' && i.severity !== 'error') : [];
   // spec112: confirmed questions whose dependencies changed stay out as examples until reviewed.
   const heldQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions-review') : [];
+  // spec149: caliber lists ship whole; one held back leaves its table on the base model.
+  const heldCalibers = result?.ok ? result.issues.filter(i => i.source === 'calibers-held') : [];
   const label = busy === 'publish' ? '检查并发布中…' : republish ? '重新发布' : `发布 v${(workflow?.publishedVersion ?? 0) + 1}`;
   const notices = <>
     {confirming === 'pending' && <div role="alert" data-tour="draft-confirm" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
@@ -134,6 +146,14 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       <button className="da-btn da-btn-sm" onClick={() => setConfirming(null)}>取消</button>
     </div>}
     {error && <div role="alert" style={{ ...note, color: 'var(--da-danger)' }}>{error}</div>}
+    {unfinished.length > 0 && blockedCalibers.length === 0 && <div role="status" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
+      {unfinished.map(t => `${t.model} 的口径清单还有 ${publishBlockers(t).length} 项未核查验证`).join('；')}，完成前知识库不能发布。
+      {onCalibers && <button className="da-btn da-btn-sm" onClick={onCalibers}>去口径页</button>}
+    </div>}
+    {blockedCalibers.length > 0 && <div role="alert" style={{ ...note, color: 'var(--da-danger)', display: 'block' }}>
+      未发布：口径清单还没有全部核查并验证通过，请到“口径”页补完后再发布。
+      <ul style={{ margin: '4px 0 0' }}>{blockedCalibers.map((i, n) => <li key={n}>{i.message}</li>)}</ul>
+    </div>}
     {issues.length > 0 && <div role="alert" style={{ ...note, color: 'var(--da-danger)', display: 'block' }}>
       检查未通过，请在对话中让助手修复：<ul style={{ margin: '4px 0 0' }}>{issues.map((i, n) => <li key={n}>{i.message}</li>)}</ul>
     </div>}
@@ -146,6 +166,11 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       已发布 v{result?.mdlVersion}。有 {heldQuestions.length} 条问答因口径变更待复核，这次没有作为问数示例发布；在试问中复核后，下次发布即可恢复：
       <ul style={{ margin: '4px 0 0' }}>{heldQuestions.map((i, n) => <li key={n}>{i.message}</li>)}</ul>
       <button className="da-btn da-btn-sm" onClick={() => setResult(r => r && { ...r, issues: r.issues.filter(i => i.source !== 'questions-review') })}>知道了</button>
+    </div>}
+    {heldCalibers.length > 0 && <div role="alert" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)', display: 'block' }}>
+      已发布 v{result?.mdlVersion}，但以下口径内容没有进入本次发布。口径清单要表说明已核查、每个口径都核查并验证通过才整张发布；请到“口径”页补完后重新发布：
+      <ul style={{ margin: '4px 0 0' }}>{heldCalibers.map((i, n) => <li key={n}>{i.message}</li>)}</ul>
+      <button className="da-btn da-btn-sm" onClick={() => setResult(r => r && { ...r, issues: r.issues.filter(i => i.source !== 'calibers-held') })}>知道了</button>
     </div>}
   </>;
   return <footer className="modeling-draft-bar" aria-label="草稿栏" style={{ position: 'relative' }}>

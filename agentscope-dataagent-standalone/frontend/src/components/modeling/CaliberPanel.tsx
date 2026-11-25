@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getCalibers, judgeCalibers, reviewCalibers, verifyCalibers } from '../../api/calibers';
 import type { CaliberCheck, CaliberReviewState, CaliberTable, CaliberTableStatus } from '../../api/calibers';
 import Icon from '../Icon';
-import { caliberRequest, caliberSource, conditionLines, keyText, reviewProgress, scopeText } from './caliberPresentation';
+import { caliberLabel, caliberRequest, caliberSource, conditionLines, keyText, publishBlockers, publishedText, reviewProgress, scopeText, undecided } from './caliberPresentation';
 import './ModelingOptimization.css';
 import './CaliberPanel.css';
 
@@ -57,8 +57,7 @@ export default function CaliberPanel({ groupId, assistantIdle, onDraft }: {
     try { await action(); } catch (e) { setError(message(e)); } finally { setBusy(''); }
   };
   const draft = (t: CaliberTable) => {
-    const label = t.listPath ? `按文档更新 ${t.model} 的口径清单` : `为 ${t.model} 起草口径清单`;
-    if (onDraft(caliberRequest(t), label)) setError('');
+    if (onDraft(caliberRequest(t), caliberLabel(t))) setError('');
   };
 
   const pending = table?.rows.filter(r => r.review === 'REVIEW_PENDING') ?? [];
@@ -78,10 +77,12 @@ export default function CaliberPanel({ groupId, assistantIdle, onDraft }: {
     setChecks(null); setVerdicts({});
   });
   const progress = table ? reviewProgress(table) : null;
+  const blockers = table ? publishBlockers(table) : [];
+  const unjudged = undecided(checks, verdicts);
 
   return <section className="sm-pane mo-optimization cp-pane" aria-label="口径">
     <header className="mo-page-head"><div><h2>口径</h2>
-      <p>业务文档开头写明“适用模型”的表，可由助手把文档中的口径表照抄为口径清单；平台按清单生成查询模板和指标。逐行核查、用问题验证通过后随版本发布，问数按口径名取数。</p></div></header>
+      <p>业务文档开头写明“适用模型”的表，可由助手把文档中的口径表照抄为口径清单；平台按清单生成查询模板和指标。表说明和每个口径都核查、验证通过后才能发布知识库；发布后这张表只按口径名经指标取数，不再直接查原表。</p></div></header>
     {error && <div role="alert" className="da-alert da-alert-error">{error}</div>}
     {tables === null ? <div className="da-small">{error ? '读取失败' : '加载中…'}</div>
       : tables.length === 0 ? <div className="da-card sm-empty">还没有声明了适用模型的业务文档。在“资料”页上传业务文档，并在文档开头写一行“适用模型：`模型名`”。</div>
@@ -90,7 +91,8 @@ export default function CaliberPanel({ groupId, assistantIdle, onDraft }: {
           {tables.map(t => <button key={t.model} type="button" className={`cp-item ${t.model === selected ? 'cp-item-on' : ''}`} aria-current={t.model === selected} onClick={() => setSelected(t.model)}>
             <span className="cp-item-name">{t.model}</span>
             <span className="cp-item-meta"><span className={`mo-pill ${STATUS[t.status].tone}`}>{STATUS[t.status].label}</span>
-              {t.rows.length > 0 && <small className="da-small">{reviewProgress(t).passed}/{t.rows.length} 已通过</small>}</span>
+              {t.rows.length > 0 && <small className="da-small">{reviewProgress(t).passed}/{t.rows.length} 已通过</small>}
+              {t.listPath && t.published !== 'CURRENT' && <span className="mo-pill mo-amber">{t.published === 'NONE' ? '未发布' : '有改动未发布'}</span>}</span>
             {t.subject && <small className="da-small cp-item-subject">{t.subject}</small>}
           </button>)}
         </nav>
@@ -112,7 +114,9 @@ export default function CaliberPanel({ groupId, assistantIdle, onDraft }: {
 
           {progress && listPath && <div className={`cp-progress ${table.publishable ? 'cp-progress-ok' : ''}`} aria-label="核查进度">
             <span><strong>{progress.passed}/{progress.total}</strong> 个口径已通过 · 表说明{table.scenarioReviewed ? '已核查' : '待核查'}</span>
-            <span className="da-small">{table.publishable ? '下次发布会带上这份清单' : '还有未核查或未验证的内容：下次发布不带这份清单的改动，问数继续用已发布的口径'}</span>
+            <span className="da-small">{publishedText(table)}</span>
+            {!table.publishable && blockers.length > 0 && <span className="cp-blockers" role="status">
+              有口径清单的表只按口径问数，清单补完前知识库不能发布。未完成：{blockers.join('、')}</span>}
           </div>}
 
           {listPath && (pending.length > 0 || !table.scenarioReviewed) && <div className="cp-actions">
@@ -164,7 +168,10 @@ export default function CaliberPanel({ groupId, assistantIdle, onDraft }: {
               <pre className="cp-sql">{c.segment}</pre>
               <details><summary className="da-small">问数时的指标查询（按口径名查查询模板）</summary>{c.expanded && <pre className="cp-sql">{c.expanded}</pre>}</details>
             </article>)}
-            {checks && checks.some(c => !c.error) && <div><button type="button" className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || Object.keys(verdicts).length === 0}
+            {checks && checks.some(c => !c.error) && <div className="cp-judge">
+              {unjudged.length > 0 && Object.keys(verdicts).length > 0 && <p className="cp-blockers" role="status">
+                还有 {unjudged.length} 个口径未选判定：{unjudged.join('、')}。未判定的口径仍为待验证，补完前知识库不能发布。</p>}
+              <button type="button" className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || Object.keys(verdicts).length === 0}
               onClick={() => void judge()}>{busy === 'judge' ? '提交中…' : `提交判定（${Object.keys(verdicts).length}）`}</button></div>}
           </section>}
 

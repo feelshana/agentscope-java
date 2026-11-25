@@ -178,10 +178,14 @@ public final class CaliberQueryGate {
      */
     public static String checkSql(Path published, String sql) {
         if (sql == null || published == null) return null;
+        // The source table and the generated View both carry overlapping calibers and summary
+        // rows; only the Cube's query gate keeps them apart.
         Map<String, String> cubes = new java.util.LinkedHashMap<>();
         for (Map.Entry<String, String> entry : CaliberCompiler.lists(published).entrySet()) {
             CaliberList.Parsed parsed = CaliberList.parse(entry.getKey(), entry.getValue());
-            if (parsed.ok()) cubes.put(parsed.list().model(), parsed.list().cubeName());
+            if (!parsed.ok()) continue;
+            cubes.put(parsed.list().model(), parsed.list().cubeName());
+            cubes.put(parsed.list().viewName(), parsed.list().cubeName());
         }
         if (cubes.isEmpty()) return null;
         String code = stripLiterals(sql);
@@ -194,7 +198,7 @@ public final class CaliberQueryGate {
             if (table.matcher(code).find())
                 return "表 "
                         + e.getKey()
-                        + " 已有口径清单，请用指标 "
+                        + " 属于已发布的口径清单，请用指标 "
                         + e.getValue()
                         + " 的 query_cube 按口径名取数，不要对原表写 SQL 拼取数条件；清单里没有用户要的口径或范围时，告诉用户并给出最接近的口径。";
         }

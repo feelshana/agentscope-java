@@ -45,3 +45,39 @@ test('table selection keys and scope dimensions read as one line each (spec149 P
     '省份 province_name（维度 province）：汇总 全国，未指定时取 全国，取值 全国、浙江');
   assert.match(scopeText({ column: 'channel_type', name: 'channel', label: null, total: null, defaultValue: '全部', values: [] }), /^channel channel_type（维度 channel）：汇总 未写，未指定时取 全部$/);
 });
+
+test('a list ships whole, so every unfinished caliber is named as a blocker', async () => {
+  const { publishBlockers } = await import('../src/components/modeling/caliberPresentation.ts');
+  const rows = [{ name: '咪咕视频会员总体', review: 'VERIFY_PENDING' }, { name: '足球通', review: 'PASSED' },
+    { name: '篮球通', review: 'PROBLEM' }, { name: '中超会员', review: 'REVIEW_PENDING' }, { name: 'UFC会员', review: 'PASSED' }];
+  assert.deepEqual(publishBlockers({ rows, conflicts: [{ caliber: 'UFC会员' }], scenarioReviewed: false, errors: [] }),
+    ['表说明待核查', '咪咕视频会员总体（待验证）', '篮球通（有问题）', '中超会员（待核查）', 'UFC会员（冲突）']);
+  assert.deepEqual(publishBlockers({ rows: [{ name: '足球通', review: 'PASSED' }], conflicts: [], scenarioReviewed: true, errors: [] }), []);
+});
+test('the published state says what query uses for the table now', async () => {
+  const { publishedText } = await import('../src/components/modeling/caliberPresentation.ts');
+  assert.match(publishedText({ published: 'NONE', publishable: false }), /不能发布/);
+  assert.match(publishedText({ published: 'NONE', publishable: true }), /下次发布后/);
+  assert.match(publishedText({ published: 'OLDER', publishable: false }), /不能发布.*上一版/);
+  assert.match(publishedText({ published: 'CURRENT', publishable: true }), /^已发布/);
+});
+test('cases that can be judged but have no verdict are listed', async () => {
+  const { undecided } = await import('../src/components/modeling/caliberPresentation.ts');
+  const checks = [{ caliber: '咪咕视频会员总体', error: null }, { caliber: '足球通', error: null }, { caliber: '篮球通', error: '展开失败' }];
+  assert.deepEqual(undecided(checks, { 足球通: 'EXPECTED' }), ['咪咕视频会员总体']);
+  assert.deepEqual(undecided(null, {}), []);
+});
+
+test('finished document turns queue a caliber turn per table a document declares (spec149 P6)', async () => {
+  const { autoDraftable, caliberLabel, unfinishedLists } = await import('../src/components/modeling/caliberPresentation.ts');
+  const tables = [
+    table({ model: 'a', status: 'DRAFTABLE', documents: ['a.md'] }),
+    table({ model: 'b', status: 'DRAFTABLE', documents: [] }),
+    table({ model: 'c', status: 'OUTDATED', listPath: 'calibers/c.yml', documents: ['c.md'], publishable: true }),
+    table({ model: 'd', status: 'CURRENT', listPath: 'calibers/d.yml', documents: ['d.md'], publishable: false }),
+  ];
+  assert.deepEqual(autoDraftable(tables).map(t => t.model), ['a', 'c']);
+  assert.equal(caliberLabel(tables[0]), '为 a 起草口径清单');
+  assert.equal(caliberLabel(tables[2]), '按文档更新 c 的口径清单');
+  assert.deepEqual(unfinishedLists(tables).map(t => t.model), ['d']);
+});

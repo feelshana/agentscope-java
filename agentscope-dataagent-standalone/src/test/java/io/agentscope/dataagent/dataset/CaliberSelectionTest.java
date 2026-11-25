@@ -139,7 +139,7 @@ class CaliberSelectionTest {
                 .contains("pay_type1=全部（固定）；province:eq:全国；channel:eq:全部")
                 .contains("| 咪咕视频 | 活跃用户（日活） | active_metrics | dau_total（日活跃用户数） | 日 |")
                 .contains("例如只说“用户数”），先问是哪一个", "说明当前没有这类数据")
-                .contains("不要对这些指标的原表（模型 active_d、vip_m）用 run_sql")
+                .contains("不要对这些指标的原表或生成的口径视图（active_d、active_caliber、vip_m、vip_caliber）用 run_sql")
                 .contains("- vip_metrics：咪咕视频会员规模；适用于会员数；不适用于活跃用户。");
         assertThat(CaliberCompiler.check(root)).isEmpty();
         assertThat(CaliberCompiler.indexWarnings(root)).isEmpty();
@@ -216,7 +216,7 @@ class CaliberSelectionTest {
     }
 
     @Test
-    void rawSqlOnACaliberTableIsRefusedButItsViewAndOtherTablesAreNot() throws Exception {
+    void rawSqlOnACaliberTableOrItsGeneratedViewIsRefusedButOtherTablesAreNot() throws Exception {
         assertThat(CaliberQueryGate.checkSql(root, "SELECT * FROM vip_m")).isNull();
         write("calibers/vip.yml", VIP);
         CaliberCompiler.sync(root);
@@ -225,8 +225,10 @@ class CaliberSelectionTest {
                                 root, "SELECT SUM(cnt_zd) FROM `vip_m` WHERE vip_type_6 = '足球'"))
                 .contains("请用指标 vip_metrics 的 query_cube");
         assertThat(CaliberQueryGate.checkSql(root, "select * from VIP_M")).isNotNull();
+        // The generated View holds overlapping calibers and summary rows as well.
         assertThat(CaliberQueryGate.checkSql(root, "SELECT caliber_name FROM vip_caliber"))
-                .isNull();
+                .contains("vip_caliber", "请用指标 vip_metrics 的 query_cube");
+        assertThat(CaliberQueryGate.checkSql(root, "SELECT * FROM vip_caliber_extra")).isNull();
         assertThat(CaliberQueryGate.checkSql(root, "SELECT 'vip_m' AS t FROM orders -- vip_m"))
                 .isNull();
         assertThat(CaliberQueryGate.checkSql(root, "SELECT * FROM orders /* vip_m */")).isNull();

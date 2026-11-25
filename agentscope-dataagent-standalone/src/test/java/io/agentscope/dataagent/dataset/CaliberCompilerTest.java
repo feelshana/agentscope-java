@@ -146,6 +146,19 @@ class CaliberCompilerTest {
                                         root, "calibers/x.yml", LIST.replace("combine: sum", ""))
                                 .errors())
                 .anyMatch(e -> e.contains("会把这些行的数值相加") && e.contains("combine: sum"));
+        // 2026-11-25: fields the format lacks are reported, not skipped (a scope "format" and a
+        // measure "pending" were written in a confirmation turn and silently lost).
+        assertThat(
+                        CaliberCompiler.compile(
+                                        root,
+                                        "calibers/x.yml",
+                                        LIST.replace(
+                                                "name: members", "name: members, pending: 待确认"))
+                                .errors())
+                .anyMatch(
+                        e ->
+                                e.contains("度量 cnt_zd 不支持字段 pending")
+                                        && e.contains("scenario.description"));
         assertThat(CaliberCompiler.compile(root, "calibers/x.yml", "model: [").errors())
                 .anyMatch(e -> e.contains("不是合法的 YAML"));
         assertThat(CaliberCompiler.compile(root, "calibers/x.yml", "model: vip_m\n").errors())

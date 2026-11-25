@@ -79,7 +79,21 @@ public final class WrenProjectAccess {
             // spec114 §8: the coach reads existing query templates to judge reuse, never writes.
             boolean coachTurn,
             // spec149: drafting caliber lists from business documents.
-            boolean caliberTurn) {
+            boolean caliberTurn,
+            // spec149 P6: the user's own words (a chat request or confirmation answers); it may
+            // edit an existing caliber list.
+            boolean chatTurn) {
+        public Project(
+                String ownerId,
+                String groupId,
+                String name,
+                Path root,
+                boolean assetTurn,
+                boolean coachTurn,
+                boolean caliberTurn) {
+            this(ownerId, groupId, name, root, assetTurn, coachTurn, caliberTurn, false);
+        }
+
         public Project(String ownerId, String groupId, String name, Path root) {
             this(ownerId, groupId, name, root, false, false, false);
         }
@@ -119,16 +133,22 @@ public final class WrenProjectAccess {
         }
         Project project = resolve(scope.ownerId(), selected.get(0));
         ModelingTurnPurpose purpose = context.get(ModelingTurnPurpose.class);
-        if (purpose == null || !(purpose.asset() || purpose.coach() || purpose.caliber()))
+        // A turn without a declared purpose is the user's own chat request (ModelingTurnPurpose).
+        boolean chat = purpose == null || purpose.value() == null;
+        // Confirmation answers are the user's own decisions too, so they may settle a caliber
+        // list's pending items the same way a chat request does.
+        boolean userWords = chat || ModelingTurnPurpose.CONFIRM.equals(purpose.value());
+        if (!userWords && !(purpose.asset() || purpose.coach() || purpose.caliber()))
             return project;
         return new Project(
                 project.ownerId(),
                 project.groupId(),
                 project.name(),
                 project.root(),
-                purpose.asset(),
-                purpose.coach(),
-                purpose.caliber());
+                !chat && purpose.asset(),
+                !chat && purpose.coach(),
+                !chat && purpose.caliber(),
+                userWords);
     }
 
     public Project resolve(String owner, String group) {
@@ -190,8 +210,15 @@ public final class WrenProjectAccess {
             }
             String lowerPath = relative.toLowerCase(Locale.ROOT);
             boolean caliberFile = first.equals(CaliberList.DIRECTORY);
-            if (caliberFile && !project.caliberTurn()) {
-                throw new DatasetException("口径清单只在起草口径清单的轮次中修改；需要时提示用户在语义模型页点“起草口径清单”。", 403);
+            // spec149 P6: a chat turn may edit a list that exists; new lists come from documents.
+            if (caliberFile
+                    && !project.caliberTurn()
+                    && !(project.chatTurn() && Files.isRegularFile(resolved))) {
+                throw new DatasetException(
+                        project.chatTurn()
+                                ? "这张表还没有口径清单，对话中不能新建。口径清单按业务文档起草：告诉用户上传开头写明“适用模型”的业务文档后，页面会自动起草；已有文档时可在“口径”页点“起草口径清单”。"
+                                : "口径清单只在起草口径清单、用户对话或写入用户确定的轮次中修改；需要时提示用户在“口径”页起草。",
+                        403);
             }
             if (caliberFile && !lowerPath.matches("calibers/[a-z0-9_-]{1,64}\\.yml")) {
                 throw new DatasetException(

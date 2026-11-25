@@ -693,8 +693,21 @@ class OfficialWrenToolkitTest {
                   - {name: 篮球通, where: {vip_type_6: 篮球通会员}}
                 """;
 
-        // Outside the caliber turn the list is readable but not writable.
-        assertThat(files.write(alice, "calibers/vip.yml", list).error()).contains("起草口径清单的轮次");
+        // A chat turn cannot create a list; new lists are drafted from documents (spec149 P6).
+        assertThat(files.write(alice, "calibers/vip.yml", list).error())
+                .contains("还没有口径清单", "对话中不能新建");
+        // Other declared turns cannot write lists at all.
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.DOCUMENT));
+        assertThat(files.write(alice, "calibers/vip.yml", list).error()).contains("起草口径清单、用户对话");
+        // Confirmation answers are the user's words too, but they cannot create a list either.
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.CONFIRM));
+        assertThat(files.write(alice, "calibers/vip.yml", list).error()).contains("对话中不能新建");
 
         when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
                 .thenReturn(
@@ -753,6 +766,50 @@ class OfficialWrenToolkitTest {
                                 .error())
                 .contains("由口径清单生成");
         assertThat(files.write(alice, "calibers/vip.yml", list).isSuccess()).isFalse();
+
+        // spec149 P6: the user's chat turn edits the existing list; the row is the person's own
+        // change, so it is recorded as chat and a later document draft cannot overwrite it.
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class)).thenReturn(null);
+        String chatted =
+                Files.readString(root.resolve("calibers/vip.yml"))
+                        .replace("vip_type_6: 足球通会员", "vip_type_6: 足球通会员新");
+        assertThat(files.write(alice, "calibers/vip.yml", chatted).isSuccess()).isTrue();
+        assertThat(
+                        io.agentscope.dataagent.dataset.CaliberSources.read(root)
+                                .rows()
+                                .get("calibers/vip.yml")
+                                .get("足球通")
+                                .kind())
+                .isEqualTo("chat");
+        assertThat(Files.readString(root.resolve("views/vip_caliber/metadata.yml")))
+                .contains("足球通会员新");
+        // Generated files stay read-only in chat as well.
+        assertThat(
+                        files.write(alice, "views/vip_caliber/metadata.yml", "name: vip_caliber\n")
+                                .isSuccess())
+                .isFalse();
+
+        // 2026-11-25: the user's confirmation answers settle a pending caliber in the list itself
+        // (they were refused and leaked into rules); the row is recorded as the person's own.
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.CONFIRM));
+        String confirmed =
+                Files.readString(root.resolve("calibers/vip.yml"))
+                        .replace("vip_type_6: 篮球通会员", "vip_type_6: 篮球通会员确");
+        assertThat(files.write(alice, "calibers/vip.yml", confirmed).isSuccess()).isTrue();
+        assertThat(
+                        io.agentscope.dataagent.dataset.CaliberSources.read(root)
+                                .rows()
+                                .get("calibers/vip.yml")
+                                .get("篮球通")
+                                .kind())
+                .isEqualTo("chat");
+        assertThat(
+                        files.write(alice, "views/vip_caliber/metadata.yml", "name: vip_caliber\n")
+                                .isSuccess())
+                .isFalse();
     }
 
     /**

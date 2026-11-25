@@ -43,6 +43,8 @@ export interface CaliberScenario {
   scope: CaliberScope[];
 }
 
+export type CaliberPublishedState = 'NONE' | 'CURRENT' | 'OLDER';
+
 export type CaliberTableStatus = 'DRAFTABLE' | 'OUTDATED' | 'CURRENT' | 'MANUAL';
 
 export interface CaliberTable {
@@ -60,6 +62,8 @@ export interface CaliberTable {
   scenarioReviewed: boolean;
   /** Whether the draft list ships on the next publish; otherwise the published one keeps serving. */
   publishable: boolean;
+  /** NONE: never published (query uses the base model); CURRENT: published as drafted; OLDER: query uses an earlier version. */
+  published: CaliberPublishedState;
   viewYaml: string | null;
   cubeYaml: string | null;
   ruleWarnings: string[];

@@ -716,13 +716,16 @@ public class MdlPublishService {
         }
 
         Path projectDir = workspace.copyToStaging(groupId);
-        // spec149: tables publish independently; unreviewed caliber changes and hand-written
-        // Cubes stay out of this version (warnings), the published calibers keep serving.
+        // spec149: a caliber list ships only when fully reviewed and verified, and an unfinished
+        // one blocks the release (a table with a list is queried only through its calibers);
+        // hand-written Cubes stay out of this version with a warning.
         issues.addAll(
                 CaliberReviews.stage(
                         workspace.workspaceRoot(groupId),
                         projectDir,
-                        props.groupRoot(groupId).resolve("published")));
+                        props.groupRoot(groupId).resolve("published"),
+                        true));
+        if (hasErrors(issues)) return failure(group, issues, "");
         issues.addAll(CaliberCompiler.ruleWarnings(projectDir));
         snapshot = shipped(snapshot, projectDir);
 

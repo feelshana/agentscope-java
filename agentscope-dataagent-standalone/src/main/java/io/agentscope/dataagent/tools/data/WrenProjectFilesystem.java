@@ -226,7 +226,10 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                 relative,
                 before,
                 after,
-                io.agentscope.dataagent.dataset.CaliberSources.DOCUMENT,
+                // spec149 P6: a chat edit is the person's own change; documents never overwrite it.
+                p.chatTurn()
+                        ? io.agentscope.dataagent.dataset.CaliberSources.CHAT
+                        : io.agentscope.dataagent.dataset.CaliberSources.DOCUMENT,
                 context == null ? p.ownerId() : context.getUserId(),
                 model == null
                         ? java.util.Map.of()

@@ -675,3 +675,15 @@ B 口径清单发布后问数验收。选表规则与按口径名 query_cube 生
 ## 2026-11-24 Asia/Shanghai · spec149 P5 多表选表、指标说法与范围维度
 
 清单增加 `business`/`audience`（选表键）、度量 `synonyms`/`default`、`scope`（范围维度：列、维度名、汇总值、默认值、可选取值）。编译器把范围列作为视图列和 Cube 维度；`calibers.md` 改为"业务 × 统计对象"选表索引；多表时警告缺选表键、业务对象相同、说法与口径重名。门禁：`query_cube` 每个范围维度须筛选（in/eq）或分组、取值须在 values 内；`run_sql` 引用有已发布清单的原表时拒绝。口径页增加表说明卡片与范围取值检查；验证问题用默认指标并带默认范围；起草提示词补 P5 字段，【】内容不当事实。修正：Wren 等值筛选为 `eq` 不是 `equals`（P4 起即写错）。旧清单表说明哈希不变（B 重启后仍已核查、可发布）。验证：单元 1168 项、前端 7 项与构建、DocsConsistencyTest 通过；本机 B 问"各省份足球通"时 run_sql 原表被拒、如实答取不到；示例文档起草出业务、对象、默认指标、5 个范围维度，无错误；草稿副本经 Wren build、展开、EXPLAIN 并执行，篮球通 10 月 3,283,751；B 草稿已还原。未提交。多表真实验收待活跃用户等表和文档。
+
+## 2026-11-25 Asia/Shanghai · spec149 口径发布拦截与起草自动化（P6）
+
+新知识库验收：文档"适用模型"须写带 `ds_` 前缀的完整模型名；一个口径漏提交判定导致清单被静默扣下，问数改用 run_sql 拼错 `vip_type_1`（178,460,677），补判定发布后走 Cube 得 187,657,138。按用户要求：口径页显示发布状态（`CaliberService.Table#published`）与未完成项、提交判定前提示未判定口径；发布时清单未全部通过即失败（`CaliberReviews#stage` 的 `blockIncomplete`，草稿校验仍只警告）；`CaliberQueryGate#checkSql` 与选表规则覆盖生成视图。P6：`SemanticModelingPage` 在 auto/document 轮结束后按 `autoDraftable` 排队口径轮；AUTO/DOCUMENT 提示词不写口径条件规则；`WrenProjectAccess.Project#chatTurn` 允许对话轮修改已有清单（`CaliberSources.CHAT`）；DraftBar 提示未完成清单。ADR0155 追加第 17–19 条，spec149 补 P6 与验收 18–22。验证：后端单元 1170 项、前端 157 项与口径 11 项、构建、DocsConsistencyTest、spotless 通过。真实页面自动起草未验收。未提交。
+
+## 2026-11-25 Asia/Shanghai · P6 实测与确认答复轮修复
+
+实测：建模轮结束后口径轮自动排队并起草 13 个口径；问数走 `query_cube` 得 187,657,138。问题：建模轮仍就文档【二选一】提问；用户答复进入 `confirm` 轮，改清单被拒 4 次，模型把拆分条件写进规则与列描述，和清单"相加"矛盾。修复：`WrenProjectAccess#resolve` 把 confirm 轮视作用户本人的话（可改已有清单、不能新建，来源记对话）；CONFIRM、CALIBER、AUTO/DOCUMENT 提示词与前端确认请求同步；ADR0155 第 20 条。验证：OfficialWrenToolkitTest、DataAgentConfigTest、Caliber* 与 DocsConsistencyTest 通过。
+
+## 2026-11-25 Asia/Shanghai · 口径清单字段校验与提问规则调整
+
+二次实测：答复轮成功改清单、规则不再含取数条件、问数走 Cube。发现：答复轮写了范围 `format`、度量 `pending`，解析器静默丢弃；建模轮第二次违反"不问口径"。修复：`CaliberList#parse` 各层校验字段名并给出写法指引；去掉建模轮/文档轮"不问口径"，口径轮不重复已提问事项；ADR0155 第 21 条。

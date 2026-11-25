@@ -46,6 +46,8 @@ import type { TurnPurpose } from '../../api/chat';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
 import SemanticAssetsPanel from '../../components/modeling/SemanticAssetsPanel';
 import CaliberPanel from '../../components/modeling/CaliberPanel';
+import { getCalibers } from '../../api/calibers';
+import { autoDraftable, caliberLabel, caliberRequest } from '../../components/modeling/caliberPresentation';
 import './SemanticModelingPage.css';
 import '../../components/modeling/ModelingSetup.css';
 
@@ -81,7 +83,8 @@ const documentRequest = (changes: string[]) => `业务文档有变化：${change
   + '只修改与文档有差异的内容，完成后执行校验，按回复写法简短说明。';
 /** spec092: hands the user's answers to the assistant to write where queries read them. */
 const confirmRequest = (decisions: ConfirmationDecision[]) => '我确定了以下口径，请整理后写入草稿：指标定义、默认过滤、术语写入 knowledge/rules/，'
-  + '字段含义写入对应模型的列描述，确定建立的关系写入 relationships.yml；不要再次向我确认这些内容，完成后用一两行说明更新了哪些口径。\n'
+  + '字段含义写入对应模型的列描述，确定建立的关系写入 relationships.yml；涉及已有口径清单（calibers/）中的口径、指标或统计范围取值的，只改对应清单，不写进规则或列描述；'
+  + '不要再次向我确认这些内容，完成后用一两行说明更新了哪些口径。\n'
   + decisions.map((d, i) => `${i + 1}. 问题：${d.question}\n   我的确定：${d.answer}`).join('\n');
 
 /** spec093: after the modeler changed one table's fields, only that table is re-modeled. */
@@ -426,9 +429,29 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     const timer = window.setTimeout(() => tourSignal('query-ready', { groupId }), 3000);
     return () => window.clearTimeout(timer);
   }, [tourStep, preparing, groupId]);
+  // The purpose of the platform request the chat last submitted; a typed message has none.
+  const submittedPurpose = useRef<TurnPurpose | undefined>(undefined);
+  // spec149 P6: after a document or modeling turn, tables a document declares get their caliber
+  // turn queued, one per table; review, verdicts and publishing stay with the person.
+  const queueCaliberDrafts = async () => {
+    try {
+      const tables = autoDraftable(await getCalibers(groupId));
+      if (activeGroup.current !== groupId || !windowReadyRef.current) return;
+      setQueue(previous => {
+        const items = previous.groupId === groupId ? previous.items : [];
+        const queued = new Set(items.filter(r => r.purpose === 'caliber').map(r => r.label));
+        const added = tables.filter(t => !queued.has(caliberLabel(t)))
+          .map(t => ({ id: ++sequence.current, text: caliberRequest(t), purpose: 'caliber' as TurnPurpose, label: caliberLabel(t) }));
+        return { groupId, items: [...items, ...added] };
+      });
+    } catch (e) { if (activeGroup.current === groupId) setError(message(e)); }
+  };
   // Any turn may rewrite drafts or trial questions; every panel listening for updates reloads.
   const turnDone = () => {
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
+    const finished = submittedPurpose.current;
+    submittedPurpose.current = undefined;
+    if (finished === 'auto' || finished === 'document') void queueCaliberDrafts();
   };
   const locateConfirmations = () => { if (canLeaveField()) setPanelChoice('pending'); };
 
@@ -560,6 +583,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
             draftPrompt={head?.text ?? prefill?.text} draftPromptId={head?.id ?? prefill?.id} submitDraft={!!head && startOffer !== groupId}
             onClose={() => setPanelChoice(null)}
             onDraftSubmitted={() => {
+              submittedPurpose.current = head?.purpose;
               setQueue(previous => ({ groupId, items: (previous.groupId === groupId ? previous.items : []).slice(1) }));
             }}
             onTurnDone={turnDone} draftPurpose={head?.purpose} draftLabel={head?.label}
@@ -597,7 +621,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     </main>}
     {!setupActive && <div className="mw-publish-row">
       {!screeningPending && workflow && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length} checksPending={!confirmationsReady || screening === null}
-      onLocate={locateConfirmations}
+      onLocate={locateConfirmations} onCalibers={() => selectTab('calibers')}
       publishSignal={publishSignal} onSummary={setDraftSummary} />}
       {toQuery && <button className="da-btn da-btn-primary mw-query-button" disabled={!!preparing || queryHeld}
         title={queryHeld ? TOUR_QUERY_HINT : undefined} onClick={toQuery}>{preparing ? '问数准备中…' : <>去问数<Icon name="chevron" size="sm" /></>}</button>}

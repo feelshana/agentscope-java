@@ -168,6 +168,16 @@ public final class CaliberReviews {
      * only Cubes a person reviewed reach query. Returns warnings naming what was held back.
      */
     public static List<MdlIssue> stage(Path draft, Path staging, Path published) {
+        return stage(draft, staging, published, false);
+    }
+
+    /**
+     * Like {@link #stage(Path, Path, Path)}; with {@code blockIncomplete} an unfinished list is an
+     * error instead of being held back: a table with a caliber list is queried only through its
+     * calibers, so the release waits until a person has finished the list (or deleted it).
+     */
+    public static List<MdlIssue> stage(
+            Path draft, Path staging, Path published, boolean blockIncomplete) {
         List<MdlIssue> issues = new ArrayList<>();
         Map<String, ListReview> reviews = read(draft);
         CaliberSources.State sources = CaliberSources.read(draft);
@@ -199,6 +209,20 @@ public final class CaliberReviews {
                 if (parsed.ok() && publishable(reviews.get(path), parsed.list(), conflicts))
                     continue;
                 holdBack(staging, published, path, now, before);
+                if (blockIncomplete) {
+                    issues.add(
+                            new MdlIssue(
+                                    "error",
+                                    "口径清单 "
+                                            + path
+                                            + " 还未全部核查并验证通过："
+                                            + String.join(
+                                                    "、",
+                                                    blockers(reviews.get(path), parsed, conflicts))
+                                            + "。有口径清单的表只按口径问数，请到“口径”页补完后再发布；不需要这份清单时删除它再发布",
+                                    "calibers-blocked"));
+                    continue;
+                }
                 issues.add(
                         new MdlIssue(
                                 "warning",
@@ -206,11 +230,13 @@ public final class CaliberReviews {
                                         + path
                                         + " 有未核查或未通过验证的改动，本次未发布这些改动"
                                         + (before == null ? "，该表暂按基础语义模型问数" : "，问数继续使用已发布的口径"),
-                                "calibers"));
+                                "calibers-held"));
             }
             for (String cube : unreviewedCubes(staging)) {
                 deleteDir(staging.resolve(cube));
-                issues.add(new MdlIssue("warning", cube + " 不是由口径清单生成的指标，未经核查，本次不发布", "calibers"));
+                issues.add(
+                        new MdlIssue(
+                                "warning", cube + " 不是由口径清单生成的指标，未经核查，本次不发布", "calibers-held"));
             }
         } catch (IOException e) {
             throw new DatasetException("准备口径发布内容失败：" + e.getMessage(), e);
@@ -218,6 +244,28 @@ public final class CaliberReviews {
         // The selection rules must describe the lists that actually ship.
         CaliberCompiler.writeRules(staging);
         return issues;
+    }
+
+    /** What keeps a list from shipping, in the reviewer's words. */
+    static List<String> blockers(
+            ListReview review, CaliberList.Parsed parsed, List<CaliberSources.Conflict> conflicts) {
+        if (!parsed.ok()) return List.of("清单有错误");
+        CaliberList list = parsed.list();
+        List<String> out = new ArrayList<>();
+        if (!scenarioReviewed(review, list)) out.add("表说明待核查");
+        Set<String> conflicted = new LinkedHashSet<>();
+        for (CaliberSources.Conflict c : conflicts) conflicted.add(c.caliber());
+        for (CaliberList.Caliber c : list.calibers()) {
+            if (conflicted.contains(c.name())) {
+                out.add(c.name() + "（冲突）");
+                continue;
+            }
+            String status = rowStatus(review, c);
+            if (REVIEW_PENDING.equals(status)) out.add(c.name() + "（待核查）");
+            else if (VERIFY_PENDING.equals(status)) out.add(c.name() + "（待验证）");
+            else if (PROBLEM.equals(status)) out.add(c.name() + "（有问题）");
+        }
+        return out;
     }
 
     private static void holdBack(

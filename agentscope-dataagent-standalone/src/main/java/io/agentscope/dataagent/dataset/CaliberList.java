@@ -127,6 +127,7 @@ public record CaliberList(
             return new Parsed(null, List.of(fileName + " 不是合法的 YAML：" + firstLine(e.getMessage())));
         }
         if (root == null) return new Parsed(null, List.of(fileName + " 必须是一个 YAML 对象"));
+        unknown(root, ROOT_KEYS, "清单顶层", errors);
 
         String model = text(root.get("model"));
         if (model == null || !IDENTIFIER.matcher(model).matches()) errors.add("model 必须写成对应的模型名");
@@ -144,6 +145,7 @@ public record CaliberList(
         }
 
         Map<String, Object> conventions = map(root.get("conventions"));
+        if (conventions != null) unknown(conventions, CONVENTION_KEYS, "conventions", errors);
         String unrestricted =
                 conventions == null || text(conventions.get("unrestricted")) == null
                         ? DEFAULT_UNRESTRICTED
@@ -174,11 +176,13 @@ public record CaliberList(
     }
 
     private static Scenario scenario(Map<String, Object> m, List<String> errors) {
+        unknown(m, SCENARIO_KEYS, "scenario", errors);
         String subject = text(m.get("subject"));
         if (subject == null) errors.add("scenario.subject（这张表统计什么）不能为空");
         Time time = null;
         Map<String, Object> t = map(m.get("time"));
         if (t != null) {
+            unknown(t, TIME_KEYS, "scenario.time", errors);
             String column = text(t.get("column"));
             String grain = lower(text(t.get("grain")));
             String format = lower(text(t.get("format")));
@@ -207,6 +211,7 @@ public record CaliberList(
                     errors.add("度量 " + column + " 的 name 只能用字母、数字和下划线");
                     continue;
                 }
+                unknown(r, MEASURE_KEYS, "度量 " + column, errors);
                 if (name.equalsIgnoreCase(column))
                     errors.add(
                             "度量 "
@@ -287,6 +292,7 @@ public record CaliberList(
                 errors.add("范围列 " + column + " 的 name 只能用字母、数字和下划线");
                 continue;
             }
+            unknown(r, SCOPE_KEYS, "范围列 " + column, errors);
             if (name.equalsIgnoreCase(column))
                 errors.add("范围列 " + column + " 的 name 不能与列名相同（Wren 会报循环依赖），例如写成 province");
             if (RESERVED_MEMBERS.contains(name.toLowerCase(Locale.ROOT))
@@ -297,7 +303,11 @@ public record CaliberList(
                 errors.add("列 " + column + " 不能同时写在 fixed_scope 和 scope 中");
             String defaultValue = text(r.get("default"));
             if (defaultValue == null)
-                errors.add("范围列 " + column + " 要写 default（用户没指定时取的值）；文档没写时写汇总值并在 pending 中标待确认");
+                errors.add(
+                        "范围列 "
+                                + column
+                                + " 要写 default（用户没指定时取的值）；文档没写时写汇总值，并在 scenario.description"
+                                + " 末尾以“待业务确认：”注明");
             List<String> values = texts(r.get("values"));
             if (defaultValue != null && !values.isEmpty() && !values.contains(defaultValue))
                 errors.add("范围列 " + column + " 的 default 不在 values 中");
@@ -317,6 +327,7 @@ public record CaliberList(
         if (value == null) return null;
         if (value instanceof Map<?, ?>) {
             Map<String, Object> m = map(value);
+            unknown(m, KEY_KEYS, field, errors);
             String name = text(m.get("name"));
             if (name == null) {
                 errors.add(field + " 写成 名称，或 {name: 名称, synonyms: [说法]}");
@@ -339,6 +350,7 @@ public record CaliberList(
             errors.add("口径名不能含单引号或英文逗号且不超过 80 字：" + name);
             return null;
         }
+        unknown(r, CALIBER_KEYS, "口径「" + name + "」", errors);
         Map<String, List<String>> where = new LinkedHashMap<>();
         Map<String, Object> w = map(r.get("where"));
         if (w == null || w.isEmpty()) {
@@ -361,6 +373,58 @@ public record CaliberList(
                 text(r.get("combine")),
                 map(r.get("source")),
                 map(r.get("conflict")));
+    }
+
+    // ------------------------------------------------------------------ field names
+
+    // 2026-11-25: unknown fields used to be skipped silently, so a "format" on a scope or a
+    // "pending" on a measure looked written but never reached the Cube or the query assistant.
+    private static final List<String> ROOT_KEYS =
+            List.of("model", "name", "scenario", "conventions", "calibers", "documents");
+    private static final List<String> SCENARIO_KEYS =
+            List.of(
+                    "subject",
+                    "description",
+                    "business",
+                    "audience",
+                    "time",
+                    "measures",
+                    "scope",
+                    "fixed_scope",
+                    "use_for",
+                    "not_for");
+    private static final List<String> TIME_KEYS = List.of("column", "grain", "format");
+    private static final List<String> MEASURE_KEYS =
+            List.of("column", "name", "label", "description", "synonyms", "default");
+    private static final List<String> SCOPE_KEYS =
+            List.of("column", "name", "label", "total", "default", "values");
+    private static final List<String> KEY_KEYS = List.of("name", "synonyms");
+    private static final List<String> CONVENTION_KEYS = List.of("unrestricted");
+    private static final List<String> CALIBER_KEYS =
+            List.of(
+                    "name",
+                    "group",
+                    "where",
+                    "synonyms",
+                    "note",
+                    "pending",
+                    "combine",
+                    "source",
+                    "conflict");
+
+    /** Reports fields the list format does not have, so nothing written is dropped unseen. */
+    private static void unknown(
+            Map<String, Object> m, List<String> allowed, String where, List<String> errors) {
+        List<String> extra = m.keySet().stream().filter(k -> !allowed.contains(k)).toList();
+        if (extra.isEmpty()) return;
+        errors.add(
+                where
+                        + " 不支持字段 "
+                        + String.join("、", extra)
+                        + "（可写："
+                        + String.join("、", allowed)
+                        + "）。待确认事项写在口径的 pending，表级的写在 scenario.description 末尾、以“待业务确认：”开头；"
+                        + "范围取值写法等说明写进 scenario.description，指标说明写进度量的 description，口径说明写进 note。");
     }
 
     // ------------------------------------------------------------------ YAML helpers

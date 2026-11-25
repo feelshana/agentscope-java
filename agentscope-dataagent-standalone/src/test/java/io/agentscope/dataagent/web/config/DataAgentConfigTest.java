@@ -205,6 +205,20 @@ class DataAgentConfigTest {
                 .contains("不执行 context show、memory status", "raw/docs/ 下的业务文档");
         assertThat(ModelingTurnRules.forPurpose("document"))
                 .contains("不执行 context show、memory status", "只读有变化的文档");
+        // spec149 P6: caliber conditions never go into rules; chat edits only an existing list.
+        // 2026-11-25: asking about them stays allowed, the answers are written back to the list.
+        for (String purpose : new String[] {"auto", "document"})
+            assertThat(ModelingTurnRules.forPurpose(purpose))
+                    .contains("不把各口径的取数条件写进规则", "答复会写回口径清单，不写进规则")
+                    .doesNotContain("不就口径条件");
+        assertThat(ModelingTurnRules.forPurpose(null))
+                .contains("该表已有清单就只改这份清单", "还没有清单时不新建", "用户没有提到口径时不改清单");
+        // 2026-11-25: the caliber turn asks about its pending items, and the answers go back into
+        // the list rather than into rules.
+        assertThat(ModelingTurnRules.forPurpose("caliber"))
+                .contains("用 request_user_confirmation 一次性提问", "由那一轮改清单", "此前轮次已经提出的同一事项不再重复提问");
+        assertThat(ModelingTurnRules.forPurpose("confirm"))
+                .contains("只改这份清单", "删去已确定的 pending", "不把这些条件写进规则或列描述");
         assertThat(ModelingTurnRules.forPurpose("confirm"))
                 .contains(
                         "指标定义、默认过滤和独立术语写入 knowledge/rules/",

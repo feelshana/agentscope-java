@@ -47,6 +47,21 @@ class CaliberServiceTest {
               - {name: 橄榄球, where: {vip_type_6: 橄榄球会员, vip_type_2: 不限}}
             """;
 
+    @Test
+    void publishedStateTellsWhetherQueryUsesTheDraftAnEarlierListOrNone() throws Exception {
+        write("calibers/vip_m.yml", LIST);
+        assertThat(service.overview("alice", "g").get(0).published()).isEqualTo("NONE");
+        Path published = root.getParent().resolve("published").resolve("calibers");
+        Files.createDirectories(published);
+        Files.writeString(published.resolve("vip_m.yml"), LIST, StandardCharsets.UTF_8);
+        assertThat(service.overview("alice", "g").get(0).published()).isEqualTo("CURRENT");
+        write("calibers/vip_m.yml", LIST.replace("橄榄球会员", "橄榄球通会员"));
+        assertThat(service.overview("alice", "g").get(0).published()).isEqualTo("OLDER");
+        // A table without a list has nothing published.
+        Files.delete(root.resolve("calibers/vip_m.yml"));
+        assertThat(service.overview("alice", "g").get(0).published()).isEqualTo("NONE");
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         workspace =

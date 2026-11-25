@@ -520,6 +520,7 @@ public final class CaliberCompiler {
         for (CaliberList list : lists) {
             CaliberList.Scenario s = list.scenario();
             models.add(list.model());
+            models.add(list.viewName());
             CaliberList.Measure primary = s.defaultMeasure();
             List<String> scope = new ArrayList<>();
             s.fixedScope().forEach((k, v) -> scope.add(k + "=" + v + "（固定）"));
@@ -568,7 +569,7 @@ public final class CaliberCompiler {
                         "- 再定口径：按口径名筛选（filters: caliber:in:口径名）或按 caliber"
                             + " 分组，不同口径之间可能互相包含，不能相加；用户的说法可能对应多个口径或对不上任何口径名时，先向用户确认是哪个口径，不要自行选择。\n")
                 .append("- 范围：上表“范围”列出的每个维度都要写进 filters（用户没说时用所列默认值），或按它分组；汇总值与明细值同时存在，不能相加。\n")
-                .append("- 以上指标覆盖的问题只用 query_cube 取数，不要自己拼取数条件，也不要对这些指标的原表（模型 ")
+                .append("- 以上指标覆盖的问题只用 query_cube 取数，不要自己拼取数条件，也不要对这些指标的原表或生成的口径视图（")
                 .append(String.join("、", models))
                 .append("）用 run_sql；其他问题照常用 run_sql。\n");
         return out.toString();

@@ -47,6 +47,53 @@ export function conditionLines(row: Pick<CaliberRow, 'where'>): { column: string
   return lines.map(l => ({ column: l.columns.join('、'), text: l.text, unrestricted: l.unrestricted }));
 }
 
+const BLOCKING: Record<string, string> = { REVIEW_PENDING: '待核查', VERIFY_PENDING: '待验证', PROBLEM: '有问题' };
+
+/**
+ * Why the draft list cannot ship: a list publishes only as a whole, and an unfinished list blocks
+ * the knowledge base's release, since a table with a list is queried only through its calibers.
+ */
+export function publishBlockers(table: Pick<CaliberTable, 'rows' | 'conflicts' | 'scenarioReviewed' | 'errors'>): string[] {
+  const out: string[] = [];
+  if (table.errors.length) out.push('清单有错误');
+  if (!table.scenarioReviewed) out.push('表说明待核查');
+  const conflicted = new Set(table.conflicts.map(c => c.caliber));
+  for (const r of table.rows)
+    if (conflicted.has(r.name)) out.push(`${r.name}（冲突）`);
+    else if (BLOCKING[r.review]) out.push(`${r.name}（${BLOCKING[r.review]}）`);
+  return out;
+}
+
+/** What query uses for this table now, in the person's words. */
+export function publishedText(table: Pick<CaliberTable, 'published' | 'publishable'>): string {
+  if (table.published === 'CURRENT') return '已发布，问数按口径名经指标取数';
+  if (table.published === 'OLDER') return table.publishable ? '有改动待发布，问数暂用已发布的上一版口径' : '有改动未完成核查验证，补完前知识库不能发布，问数继续用已发布的上一版口径';
+  return table.publishable ? '尚未发布，下次发布后问数按口径取数' : '尚未发布，补完核查验证前知识库不能发布';
+}
+
+/** Verification cases that can be judged but have no verdict yet. */
+export function undecided(checks: { caliber: string; error: string | null }[] | null, verdicts: Record<string, string>): string[] {
+  return (checks ?? []).filter(c => !c.error && !verdicts[c.caliber]).map(c => c.caliber);
+}
+
+/** The label the conversation shows for a caliber turn the platform requested. */
+export function caliberLabel(table: Pick<CaliberTable, 'model' | 'listPath'>): string {
+  return table.listPath ? `按文档更新 ${table.model} 的口径清单` : `为 ${table.model} 起草口径清单`;
+}
+
+/**
+ * spec149 P6: tables a finished document or modeling turn leaves for a caliber turn: declared by
+ * a document, and with no list yet or a document changed since the last draft.
+ */
+export function autoDraftable(tables: CaliberTable[]): CaliberTable[] {
+  return tables.filter(t => t.documents.length > 0 && (t.status === 'DRAFTABLE' || t.status === 'OUTDATED'));
+}
+
+/** Tables whose draft list blocks the next release. */
+export function unfinishedLists(tables: CaliberTable[]): CaliberTable[] {
+  return tables.filter(t => t.listPath && !t.publishable);
+}
+
 /** How many calibers of a table passed review and verification. */
 export function reviewProgress(table: Pick<CaliberTable, 'rows'>): { passed: number; total: number } {
   return { passed: table.rows.filter(r => r.review === 'PASSED').length, total: table.rows.length };
