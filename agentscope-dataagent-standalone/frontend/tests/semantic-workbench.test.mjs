@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  brokenRefs, canonicalText, filterText, parseRuleFile, ruleRefs, sectionOf, termText,
+  brokenRefs, canonicalText, filterText, normalizeLegacyTerm, parseRuleFile, publishedRuleVersion, ruleIndex, ruleKey, ruleRefs, sectionOf, termText,
 } from '../src/components/modeling/ruleText.ts';
 import { cardRows, focusOf, joinEnds, layoutOverview, layoutWorkbench, roleOf } from '../src/components/modeling/workbenchLayout.ts';
 
@@ -17,9 +17,48 @@ test('rules are read by section and bullets keep the text the backend matches', 
   assert.deepEqual(rules[0].filter, { scope: '订单数、销售额', condition: '排除已取消订单', exception: '用户明确要求包含时不排除' });
   assert.equal(rules[1].filter, undefined, 'a bullet outside the shape stays raw');
   assert.equal(rules[1].text, '营收排除内部账号\n内部账号见 dept 字段');
+  assert.deepEqual(rules.map(rule => rule.line), [5, 6, 11]);
   assert.equal(rules[2].heading, '区域划分');
   assert.equal(sectionOf(rules[2].heading), null, 'a self-made heading is 未归类');
   assert.equal(sectionOf('Naming conventions').label, '术语');
+});
+
+test('rule comparison distinguishes moves and avoids matching ambiguous titles', () => {
+  const path = 'knowledge/rules/general.md';
+  const online = parseRuleFile(path, '## Default filters\n- 统计「订单」时：取已确认订单\n- 每月汇总单独读取\n');
+  const draft = parseRuleFile(path, '## Default filters\n- 统计「订单」时：取有效订单\n\n## Metrics\n- 每月汇总单独读取\n');
+  assert.equal(publishedRuleVersion(draft[0], draft, online), online[0]);
+  assert.equal(publishedRuleVersion(draft[1], draft, online), online[1]);
+  assert.notEqual(ruleKey(draft[1]), ruleKey(online[1]));
+
+  const another = parseRuleFile(path, '## Default filters\n- 统计「订单」时：取下单总数\n')[0];
+  assert.equal(publishedRuleVersion(draft[0], [...draft, another], online), undefined);
+  assert.equal(publishedRuleVersion(draft[0], draft, [...online, another]), undefined);
+});
+
+test('the rule index separates the opening from the rest without changing the stored sentence', () => {
+  const [structured, policy, legacy, long] = parseRuleFile('p.md', [
+    '## Default filters', '- 统计「订单」时：取有效订单', '- 全国总量，按实际业务口径汇总后排除试用账号',
+    '## Naming conventions', '- 【篮球通】= 一级【全部】、二级不限', '- 很长的原文连续书写并且在开头没有标点因此需要按字数截断',
+  ].join('\n'));
+  assert.deepEqual(ruleIndex(structured), { anchor: '订单', summary: '取有效订单' });
+  assert.deepEqual(ruleIndex(policy), { anchor: '全国总量', summary: '，按实际业务口径汇总后排除试用账号' });
+  assert.equal(ruleIndex(legacy).anchor, '【篮球通】');
+  const { anchor, summary } = ruleIndex(long);
+  assert.equal(anchor.length, 20);
+  assert.equal(anchor + summary, long.text);
+});
+
+test('the suggested legacy term rewrite preserves its meaning after changing the opening', () => {
+  const path = 'knowledge/rules/naming.md';
+  const heading = 'Naming conventions';
+  const meaning = '一级【全部】、二级不限，明细按客户去重。';
+  const rule = normalizeLegacyTerm(path, heading, '【篮球通】＝ ' + meaning);
+  assert.equal(rule.text, '"篮球通" = ' + meaning);
+  assert.equal(rule.term.meaning, meaning);
+  assert.equal(normalizeLegacyTerm(path, heading, '【篮球通】= 一级\n二级'), undefined);
+  assert.equal(normalizeLegacyTerm(path, heading, '还有【篮球通】= 一级'), undefined);
+  assert.equal(normalizeLegacyTerm(path, 'Default filters', '【篮球通】= 一级'), undefined);
 });
 
 test('the page shapes round-trip through the parser', () => {
@@ -42,6 +81,9 @@ test('referenced fields are qualified names or unique bare columns', () => {
   assert.deepEqual(ruleRefs('按 region 统计', models), ['演示客户.region']);
   // customer_id belongs to both models, so a bare mention names neither.
   assert.deepEqual(ruleRefs('按 customer_id 关联', models), []);
+  const qualified = [{ name: 'orders', columns: [{ name: 'amount' }, { name: 'amount_net' }] }];
+  assert.deepEqual(ruleRefs('按orders.amount_net统计', qualified), ['orders.amount_net']);
+  assert.deepEqual(ruleRefs('按daily_orders.amount_net统计', qualified), []);
   assert.deepEqual(brokenRefs('演示订单.paid 与 演示订单.order_id', models), ['演示订单.paid']);
 });
 

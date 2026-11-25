@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1400">
+<title>知识库工作台 · 第二轮修补 · 2026-11-25</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#ececf1;color:#16171d;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.wrap{width:1360px;margin:0 auto}
+svg.ic{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* ---------- 封面 ---------- */
+.cover{padding:64px 0 30px}
+.eyebrow{display:flex;align-items:center;gap:10px;font-size:11.5px;color:#6b6f80;letter-spacing:.02em}
+.eyebrow i{width:22px;height:1px;background:#c3c5d0}
+.cover h1{margin:16px 0 0;font-size:42px;font-weight:680;letter-spacing:-.025em;line-height:1.14}
+.cover .lede{margin:16px 0 0;max-width:860px;font-size:14.5px;line-height:1.75;color:#3c3f4c}
+.cover .lede b{font-weight:620;color:#16171d}
+.metas{display:flex;gap:34px;margin-top:26px;padding-top:18px;border-top:.5px solid rgba(60,60,67,.16)}
+.metas div{font-size:11px;color:#6b6f80}
+.metas b{display:block;font-size:15px;font-weight:640;color:#16171d;margin-bottom:2px;font-variant-numeric:tabular-nums}
+.toc{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:30px}
+.toc a{display:block;padding:10px 12px;border:.5px solid rgba(60,60,67,.14);border-radius:9px;background:#fff;
+  text-decoration:none;color:#16171d;font-size:12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.toc a span{display:block;font:600 10px/1.4 ui-monospace,Menlo,monospace;color:#9a9dab;margin-bottom:3px}
+.toc a:hover{border-color:#c9bef0;background:#faf9fe}
+/* ---------- 章节 ---------- */
+.sec{padding:34px 0 6px}
+.sec-head{display:flex;align-items:flex-end;gap:14px;padding-bottom:12px;margin-bottom:18px;border-bottom:.5px solid rgba(60,60,67,.16)}
+.sec-head .k{font:600 11px/1 ui-monospace,Menlo,monospace;color:#5f4bc8;background:#efebfc;padding:5px 7px;border-radius:6px}
+.sec-head h2{margin:0;font-size:24px;font-weight:660;letter-spacing:-.02em}
+.sec-head p{margin:0 0 1px auto;font-size:12px;color:#6b6f80;max-width:620px;line-height:1.6}
+h3.sub{font-size:14px;font-weight:640;margin:26px 0 10px;display:flex;align-items:center;gap:8px}
+h3.sub:first-child{margin-top:0}
+h3.sub .bar{width:3px;height:14px;border-radius:2px;background:#5f4bc8}
+p.note{font-size:12.5px;line-height:1.75;color:#4a4d5c;margin:0 0 12px;max-width:1080px}
+p.note b{color:#16171d;font-weight:620}
+.fig{margin:6px 0 20px}
+.figcap{margin-top:9px;display:flex;align-items:baseline;gap:8px;font-size:11.5px;color:#6b6f80}
+.figcap b{font:650 11px/1 ui-monospace,Menlo,monospace;color:#16171d}
+/* ---------- board ---------- */
+.board{width:1360px;height:760px;background:#fff;border-radius:14px;overflow:hidden;position:relative;
+  display:grid;grid-template-columns:240px minmax(0,1fr);grid-template-rows:28px 52px minmax(0,1fr);
+  border:.5px solid rgba(60,60,67,.16);
+  box-shadow:0 1px 2px rgba(16,24,40,.06),0 14px 36px -14px rgba(16,24,40,.2);font-size:13px}
+/* 标签条 */
+.tabstrip{grid-column:1/-1;grid-row:1;display:flex;align-items:flex-end;gap:1px;padding:0 8px;background:#e9e9ef;
+  border-bottom:.5px solid rgba(60,60,67,.14);overflow:hidden}
+.tab{display:flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:7px 7px 0 0;max-width:146px;
+  font-size:10.5px;color:#5c6070;background:transparent}
+.tab .dot{width:5px;height:5px;border-radius:50%;background:#b9bbc7;flex:none}
+.tab .tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab .x{font-size:10px;color:#9a9dab;margin-left:2px}
+.tab.cur{background:#fff;color:#16171d;font-weight:620;height:25px;box-shadow:0 -1px 2px rgba(16,24,40,.05)}
+.tab.cur .dot{background:#5f4bc8}
+.tab.home{max-width:none;color:#16171d;font-weight:600}
+/* 顶栏 */
+.top{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:9px;padding:0 14px;background:#fff;
+  border-bottom:.5px solid rgba(60,60,67,.12);min-width:0;z-index:6}
+.crumb{display:flex;align-items:center;gap:5px;min-width:0;font-size:12px}
+.crumb a{color:#5f4bc8;font-weight:560;text-decoration:none;padding:3px 5px;margin-left:-5px;border-radius:5px;white-space:nowrap}
+.crumb a:hover{background:#f3f0fd}
+.crumb .sep{color:#b0b2be}
+.crumb strong{font-size:13px;font-weight:640;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:330px}
+.pill{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:6px;flex:none;
+  font-size:10px;font-weight:600;background:#f1f1f6;color:#626779}
+.pill .ic{width:11px;height:11px}
+.pill.ok{background:#e7f4eb;color:#17603e}
+.pill.warn{background:#fdf3e0;color:#8a5a00}
+.pill.draft{background:#efebfc;color:#4b3aa8}
+.actions{margin-left:auto;display:flex;align-items:center;gap:6px;flex:none}
+.btn{height:28px;padding:0 10px;border-radius:7px;border:.5px solid rgba(60,60,67,.2);background:#fff;color:#16171d;
+  font-size:11.5px;font-weight:550;display:inline-flex;align-items:center;gap:5px;font-family:inherit;white-space:nowrap}
+.btn .ic{width:13px;height:13px}
+.btn.primary{background:#5f4bc8;border-color:#5f4bc8;color:#fff;box-shadow:0 1px 2px rgba(95,75,200,.26)}
+.btn.primary.dis{background:#c9c6e6;border-color:#c9c6e6;box-shadow:none;color:#fbfaff}
+.btn.ghost{border-color:transparent;background:transparent;color:#5f4bc8;font-weight:600}
+.btn.sm{height:24px;font-size:11px;padding:0 8px}
+.btn.sm .ic{width:12px;height:12px}
+/* 目录 */
+.nav{grid-column:1;grid-row:3;background:#fbfbfd;border-right:.5px solid rgba(60,60,67,.12);display:flex;flex-direction:column;min-height:0}
+.nav-body{flex:1;min-height:0;padding:9px 8px 4px;overflow:hidden}
+.grp{margin-bottom:3px}
+.grp h3{margin:0;height:22px;padding:0 9px;display:flex;align-items:center;justify-content:space-between;
+  font-size:10px;font-weight:650;letter-spacing:.045em;color:#8a8d9c}
+.grp h3 em{font-style:normal;font:600 9.5px/1 ui-monospace,Menlo,monospace;color:#9a9dab}
+.mi{height:30px;display:flex;align-items:center;gap:9px;padding:0 9px;border-radius:7px;font-size:12px;color:#1e2028;position:relative}
+.mi .ic{width:15px;height:15px;color:#767b8b}
+.mi .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mi .n{font:600 10px/1 ui-monospace,Menlo,monospace;color:#8a8d9c;padding:2px 4px;border-radius:4px;background:#eeeef5}
+.mi.on{background:#efebfc;color:#5f4bc8;font-weight:640;box-shadow:inset 0 0 0 .5px #ddd4f6}
+.mi.on .ic{color:#5f4bc8}
+.mi.on .n{background:#e2daf9;color:#4b3aa8}
+.mi.on::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;border-radius:2px;background:#5f4bc8}
+.entry{display:flex;align-items:center;gap:1px}
+.entry .mi{flex:1}
+.caret{width:24px;height:26px;display:grid;place-items:center;color:#8a8d9c;flex:none}
+.caret .ic{width:12px;height:12px;transform:rotate(90deg)}
+.caret.off .ic{transform:none}
+.sub{margin:1px 0 4px 15px;padding:1px 0 1px 6px;border-left:.5px solid rgba(60,60,67,.15)}
+.si{height:26px;display:flex;align-items:center;gap:6px;padding:0 6px;border-radius:6px;font-size:10.5px;color:#4a4d5c}
+.si .ic{width:12px;height:12px;color:#9a9dab}
+.si .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,Menlo,monospace}
+.si .n{font:600 9.5px/1 ui-monospace,Menlo,monospace;color:#9a9dab;width:16px;text-align:right;flex:none}
+.si.on{background:#efebfc;color:#4b3aa8}
+.si.on .ic{color:#5f4bc8}
+.nav-foot{border-top:.5px solid rgba(60,60,67,.12);padding:8px 12px 9px;flex:none}
+.steps3{display:flex;align-items:center;gap:5px;font-size:10px;color:#767b8b}
+.steps3 i{width:4px;height:4px;border-radius:50%;background:#d6d7e0;flex:none}
+.steps3 i.ok{background:#2f9e63}
+.steps3 span{display:flex;align-items:center;gap:4px}
+.steps3 .d{color:#c9cad4;margin:0 1px}
+/* 主区 */
+.main{grid-column:2;grid-row:3;min-height:0;background:#fff;position:relative;padding:17px 20px 0;display:flex;flex-direction:column;overflow:hidden}
+.ph{display:flex;align-items:flex-start;gap:12px;flex:none;margin-bottom:12px}
+.ph h1{margin:0;font-size:19px;font-weight:660;letter-spacing:-.015em}
+.ph p{margin:3px 0 0;font-size:11.5px;color:#626779;line-height:1.5}
+.ph .actions{margin-left:auto;margin-top:1px}
+.ph .stamp{font-size:10.5px;color:#9a9dab;margin-top:5px}
+/* 流程带 */
+.flow{display:flex;border:.5px solid rgba(60,60,67,.13);border-radius:10px;overflow:hidden;background:#fff;flex:none;margin-bottom:12px;
+  box-shadow:0 1px 2px rgba(16,24,40,.03)}
+.fstep{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:34px;padding:0 11px;border-right:.5px solid rgba(60,60,67,.1)}
+.fstep:last-child{border-right:0}
+.fstep .no{width:16px;height:16px;border-radius:50%;border:.5px solid #d6d7e0;display:grid;place-items:center;
+  font:600 9px/1 ui-monospace,Menlo,monospace;color:#9a9dab;flex:none}
+.fstep.done .no{background:#e7f4eb;border-color:#c3e4d0;color:#17603e}
+.fstep.cur{background:#faf9fe}
+.fstep.cur .no{border-color:#c9bef0;color:#5f4bc8;background:#f3f0fd}
+.fstep b{font-size:11.5px;font-weight:620;flex:none}
+.fstep small{font-size:10.5px;color:#8a8d9c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fstep .go{margin-left:auto;color:#5f4bc8;font-size:10.5px;display:flex;align-items:center;gap:1px;flex:none;font-weight:560}
+.fstep .go .ic{width:10px;height:10px}
+/* 指标 */
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;flex:none;margin-bottom:11px}
+.metric{border:.5px solid rgba(60,60,67,.13);border-radius:10px;background:#fff;padding:8px 12px 9px;position:relative;
+  box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.metric .l{display:flex;align-items:center;gap:5px;font-size:10px;color:#8a8d9c}
+.metric .l .ic{width:12px;height:12px;color:#9a9dab}
+.metric b{display:block;margin-top:3px;font-size:23px;font-weight:650;letter-spacing:-.025em;line-height:1.1;font-variant-numeric:tabular-nums}
+.metric small{display:block;margin-top:3px;font-size:10.5px;color:#8a8d9c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.metric .cv{position:absolute;right:9px;top:10px;color:#c3c5d0}
+.metric .cv .ic{width:11px;height:11px}
+.metric.stat b{font-size:19px;letter-spacing:-.01em;display:flex;align-items:center;gap:6px;margin-top:4px}
+.metric.stat b i{width:6px;height:6px;border-radius:50%;background:#2f9e63;flex:none}
+/* 卡片 */
+.card{border:.5px solid rgba(60,60,67,.13);border-radius:11px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04);overflow:hidden}
+.card-h{height:34px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:.5px solid rgba(60,60,67,.1);flex:none}
+.card-h h2{margin:0;font-size:12px;font-weight:630;display:flex;align-items:center;gap:6px}
+.card-h h2 .ic{width:13px;height:13px;color:#8a8d9c}
+.card-h small{font-size:10.5px;color:#8a8d9c;font-weight:500}
+.card-h .r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.card-foot{height:30px;display:flex;align-items:center;gap:6px;padding:0 12px;font-size:10.5px;color:#8a8d9c;
+  border-top:.5px solid rgba(60,60,67,.08);background:#fcfcfd;flex:none}
+.card-foot .r{margin-left:auto}
+/* 表格 */
+.tbl{width:100%;border-collapse:collapse;table-layout:fixed}
+.tbl th{height:27px;text-align:left;padding:0 8px;font-size:10px;font-weight:600;color:#8a8d9c;
+  background:#fbfbfd;border-bottom:.5px solid rgba(60,60,67,.1);white-space:nowrap}
+.tbl td{height:37px;padding:0 8px;font-size:11.5px;border-bottom:.5px solid rgba(60,60,67,.07);color:#2c2e38;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .nmcell{display:flex;align-items:center;gap:7px;min-width:0}
+.tbl .nmcell .ic{width:13px;height:13px;color:#a2a5b2;flex:none}
+.tbl .nm{font-family:ui-monospace,Menlo,monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl .num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl .mut{color:#9a9dab}
+.tbl .op{text-align:right;color:#b0b2be}
+.tbl.roomy td{height:52px}
+.tbl.roomy th{height:30px}
+/* chip */
+.chip{display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border-radius:5px;
+  font-size:9.5px;font-weight:600;background:#f1f1f6;color:#626779;white-space:nowrap}
+.chip .ic{width:10px;height:10px}
+.chip.ds{background:#eceefa;color:#3f3b86}
+.chip.file{background:#f2f2f7;color:#5c6070}
+.chip.ok{background:#e7f4eb;color:#17603e}
+.chip.warn{background:#fdf3e0;color:#8a5a00}
+.chip.line{background:#fff;border:.5px solid rgba(60,60,67,.18);color:#626779}
+/* 两栏 */
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 258px;gap:12px;flex:1;min-height:0}
+.side{display:flex;flex-direction:column;gap:10px;min-height:0}
+/* 提示行 */
+.hintline{display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;margin-bottom:10px;flex:none;
+  border:.5px solid #f0e3c4;background:#fdfaf2;border-radius:8px;font-size:10.5px;color:#7a5b12}
+.hintline .ic{width:13px;height:13px;color:#b98a1a}
+.hintline b{font-weight:650}
+.hintline .r{margin-left:auto;color:#8a6a12;font-weight:600;display:flex;align-items:center;gap:2px}
+.hintline .r .ic{width:10px;height:10px;color:#b98a1a}
+/* pin */
+.pin{position:absolute;width:18px;height:18px;border-radius:50%;background:#d93a2b;color:#fff;text-align:center;
+  font:650 10.5px/18px -apple-system,sans-serif;box-shadow:0 1px 4px rgba(160,30,20,.4),0 0 0 2px rgba(255,255,255,.9);z-index:20}
+/* ---------- 问题卡 ---------- */
+.iss{border:.5px solid rgba(60,60,67,.14);border-radius:12px;background:#fff;padding:13px 16px 12px;margin-bottom:9px;
+  display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.iss .no{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:#fdecea;color:#b42318;
+  font:650 10.5px/1 ui-monospace,Menlo,monospace}
+.iss.p1 .no{background:#fdf3e0;color:#8a5a00}
+.iss.p2 .no{background:#f1f1f6;color:#626779}
+.iss h4{margin:1px 0 7px;font-size:13.5px;font-weight:640;letter-spacing:-.005em}
+.iss .row{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;margin-top:5px;font-size:12.3px;line-height:1.7;color:#3c3f4c}
+.iss .row>div:last-child{max-width:1080px}
+.iss .row .k{font-size:10px;font-weight:650;color:#9a9dab;letter-spacing:.04em;padding-top:3px}
+.iss .row b{color:#16171d;font-weight:620}
+.iss code{font-family:ui-monospace,Menlo,monospace;font-size:11.3px;background:#f4f4f8;padding:1px 4px;border-radius:4px;color:#3f3b86}
+.iss .ok{color:#17603e;font-weight:600}
+/* 表格型说明 */
+table.spec{width:100%;border-collapse:collapse;font-size:12.2px;background:#fff;border:.5px solid rgba(60,60,67,.14);
+  border-radius:10px;overflow:hidden}
+table.spec th{background:#fbfbfd;text-align:left;padding:9px 11px;font-size:10.5px;font-weight:640;color:#8a8d9c;
+  border-bottom:.5px solid rgba(60,60,67,.12);white-space:nowrap}
+table.spec td{padding:9px 11px;border-bottom:.5px solid rgba(60,60,67,.08);vertical-align:top;line-height:1.6;color:#3c3f4c}
+table.spec tr:last-child td{border-bottom:0}
+table.spec td b{color:#16171d;font-weight:620}
+table.spec code{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:#f4f4f8;padding:1px 4px;border-radius:4px}
+.tag{display:inline-block;font:650 9.5px/1.5 ui-monospace,Menlo,monospace;padding:1px 5px;border-radius:4px;background:#fdecea;color:#b42318}
+.tag.p1{background:#fdf3e0;color:#8a5a00}
+.tag.p2{background:#f1f1f6;color:#626779}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.foot{margin-top:60px;padding:22px 0;border-top:.5px solid rgba(60,60,67,.16);font-size:11.5px;color:#6b6f80;display:flex;gap:16px}
+.foot .r{margin-left:auto}
+
+/* ---- 给 codex 的指令块 ---- */
+.promptbox{background:#1b1c22;color:#e6e7ee;border-radius:11px;padding:14px 16px;font:500 11.5px/1.85 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;margin-top:10px;box-shadow:0 1px 2px rgba(16,24,40,.1)}
+.promptbox b{color:#c9bef0;font-weight:600}
+/* ---- 对比图 ---- */
+.cmpwrap{display:grid;grid-template-columns:1fr 1fr;gap:30px;padding:20px;background:#fff;border:.5px solid rgba(60,60,67,.14);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.cmpcol{display:flex;flex-direction:column;gap:9px;min-width:0}
+.cmph{display:flex;align-items:center;gap:8px;font-size:11.5px;color:#4a4d5c}
+.cmpbox{width:100%;height:500px;background:#fbfbfd;border:.5px solid rgba(60,60,67,.14);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.cmpbox .nav-body{padding:9px 8px 4px;flex:1}
+.cmpmarks{display:grid;gap:4px;font-size:10.5px;line-height:1.55;color:#6b6f80}
+.cmpmarks span{background:#fafafc;border-radius:6px;padding:5px 8px;border-left:2px solid #e8b4ad}
+.cmpmarks.good span{border-left-color:#bfe3cd}
+.identity{height:30px;display:flex;align-items:center;gap:6px;padding:0 9px;margin-bottom:9px;border:.5px solid rgba(60,60,67,.14);border-radius:8px;background:#f1f1f6;font-size:11.5px}
+.identity span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.identity .ic{width:13px;height:13px;color:#5f4bc8}
+.identity .ch{width:12px;height:12px;color:#8a8d9c}
+.grp h3 em.bad{color:#b42318}
+.steps3.bad3{align-items:center}
+.steps3.bad3 i{width:38px;height:3px;border-radius:2px;background:#dcdce6}
+.steps3.bad3 span{margin-left:4px}
+.backrow{display:flex;align-items:center;gap:5px;font-size:10px;color:#767b8b;margin-top:4px}
+/* ---- 卡片生长 ---- */
+.card.grow{display:flex;flex-direction:column;min-height:0}
+.tblwrap{flex:1;min-height:0;overflow:hidden;display:flex}
+.tbl.fill{height:100%;flex:1}
+.tbl.fill tbody tr{height:auto}
+/* ---- 侧栏小卡 ---- */
+.side .card{display:flex;flex-direction:column;flex:1;min-height:0}
+.sidebody{padding:11px 12px;flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:4px;min-height:0}
+.sidebody b.big{font-size:13px;font-weight:640;letter-spacing:-.01em}
+.sidebody b.mid{font-size:11.5px;font-weight:600;display:flex;align-items:center;gap:5px}
+.sidebody small{font-size:10.5px;color:#8a8d9c;line-height:1.5}
+.ava-row{display:flex;align-items:center;gap:8px}
+.ava{width:26px;height:26px;border-radius:50%;background:#efebfc;color:#5f4bc8;display:grid;place-items:center;font-size:11px;font-weight:650;flex:none}
+.ava-row b{display:block;font-size:11.5px;font-weight:600;line-height:1.3}
+.ava-row small{display:block;font-size:10px;color:#8a8d9c}
+.gd{width:6px;height:6px;border-radius:50%;background:#2f9e63;flex:none}
+.gd.amber{background:#c98a1a}
+/* ---- 底部入口条 ---- */
+.nextbar{display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;border:.5px solid rgba(60,60,67,.13);border-radius:11px;background:#fcfcfd;flex:none}
+.icwrap{width:26px;height:26px;border-radius:8px;background:#efebfc;display:grid;place-items:center;color:#5f4bc8;flex:none}
+.icwrap .ic{width:13px;height:13px}
+.nextbar b{display:block;font-size:11.5px;font-weight:620}
+.nextbar small{display:block;font-size:10.5px;color:#8a8d9c;margin-top:1px}
+.nextbar .btn{margin-left:auto}
+/* ---- 连接条 / 导入行 / 工具行 ---- */
+.connbar{display:flex;align-items:center;gap:9px;height:44px;padding:0 12px;border:.5px solid rgba(60,60,67,.13);border-radius:10px;background:#fff;flex:none;margin-bottom:9px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
+.connbar .ico{width:26px;height:26px;border-radius:8px;background:#eef0fb;color:#3f3b86;display:grid;place-items:center;flex:none}
+.connbar .ico .ic{width:13px;height:13px}
+.connbar b{font-size:11.5px;font-weight:630;display:flex;align-items:center;gap:6px}
+.connbar small{display:block;font-size:10.5px;color:#8a8d9c;margin-top:1px}
+.connbar .r{margin-left:auto;display:flex;gap:6px}
+.importrow{display:flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:.5px solid rgba(60,60,67,.12);border-radius:9px;background:#fcfcfd;flex:none;margin-bottom:9px;font-size:10.5px;color:#6b6f80}
+.importrow b{font-size:11px;font-weight:600;color:#3c3f4c}
+.importrow .r{margin-left:auto;color:#5f4bc8;font-weight:560;display:flex;align-items:center;gap:2px}
+.toolrow{display:flex;align-items:center;gap:8px;flex:none;margin-bottom:9px}
+.search{width:250px;height:30px;display:flex;align-items:center;gap:7px;padding:0 10px;border:.5px solid rgba(60,60,67,.16);border-radius:8px;background:#fff;font-size:11px;color:#9a9dab}
+.search .ic{width:13px;height:13px}
+.toolrow .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+/* ---- 添加数据双入口 ---- */
+.addrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;flex:none}
+.addcard{display:flex;align-items:center;gap:9px;padding:10px 12px;border:.5px dashed rgba(60,60,67,.22);border-radius:10px;background:#fcfcfd;font-size:11px;color:#4a4d5c}
+.addcard .ic{width:15px;height:15px;color:#8a8d9c}
+.addcard b{display:block;font-size:11.5px;font-weight:600;color:#16171d}
+.addcard small{display:block;font-size:10px;color:#9a9dab;margin-top:1px}
+.addcard .r{margin-left:auto;color:#5f4bc8;font-weight:600;font-size:10.5px}
+/* ---- 表详情 ---- */
+.tabs{display:flex;align-items:center;gap:2px;height:34px;border-bottom:.5px solid rgba(60,60,67,.12);flex:none;margin-bottom:0}
+.tabs .tb{height:34px;padding:0 10px;display:flex;align-items:center;gap:5px;font-size:11.5px;color:#626779;position:relative;border-radius:7px 7px 0 0}
+.tabs .tb.on{color:#16171d;font-weight:620}
+.tabs .tb.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-.5px;height:2px;border-radius:2px;background:#5f4bc8}
+.tabs .tb .n{font:600 9.5px/1 ui-monospace,Menlo,monospace;color:#8a8d9c;background:#f1f1f6;padding:1px 4px;border-radius:4px}
+.tabs .r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.tgl{display:flex;align-items:center;gap:5px;font-size:10.5px;color:#626779}
+.tgl i{width:22px;height:13px;border-radius:7px;background:#dcdde6;position:relative;flex:none}
+.tgl i::after{content:"";position:absolute;left:1.5px;top:1.5px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.tgl.on i{background:#2f9e63}
+.tgl.on i::after{left:auto;right:1.5px}
+.scrollx{overflow:hidden;position:relative}
+.scrollx::after{content:"";position:absolute;right:0;top:0;bottom:0;width:36px;background:linear-gradient(90deg,rgba(255,255,255,0),#fff 70%);pointer-events:none}
+.tbl.sticky td:first-child,.tbl.sticky th:first-child{position:sticky;left:0;background:#fff;z-index:2;box-shadow:1px 0 0 rgba(60,60,67,.08)}
+.tbl.sticky th:first-child{background:#fbfbfd}
+.tbl.compact td{height:31px;font-size:11px}
+.tbl.compact th{font-size:9.5px;height:25px}
+.tbl .thl{display:flex;align-items:center;gap:3px}
+.tbl .thl .ic{width:9px;height:9px;color:#c3c5d0}
+/* ---- 业务规则 ---- */
+.split{display:grid;grid-template-columns:minmax(0,1fr) 322px;flex:1;min-height:0;margin:0 -20px;border-top:.5px solid rgba(60,60,67,.1)}
+.split>.left{min-width:0;display:flex;flex-direction:column;padding:12px 16px 0;overflow:hidden}
+.split>.right{min-width:0;border-left:.5px solid rgba(60,60,67,.12);display:flex;flex-direction:column;background:#fcfcfd;overflow:hidden}
+.rule-h{display:flex;align-items:center;gap:8px;height:36px;flex:none;border-bottom:.5px solid rgba(60,60,67,.09);margin:0 -12px;padding:0 12px;background:#fbfbfd}
+.rule-g{height:26px;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:650;color:#8a8d9c;letter-spacing:.04em;margin-top:6px}
+.rule-g .n{font:600 9.5px/1 ui-monospace;background:#f1f1f6;padding:2px 4px;border-radius:4px;color:#8a8d9c}
+.rr{display:flex;align-items:flex-start;gap:9px;padding:7px 8px;border-radius:8px;position:relative;min-height:52px}
+.rr+.rr{margin-top:1px}
+.rr .pinline{width:0;flex:none}
+.rr .body{flex:1;min-width:0}
+.rr .t{font-size:11.8px;color:#1e2028;line-height:1.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rr .m{font:500 9.8px/1.6 ui-monospace,Menlo,monospace;color:#9a9dab;margin-top:3px;display:flex;align-items:center;gap:5px}
+.rr .m .dot{width:3px;height:3px;border-radius:50%;background:#cfd0da}
+.rr.on{background:#efebfc;box-shadow:inset 0 0 0 .5px #ddd4f6}
+.rr.on .t{color:#3b2f86;font-weight:600}
+.rr.on::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;border-radius:2px;background:#5f4bc8}
+.rr .edit{color:#c3c5d0;margin-left:2px}
+/* 详情栏 */
+.insp-h{padding:11px 13px 10px;border-bottom:.5px solid rgba(60,60,67,.1);background:#fff;flex:none}
+.insp-h .t{font-size:12.5px;font-weight:640;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.insp-h .m{font:500 9.8px/1.5 ui-monospace,Menlo,monospace;color:#9a9dab;margin-top:4px;display:flex;align-items:center;gap:5px}
+.seg{display:flex;gap:2px;padding:2px;background:#f1f1f6;border-radius:7px;font-size:10.5px;flex:none}
+.seg span{padding:3px 8px;border-radius:5px;color:#626779}
+.seg span.on{background:#fff;color:#16171d;font-weight:600;box-shadow:0 1px 2px rgba(16,24,40,.08)}
+.insp-body{padding:11px 13px;flex:1;min-height:0;display:flex;flex-direction:column;gap:9px;overflow:hidden}
+.ta{flex:1;min-height:0;border:.5px solid rgba(60,60,67,.16);border-radius:8px;background:#fff;padding:9px 10px;font-size:11.5px;line-height:1.75;color:#2c2e38}
+.ta .hl{background:#fff6e8;box-shadow:0 0 0 1px #f0dcb4;border-radius:3px}
+.meta-line{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#8a8d9c;flex:none}
+.insp-foot{border-top:.5px solid rgba(60,60,67,.1);padding:9px 13px;display:flex;align-items:center;gap:7px;flex:none;background:#fff}
+.insp-foot .ck{display:flex;align-items:center;gap:5px;font-size:10px;color:#626779}
+.insp-foot .ck i{width:12px;height:12px;border-radius:3px;border:.5px solid rgba(60,60,67,.28);background:#fff;flex:none}
+.insp-foot .r{margin-left:auto;display:flex;gap:6px}
+/* 小节 tab */
+.gtabs{display:flex;align-items:center;gap:2px;height:32px;flex:none;border-bottom:.5px solid rgba(60,60,67,.1);margin:0 -16px 8px;padding:0 16px;overflow:hidden}
+.gtabs .g{height:32px;display:flex;align-items:center;gap:5px;padding:0 9px;font-size:11px;color:#626779;position:relative;white-space:nowrap}
+.gtabs .g .n{font:600 9.5px/1 ui-monospace;color:#9a9dab;background:#f1f1f6;padding:1px 4px;border-radius:4px}
+.gtabs .g.on{color:#16171d;font-weight:640}
+.gtabs .g.on::after{content:"";position:absolute;left:9px;right:9px;bottom:-.5px;height:2px;border-radius:2px;background:#5f4bc8}
+.gtabs .g.on .n{background:#efebfc;color:#4b3aa8}
+.gtabs .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+/* ---- 关系图 ---- */
+.canvas{position:absolute;inset:0;background-color:#fff;background-image:radial-gradient(circle,#dcdee8 .9px,transparent .9px);background-size:16px 16px}
+.mnode{position:absolute;width:212px;border:.5px solid rgba(60,60,67,.22);border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.07),0 6px 16px -8px rgba(16,24,40,.18);overflow:hidden}
+.mnode.dash{border-style:dashed;border-color:rgba(60,60,67,.26)}
+.mnode .hd{height:30px;display:flex;align-items:center;gap:6px;padding:0 9px;border-bottom:.5px solid rgba(60,60,67,.1);background:#fcfcfd}
+.mnode .hd .ic{width:12px;height:12px;color:#8a8d9c}
+.mnode .hd b{font:600 10.5px/1.2 ui-monospace,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.mnode .bd{padding:7px 9px 8px}
+.mnode .fld{display:flex;align-items:center;gap:5px;font:500 9.5px/1.7 ui-monospace,Menlo,monospace;color:#626779}
+.mnode .fld .k{width:9px;height:9px;border-radius:2px;background:#efebfc;border:.5px solid #d8cff5;flex:none}
+.mnode .ft{height:22px;display:flex;align-items:center;gap:4px;padding:0 9px;border-top:.5px solid rgba(60,60,67,.08);font-size:9px;color:#9a9dab;background:#fcfcfd}
+.guide{position:absolute;left:50%;top:64px;transform:translateX(-50%);width:460px;background:#fff;border:.5px solid rgba(60,60,67,.16);border-radius:12px;box-shadow:0 2px 6px rgba(16,24,40,.06),0 18px 40px -18px rgba(16,24,40,.25);padding:14px 16px}
+.guide h4{margin:0;font-size:13px;font-weight:650;display:flex;align-items:center;gap:7px}
+.guide p{margin:6px 0 0;font-size:11px;line-height:1.65;color:#626779}
+.guide .chips{display:flex;gap:5px;margin-top:9px;flex-wrap:wrap}
+.guide .acts{display:flex;gap:7px;margin-top:11px}
+.guide .acts .btn{height:26px;font-size:11px}
+.toolbar{position:absolute;right:14px;bottom:12px;display:flex;align-items:center;gap:2px;height:30px;padding:0 3px;background:#fff;border:.5px solid rgba(60,60,67,.16);border-radius:8px;box-shadow:0 1px 3px rgba(16,24,40,.1);font-size:10px;color:#626779}
+.toolbar span{padding:0 7px;display:flex;align-items:center;height:24px;border-radius:5px}
+.toolbar span.on{background:#f1f1f6}
+.toolbar .ic{width:12px;height:12px}
+.objbtn{position:absolute;left:14px;top:12px;display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;background:#fff;border:.5px solid rgba(60,60,67,.16);border-radius:8px;font-size:11px;color:#3c3f4c;box-shadow:0 1px 2px rgba(16,24,40,.06)}
+.objbtn .ic{width:13px;height:13px;color:#8a8d9c}
+/* ---- 问数 ---- */
+.steps4{display:flex;align-items:center;gap:0;flex:none;margin-bottom:14px}
+.steps4 .s{display:flex;align-items:center;gap:7px;font-size:11px;color:#9a9dab}
+.steps4 .s b{font-weight:600}
+.steps4 .s .no{width:18px;height:18px;border-radius:50%;border:.5px solid #d6d7e0;display:grid;place-items:center;font:600 9px/1 ui-monospace;color:#9a9dab}
+.steps4 .s.on{color:#16171d}
+.steps4 .s.on .no{background:#5f4bc8;border-color:#5f4bc8;color:#fff}
+.steps4 .s.done .no{background:#e7f4eb;border-color:#c3e4d0;color:#17603e}
+.steps4 .ln{width:34px;height:1px;background:#e2e3ea;margin:0 9px;flex:none}
+.bigcard{border:.5px solid rgba(60,60,67,.14);border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.05);overflow:hidden;display:flex;flex-direction:column}
+.bigcard .h{height:34px;display:flex;align-items:center;gap:8px;padding:0 13px;border-bottom:.5px solid rgba(60,60,67,.1)}
+.bigcard .h b{font-size:11.5px;font-weight:620}
+.bigcard .h .r{margin-left:auto;font-size:10px;color:#9a9dab}
+.bigcard .ta2{height:132px;padding:11px 13px;font-size:11.5px;color:#b0b2be;line-height:1.7}
+.bigcard .f{height:42px;display:flex;align-items:center;gap:8px;padding:0 12px;border-top:.5px solid rgba(60,60,67,.08);background:#fcfcfd}
+.bigcard .f .c{font:600 10px/1 ui-monospace;color:#9a9dab}
+.bigcard .f .r{margin-left:auto}
+.sug{display:flex;align-items:flex-start;gap:7px;padding:8px 9px;border:.5px solid rgba(60,60,67,.1);border-radius:8px;background:#fff;font-size:10.5px;line-height:1.55;color:#3c3f4c}
+.sug+.sug{margin-top:6px}
+.sug .ic{width:12px;height:12px;color:#5f4bc8;margin-top:1px}
+/* ---- 公共视图 ---- */
+.vrow{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border-radius:8px;border:.5px solid transparent}
+.vrow.on{background:#efebfc;border-color:#ddd4f6}
+.vrow .ic{width:14px;height:14px;color:#8a8d9c;margin-top:1px}
+.vrow .b{flex:1;min-width:0}
+.vrow .t{font-size:11.8px;font-weight:600;line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.vrow .m{font-size:10px;color:#9a9dab;margin-top:3px;display:flex;align-items:center;gap:5px}
+.vrow.on .t{color:#3b2f86}
+.kv{display:grid;grid-template-columns:64px minmax(0,1fr);gap:6px 10px;font-size:10.5px}
+.kv .k{color:#9a9dab}
+.kv .v{color:#3c3f4c;line-height:1.55}
+.warnbox{border:.5px solid #f0dcb4;background:#fffaf1;border-radius:8px;padding:8px 10px;font-size:10px;line-height:1.6;color:#7a5b12}
+.warnbox b{color:#5c4409}
+/* ---- 双联 ---- */
+.dual{display:flex;gap:14px}
+.board.half{width:673px;height:600px;grid-template-columns:minmax(0,1fr);grid-template-rows:28px 52px minmax(0,1fr)}
+.board.half>.top{grid-column:1}
+.board.half>.main{grid-column:1;padding:15px 16px 0}
+.board.half .ph h1{font-size:17px}
+/* ---- 改动清单 ---- */
+.files{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.filecard{border:.5px solid rgba(60,60,67,.13);border-radius:9px;background:#fff;padding:9px 11px;font-size:11px}
+.filecard code{display:block;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#3f3b86;margin-bottom:4px;word-break:break-all}
+.filecard span{color:#626779;line-height:1.55;display:block}
+</style>
+<style>
+
+.issues{display:grid;gap:10px}
+.issue{border:.5px solid rgba(60,60,67,.13);border-radius:10px;padding:11px 13px 12px;background:#fff}
+.issue h4{margin:0 0 6px;font-size:12.6px;font-weight:640;letter-spacing:-.005em}
+.issue .row{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;margin-top:4px;font-size:12.2px;line-height:1.72;color:#3c3f4c}
+.issue .row .k{font-size:10.6px;color:#8a8d9c;padding-top:2px}
+.qt.tight th,.qt.tight td{padding-left:6px;padding-right:6px}
+.qt.tight .st{font-size:8.6px;padding:1px 4px}
+
+
+/* ===== 第二轮追加 ===== */
+.vtab{width:100%;border-collapse:collapse;font-size:12.3px}
+.vtab th{text-align:left;font:600 10.3px/1.4 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#8a8d9c;letter-spacing:.04em;padding:8px 10px;border-bottom:.5px solid rgba(60,60,67,.14);background:#fbfbfd}
+.vtab td{padding:9px 10px;border-bottom:.5px solid rgba(60,60,67,.07);vertical-align:top;line-height:1.6;color:#3c3f4c}
+.vtab tr:last-child td{border-bottom:0}
+.vtab td:first-child{font:600 11px/1.5 ui-monospace,Menlo,monospace;color:#3b2f86;white-space:nowrap}
+.r-ok{color:#17603e;font-weight:620}
+.r-part{color:#8a5a00;font-weight:620}
+.r-bad{color:#b42318;font-weight:620}
+.r-skip{color:#8a8d9c;font-weight:600}
+.board.qa{width:1180px;height:762px;grid-template-columns:212px minmax(0,1fr);grid-template-rows:50px minmax(0,1fr)}
+.board.qa>.topbar{grid-column:1/-1;grid-row:1}
+.board.qa>.nav{grid-column:1;grid-row:2}
+.board.qa>.main{grid-column:2;grid-row:2;position:relative}
+.board.qa .main{padding:16px 18px 0}
+.board.qa .nav-title{display:none}
+.board.qa .metric b{font-size:22px}
+.board.qa .metric{padding:11px 12px 10px;min-height:70px}
+.board.qa .side .card{min-height:96px}
+.board.qa .side .card .sb{padding:9px 11px;display:flex;flex-direction:column;height:100%}
+.board.qa .side .card .sb .bt{margin-top:auto}
+.board.qa .flow{gap:0}
+.board.qa .flow .fstep{padding:9px 12px}
+.board.dbl{width:576px;height:640px;grid-template-columns:minmax(0,1fr);grid-template-rows:46px minmax(0,1fr)}
+.board.dbl>.topbar{grid-column:1}
+.board.dbl>.main{grid-column:1;padding:13px 14px 0}
+.board.dbl .ph h1{font-size:16px}
+.board.dbl .ph p{font-size:10px}
+.rulebox{display:grid;grid-template-columns:minmax(0,1fr) 301px;flex:1;min-height:0;margin:0 -15px;border-top:.5px solid rgba(60,60,67,.1)}
+.rulebox>.ls{display:flex;flex-direction:column;min-width:0;padding:8px 12px 0;overflow:hidden}
+.rulebox>.rs{border-left:.5px solid rgba(60,60,67,.12);background:#fcfcfd;display:flex;flex-direction:column;min-width:0}
+.rh{display:flex;align-items:center;gap:7px;height:30px;flex:none;border-bottom:.5px solid rgba(60,60,67,.08);margin:0 -12px;padding:0 12px;background:#fbfbfd;font:650 9.6px/1 -apple-system;letter-spacing:.04em;color:#8a8d9c}
+.rline{display:flex;align-items:flex-start;gap:8px;padding:6px 7px;min-height:52px;border-radius:7px;position:relative}
+.rline+.rline{margin-top:1px}
+.rline .tt{font-size:11.6px;line-height:1.45;color:#1e2028;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rline .mm{font:500 9.6px/1.6 ui-monospace,Menlo,monospace;color:#9a9dab;margin-top:3px}
+.rline.on{background:#efebfc;box-shadow:inset 0 0 0 .5px #ddd4f6}
+.rline.on::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;border-radius:2px;background:#5f4bc8}
+.rline.on .tt{color:#3b2f86;font-weight:600}
+.rg{height:24px;display:flex;align-items:center;gap:6px;font:650 9.6px/1 -apple-system;color:#8a8d9c;margin-top:5px;position:sticky;top:0;background:#fff;z-index:2}
+.rg .n{font:600 9.2px/1 ui-monospace;background:#f1f1f6;padding:2px 4px;border-radius:4px}
+.tabs6{display:flex;align-items:center;gap:1px;height:30px;flex:none;border-bottom:.5px solid rgba(60,60,67,.1);margin:0 -15px 0;padding:0 18px;overflow:hidden}
+.tabs6 .t{height:30px;display:flex;align-items:center;gap:4px;padding:0 8px;font-size:10.6px;color:#626779;position:relative;white-space:nowrap}
+.tabs6 .t .n{font:600 9.2px/1 ui-monospace;color:#9a9dab;background:#f1f1f6;padding:1px 3px;border-radius:3px}
+.tabs6 .t.on{color:#16171d;font-weight:640}
+.tabs6 .t.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-.5px;height:2px;border-radius:2px;background:#5f4bc8}
+.tabs6 .t.z{opacity:.45}
+.ipane{display:flex;flex-direction:column;height:100%;min-height:0}
+.ipane .ih{padding:10px 12px 8px;border-bottom:.5px solid rgba(60,60,67,.09);background:#fff;flex:none}
+.ipane .ih .t{font-size:12px;font-weight:640;line-height:1.42;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ipane .ih .m{font:500 9.4px/1.5 ui-monospace;color:#9a9dab;margin-top:3px}
+.ipane .ib{padding:9px 12px;flex:1;min-height:0;display:flex;flex-direction:column;gap:7px;overflow:hidden}
+.ipane .ta2{flex:1;min-height:0;border:.5px solid rgba(60,60,67,.15);border-radius:7px;background:#fff;padding:8px 9px;font-size:11px;line-height:1.8;color:#2c2e38;overflow:hidden}
+.ipane .if{border-top:.5px solid rgba(60,60,67,.09);padding:8px 12px;display:flex;gap:6px;align-items:center;flex:none;background:#fff}
+.ipane .if .btn:last-child{margin-left:auto}
+.mnode2{position:absolute;width:206px;border:.5px solid rgba(60,60,67,.2);border-radius:9px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.06),0 5px 14px -8px rgba(16,24,40,.16);overflow:hidden}
+.mnode2.dash{border-style:dashed;border-color:rgba(201,138,26,.45)}
+.mnode2 .hd{height:26px;display:flex;align-items:center;gap:5px;padding:0 8px;border-bottom:.5px solid rgba(60,60,67,.08);background:#fcfcfd}
+.mnode2 .hd b{font:600 9.8px/1.2 ui-monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.mnode2 .ft{height:20px;display:flex;align-items:center;padding:0 8px;border-top:.5px solid rgba(60,60,67,.07);font-size:8.8px;color:#a06a12;background:#fffdf8}
+.mnode2 .ft.ok{color:#17603e;background:#f7fcf9}
+</style>
+<style>.fig .board{margin:0 auto}.issues{display:grid;gap:10px}</style>
+<style>
+.board.qb{width:1180px;height:762px;display:grid;grid-template-columns:212px minmax(0,1fr);grid-template-rows:48px minmax(0,1fr);background:#fff;border:.5px solid rgba(60,60,67,.14);border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.05),0 20px 44px -26px rgba(16,24,40,.22);position:relative}
+.board.qb>.qtop{grid-column:1/-1;grid-row:1}
+.board.qb>.qnav{grid-column:1;grid-row:2}
+.board.qb>.qm{grid-column:2;grid-row:2}
+.board.qb.dbl{width:576px;height:600px;grid-template-columns:minmax(0,1fr);grid-template-rows:44px minmax(0,1fr)}
+.board.qb.dbl>.qtop{grid-column:1}
+.board.qb.dbl>.qnav{display:none}
+.board.qb.dbl>.qm{grid-column:1}
+.qtop{display:flex;align-items:center;gap:7px;padding:0 13px;border-bottom:.5px solid rgba(60,60,67,.1);background:#fff}
+.qtop .bc{display:flex;align-items:center;gap:5px;font-size:11.2px;color:#6b6f80;white-space:nowrap}
+.qtop .bc .ic{width:12px;height:12px;color:#8a8d9c}
+.qtop .bc b{font-weight:600;color:#16171d}
+.qtop .bc .sp{color:#c3c5d0}
+.qtop .r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.qtop .r .btn{height:24px;font-size:10.6px;padding:0 9px}
+.qnav{background:#fbfbfd;border-right:.5px solid rgba(60,60,67,.1);padding:9px 7px;display:flex;flex-direction:column;gap:11px;overflow:hidden}
+.qnav .g{display:flex;flex-direction:column;gap:1px}
+.qnav .gt{font:650 9.2px/1 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#9a9dab;letter-spacing:.04em;padding:4px 8px 4px}
+.qnav .it{display:flex;align-items:center;gap:7px;height:26px;padding:0 8px;border-radius:6px;font-size:11.3px;color:#3c3f4c;white-space:nowrap}
+.qnav .it .ic{width:13px;height:13px;color:#8a8d9c;flex:none}
+.qnav .it.on{background:#efebfc;color:#3b2f86;font-weight:600}
+.qnav .it.on .ic{color:#5f4bc8}
+.qnav .it .n{margin-left:auto;font:600 9.4px/1 ui-monospace,Menlo,monospace;color:#9a9dab;background:#f1f1f6;padding:2px 4px;border-radius:4px}
+.qm{padding:13px 15px 0;display:flex;flex-direction:column;min-height:0;position:relative;overflow:hidden}
+.qm .ph{display:flex;align-items:flex-start;gap:8px;margin-bottom:11px;flex:none}
+.qm .ph h1{font-size:19px;font-weight:660;letter-spacing:-.015em;margin:0}
+.qm .ph p{font-size:10.6px;color:#8a8d9c;margin:3px 0 0}
+.qm .ph .r{margin-left:auto;display:flex;gap:5px}
+.qm .ph .r .btn{height:24px;font-size:10.6px;padding:0 9px}
+.flow3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:.5px solid rgba(60,60,67,.13);border-radius:10px;background:#fff;margin-bottom:11px;flex:none;overflow:hidden}
+.flow3 .fs{display:flex;align-items:center;gap:8px;padding:9px 11px;border-right:.5px solid rgba(60,60,67,.09);min-width:0}
+.flow3 .fs:last-child{border-right:0}
+.flow3 .fs .no{width:19px;height:19px;border-radius:50%;display:grid;place-items:center;flex:none;font:600 9px/1 ui-monospace;background:#e7f4eb;color:#17603e;border:.5px solid #c3e4d0}
+.flow3 .fs.cur .no{background:#5f4bc8;color:#fff;border-color:#5f4bc8}
+.flow3 .fs .b{font-size:11.3px;font-weight:620;line-height:1.3}
+.flow3 .fs .s{font-size:10px;color:#8a8d9c;margin-top:1px}
+.flow3 .fs .go{margin-left:auto;font-size:10px;color:#5f4bc8;display:flex;align-items:center;gap:2px;flex:none}
+.flow3 .fs .go .ic{width:10px;height:10px}
+.m4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:11px;flex:none}
+.m4 .metric{border:.5px solid rgba(60,60,67,.13);border-radius:10px;background:#fff;padding:9px 11px 9px;min-height:68px;display:flex;flex-direction:column;position:relative}
+.m4 .metric .l{display:flex;align-items:center;gap:5px;font-size:10.2px;color:#6b6f80}
+.m4 .metric .l .ic{width:11px;height:11px;color:#9a9dab}
+.m4 .metric b{font-size:22px;font-weight:650;letter-spacing:-.02em;margin-top:2px;line-height:1.1}
+.m4 .metric small{font-size:9.6px;color:#9a9dab;margin-top:2px}
+.m4 .metric .cv{position:absolute;right:9px;top:9px;color:#c3c5d0}
+.m4 .metric .cv .ic{width:10px;height:10px}
+.m4 .metric.stat b{font-size:14px;display:flex;align-items:center;gap:5px;letter-spacing:0;margin-top:5px}
+.m4 .metric.stat b i{width:6px;height:6px;border-radius:50%;background:#2f9e63;flex:none}
+.ov{display:grid;grid-template-columns:minmax(0,1fr) 292px;gap:11px;flex:1;min-height:0;overflow:hidden;align-items:start}
+.ov .card{border:.5px solid rgba(60,60,67,.13);border-radius:11px;background:#fff;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.ov .card>.ch{display:flex;align-items:center;gap:6px;padding:9px 11px 8px;font-size:11.2px;font-weight:620;flex:none}
+.ov .card>.ch .n{font:600 9.4px/1 ui-monospace;color:#8a8d9c;background:#f1f1f6;padding:2px 4px;border-radius:4px}
+.ov .card>.ch .r{margin-left:auto;font-size:10px;color:#5f4bc8;font-weight:560}
+.ov .side{display:flex;flex-direction:column;gap:8px;min-height:0}
+.ov .side .card{flex:none;height:96px}
+.ov .side .card>.sb{padding:9px 11px;display:flex;flex-direction:column;height:100%;min-height:0}
+.ov .side .card .t{font-size:11px;font-weight:620;display:flex;align-items:center;gap:5px}
+.ov .side .card .t .ic{width:11px;height:11px;color:#8a8d9c}
+.ov .side .card .d{font-size:10px;color:#8a8d9c;line-height:1.5;margin-top:3px}
+.ov .side .card .bt{margin-top:auto;font-size:9.8px;color:#5f4bc8;display:flex;align-items:center;gap:2px}
+.qt{border-collapse:collapse;width:100%;table-layout:fixed}
+.qt th{text-align:left;font:600 9.4px/1.3 -apple-system;color:#8a8d9c;padding:5px 9px;border-bottom:.5px solid rgba(60,60,67,.1);background:#fbfbfd}
+.qt td{padding:0 9px;height:29px;font-size:10.6px;border-bottom:.5px solid rgba(60,60,67,.06);color:#3c3f4c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qt td .mono{font:500 10px/1 ui-monospace,Menlo,monospace}
+.st{display:inline-flex;align-items:center;font-size:9.4px;padding:1px 5px;border-radius:4px}
+.st.ok{background:#f4f4f7;color:#8a8d9c}
+.st.warn{background:#fff6e8;color:#8a5a00;box-shadow:inset 0 0 0 .5px #f0dcb4}
+.qt .op{color:#5f4bc8;font-weight:560}
+.qt tfoot td{height:26px;font-size:9.4px;color:#9a9dab;background:#fcfcfd}
+.dblwrap{display:flex;gap:14px}
+.rl{display:flex;align-items:flex-start;gap:7px;padding:6px 6px;min-height:52px;border-radius:6px;position:relative}
+.rl .b{min-width:0;flex:1}
+.rl .tt{font-size:10.8px;line-height:1.4;color:#1e2028;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rl .mm{font:500 9.2px/1.55 ui-monospace;color:#9a9dab;margin-top:2px}
+.rl.on{background:#efebfc;box-shadow:inset 0 0 0 .5px #ddd4f6}
+.rl.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:#5f4bc8}
+.rl.on .tt{color:#3b2f86;font-weight:600}
+.rlist{flex:1;min-height:0;overflow:hidden;margin:0 -11px;padding:0 11px}
+.rgt{height:22px;display:flex;align-items:center;gap:5px;font:650 9.2px/1 -apple-system;color:#8a8d9c;position:sticky;top:0;background:#fff;z-index:2}
+.rgt .n{font:600 9px/1 ui-monospace;background:#f1f1f6;padding:2px 4px;border-radius:3px}
+.cvwrap{position:relative;flex:1;min-height:0;border-radius:8px;overflow:hidden;background:#fff}
+.cvwrap .dot{position:absolute;inset:0;background-image:radial-gradient(circle,#dcdee8 .9px,transparent .9px);background-size:16px 16px}
+.mn{position:absolute;width:206px;border-radius:9px;background:#fff;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.06),0 6px 16px -9px rgba(16,24,40,.18)}
+.mn.un{border:.5px dashed rgba(201,138,26,.5)}
+.mn .h{height:25px;display:flex;align-items:center;gap:5px;padding:0 8px;border-bottom:.5px solid rgba(60,60,67,.08);background:#fffdf8}
+.mn .h b{font:600 9.4px/1.2 ui-monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.mn .h .ic{width:10px;height:10px;color:#c98a1a;flex:none}
+.mn .bd{padding:5px 8px 6px}
+.mn .f{display:flex;align-items:center;gap:4px;font:500 9px/1.62 ui-monospace;color:#5c6070}
+.mn .f .k{width:7px;height:7px;border-radius:2px;background:#efebfc;border:.5px solid #d8cff5;flex:none}
+.mn .f .ty{margin-left:auto;font-size:7.6px;color:#b0b2be}
+.mn .ft{height:19px;display:flex;align-items:center;padding:0 8px;font-size:8.4px;color:#a06a12;background:#fffdf8;border-top:.5px solid rgba(201,138,26,.12)}
+</style>
+
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="s-book" viewBox="0 0 24 24"><path d="M4.5 5.2A1.7 1.7 0 0 1 6.2 3.5H19v15.7H6.6a2.1 2.1 0 0 0-2.1 2.1z"/><path d="M4.5 21.3a2.1 2.1 0 0 1 2.1-2.1H19v2.1"/></symbol>
+  <symbol id="s-graph" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="6.2" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M8.2 7.4 15.8 6.6M7.1 9.1 11 15.9M16.9 8.1 13 15.9"/></symbol>
+  <symbol id="s-rules" viewBox="0 0 24 24"><path d="M5 4.5h14V20H5z"/><path d="M8.4 9h7.2M8.4 12.6h7.2M8.4 16.2h4.2"/></symbol>
+  <symbol id="s-chat" viewBox="0 0 24 24"><path d="M4 5.6h16v10.2H12l-4.6 3.7v-3.7H4z"/></symbol>
+  <symbol id="s-table" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.8"/><path d="M4 9.8h16M10 9.8V19"/></symbol>
+  <symbol id="s-folder" viewBox="0 0 24 24"><path d="M3.5 7.4a1.9 1.9 0 0 1 1.9-1.9h4l2 2h7.2a1.9 1.9 0 0 1 1.9 1.9v7.8a1.9 1.9 0 0 1-1.9 1.9H5.4a1.9 1.9 0 0 1-1.9-1.9z"/></symbol>
+  <symbol id="s-code" viewBox="0 0 24 24"><path d="m9 8.4-4 3.6 4 3.6M15 8.4l4 3.6-4 3.6"/></symbol>
+  <symbol id="s-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="5.8"/><path d="m15.4 15.4 4.1 4.1"/></symbol>
+  <symbol id="s-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="s-chev-r" viewBox="0 0 24 24"><path d="m9.5 6.5 6 5.5-6 5.5"/></symbol>
+  <symbol id="s-chev-d" viewBox="0 0 24 24"><path d="m6.5 9.5 5.5 6 5.5-6"/></symbol>
+  <symbol id="s-check" viewBox="0 0 24 24"><path d="m5.2 12.4 4.4 4.4L18.8 7.4"/></symbol>
+  <symbol id="s-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.3 12.2 2.5 2.5 4.9-5"/></symbol>
+  <symbol id="s-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.7M12 16.1v.1"/></symbol>
+  <symbol id="s-close" viewBox="0 0 24 24"><path d="m6.4 6.4 11.2 11.2M17.6 6.4 6.4 17.6"/></symbol>
+  <symbol id="s-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="18" cy="12" r="1.1"/></symbol>
+  <symbol id="s-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6"/><path d="M12 7.8v4.4l2.9 1.9"/></symbol>
+  <symbol id="s-link" viewBox="0 0 24 24"><path d="M10.2 13.8a3.9 3.9 0 0 0 5.5 0l2.7-2.7a3.9 3.9 0 0 0-5.5-5.5l-1.3 1.3"/><path d="M13.8 10.2a3.9 3.9 0 0 0-5.5 0l-2.7 2.7a3.9 3.9 0 0 0 5.5 5.5l1.3-1.3"/></symbol>
+  <symbol id="s-spark" viewBox="0 0 24 24"><path d="M12 3.6 13.6 9l5.4 1.7-5.4 1.6L12 17.9l-1.6-5.6L5 10.7 10.4 9z"/></symbol>
+  <symbol id="s-upload" viewBox="0 0 24 24"><path d="M12 16.2V4.8m0 0L8.2 8.6M12 4.8l3.8 3.8"/><path d="M5 15.8v2.6A1.6 1.6 0 0 0 6.6 20h10.8a1.6 1.6 0 0 0 1.6-1.6v-2.6"/></symbol>
+  <symbol id="s-doc" viewBox="0 0 24 24"><path d="M7 3.6h7l4 4V20a.4.4 0 0 1-.4.4H7.4A.4.4 0 0 1 7 20z"/><path d="M14 3.6V8h4"/></symbol>
+  <symbol id="s-filter" viewBox="0 0 24 24"><path d="M4 6h16l-6.2 7.2V19l-3.6-1.8v-4z"/></symbol>
+  <symbol id="s-expand" viewBox="0 0 24 24"><path d="M9 4H4v5M15 20h5v-5M4 4l6 6M20 20l-6-6"/></symbol>
+  <symbol id="s-edit" viewBox="0 0 24 24"><path d="M4.2 19.8h4L18.4 9.6l-4-4L4.2 15.8z"/><path d="m13.6 6.4 4 4"/></symbol>
+  <symbol id="s-refresh" viewBox="0 0 24 24"><path d="M19.8 12a7.8 7.8 0 1 1-2.3-5.5M19.8 4.4v4.8h-4.8"/></symbol>
+  <symbol id="s-arrow-r" viewBox="0 0 24 24"><path d="M4.5 12h14M13.5 7l5 5-5 5"/></symbol>
+  <symbol id="s-layers" viewBox="0 0 24 24"><path d="m12 3.4 8 4.4-8 4.4-8-4.4z"/><path d="m4 12 8 4.4 8-4.4M4 16.4 12 20.8l8-4.4"/></symbol>
+  <symbol id="s-menu" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14"/></symbol>
+  <symbol id="s-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.2"/><rect x="13" y="4" width="7" height="7" rx="1.2"/><rect x="4" y="13" width="7" height="7" rx="1.2"/><rect x="13" y="13" width="7" height="7" rx="1.2"/></symbol>
+  <symbol id="s-trash" viewBox="0 0 24 24"><path d="M5.5 7h13M9.5 7V5.4h5V7M7.5 7l.8 12.1h7.4L16.5 7"/></symbol>
+  <symbol id="s-play" viewBox="0 0 24 24"><path d="M8 5.5 18 12 8 18.5z"/></symbol>
+  <symbol id="s-book-open" viewBox="0 0 24 24"><path d="M12 6.5C10.4 5.1 8.3 4.5 4.6 4.5v13.8c3.7 0 5.8.6 7.4 2 1.6-1.4 3.7-2 7.4-2V4.5c-3.7 0-5.8.6-7.4 2z"/><path d="M12 6.5v13.8"/></symbol>
+  <symbol id="s-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7.5" ry="3"/><path d="M4.5 5.5v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/><path d="M4.5 11.5v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/></symbol>
+  <symbol id="s-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.5 3 7.9 7.5 9.5 4.5-1.6 7.5-5 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="s-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+  <symbol id="s-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 5.5a3 3 0 0 1 0 5.8M18 14c2 .8 3.5 2.6 3.5 5"/></symbol>
+  <symbol id="s-user-plus" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M18 8v6M15 11h6"/></symbol>
+  <symbol id="s-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="s-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 1-1 1.8v.3M12 17h.01"/></symbol>
+  <symbol id="s-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.5"/><path d="M11.5 12H21l-2 3M17.5 12v3"/></symbol>
+  <symbol id="s-external" viewBox="0 0 24 24"><path d="M13 5h6v6M19 5l-8 8"/><path d="M18 13.5V19H5V6h5.5"/></symbol>
+  <symbol id="s-chev-l" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7"/></symbol>
+  <symbol id="s-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 4.5v4h4M12 7.5V12l3 2"/></symbol>
+  <symbol id="s-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></symbol>
+  <symbol id="s-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+  <symbol id="s-file-plus" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20H6z"/><path d="M14 3.5v4h4M12 12v5M9.5 14.5h5"/></symbol>
+  <symbol id="s-cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></symbol>
+  <symbol id="s-branch" viewBox="0 0 24 24"><circle cx="7" cy="5" r="2"/><circle cx="7" cy="19" r="2"/><circle cx="17" cy="12" r="2"/><path d="M7 7v10M7 9c0 4 10 0 10 3"/></symbol>
+  <symbol id="s-download" viewBox="0 0 24 24"><path d="M12 4v11M8 11.5l4 4 4-4M5 20h14"/></symbol>
+  <symbol id="s-check-sq" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+</svg>
+<div class="wrap">
+
+<div class="cover">
+  <div class="eyebrow">知识库工作台 · 第二轮</div>
+  <h1>第一轮改完了，还剩下这些</h1>
+  <p class="lede">我把 codex 改完的 11 个界面在本地重新跑了一遍，用同一份真实数据（5 张表 / 33 条规则 / v15）逐屏对照第一轮的验收项。结论是：结构都对了，但有 10 条只做对了一半，还多出 5 个新问题——多数是「改对了形式，没改掉重复」。</p>
+  <div class="metas">
+    <div><b>23 处</b>需要继续改</div>
+    <div><b>11 个</b>界面复核</div>
+    <div><b>10 条</b>只对了一半</div>
+    <div><b>不改</b>路由与接口</div>
+  </div>
+  <div class="toc">
+    <a href="#q0"><span>00</span>第一轮验收结果</a>
+    <a href="#q1"><span>01</span>壳与跨屏 V1–V4</a>
+    <a href="#q2"><span>02</span>概览 V5–V9</a>
+    <a href="#q3"><span>03</span>数据集与表 V10–V12</a>
+    <a href="#q4"><span>04</span>业务规则 V13–V16</a>
+    <a href="#q5"><span>05</span>关系图 V17</a>
+    <a href="#q6"><span>06</span>问数 / 视图 / 资料 V18–V20</a>
+    <a href="#q7"><span>07</span>发布 / 成员 / 设置 V21–V23</a>
+    <a href="#q8"><span>08</span>改动清单与顺序</a>
+  </div>
+</div>
+
+<div class="wrap sec" id="q0">
+  <div class="sec-head"><span class="k">00</span><h2>第一轮验收结果</h2>
+  <p>先给结论：22 条里 10 条通过、10 条部分通过、1 条未通过、1 条按约定跳过。下面这张表你直接对照——通过的不必再看，重点看「部分」和「未通过」那 11 行，它们是第二轮的主体。</p></div>
+
+  <h3 class="sub"><span class="bar"></span>逐条验收</h3>
+  <table class="vtab">
+    <thead><tr><th style="width:52px">编号</th><th style="width:200px">改了什么</th><th style="width:64px">结果</th><th>实测情况</th></tr></thead>
+    <tbody>
+      <tr><td>X1</td><td>删侧栏顶部库名块</td><td class="r-ok">通过</td><td>目录第一行就是「工作区」，侧栏内不再出现库名。</td></tr>
+      <tr><td>X2</td><td>数据集子目录默认折叠</td><td class="r-ok">通过</td><td>默认 10 项；进表详情才展开 5 个子项，短名 + 字段数右对齐，当前表高亮。</td></tr>
+      <tr><td>X3</td><td>去掉底部第二个返回入口</td><td class="r-ok">通过</td><td>面包屑「知识库」前有左箭头，目录底部不再有可点文字。</td></tr>
+      <tr><td>X4</td><td>目录版本号改计数</td><td class="r-part">部分</td><td>v15 从目录里消失了，但「33 条规则」和概览指标卡的「33」撞车——同一个数字在左栏和主区各说一次。<b>V6</b></td></tr>
+      <tr><td>X5</td><td>内容少的页用窄栏</td><td class="r-part">部分</td><td>设置 460、成员 540、问数 540 都收窄了；但发布页末元素「去建模」离底 290px，超出 220 的线。<b>V21</b></td></tr>
+      <tr><td>X6</td><td>标签条层次</td><td class="r-skip">跳过</td><td>那排带 ✕ 的是浏览器原生标签页，前端不可控。同意 codex 记为不适用。</td></tr>
+      <tr><td>O1</td><td>流程条不报数字</td><td class="r-part">部分</td><td>数字确实去掉了。但变成「数据 / 数据已就绪」同词重复，且发布状态在同一屏说了三次。<b>V5</b></td></tr>
+      <tr><td>O2</td><td>第四张卡改状态卡</td><td class="r-ok">通过</td><td>绿点 + 15px「v15 已发布」，与前三张 23px 数字区分开。</td></tr>
+      <tr><td>O3</td><td>业务说明列</td><td class="r-part">部分</td><td>五个绿 chip「12/12…23/23」——5 行全绿，这列又变成零信息，而且数字要用户猜。<b>V7</b></td></tr>
+      <tr><td>O4</td><td>右栏三卡等高</td><td class="r-bad">未通过</td><td>实测 96 / 104 / 108，差 12px；三张卡内部都有 20–30px 空白。<b>V8</b></td></tr>
+      <tr><td>D1</td><td>导入记录压成一行</td><td class="r-ok">通过</td><td>26px，无导入时不占位置。</td></tr>
+      <tr><td>D2</td><td>来源短标签 + 表脚</td><td class="r-ok">通过</td><td>来源变成「数据源」chip；表脚一句说明；表下两个虚线入口都在。</td></tr>
+      <tr><td>D3</td><td>首列固定 + 渐变 + 开关</td><td class="r-part">部分</td><td>「显示字段说明」开关默认关、采样说明一行，都对了；<b>最右列仍被硬切，右侧没有渐变遮罩</b>。<b>V11</b></td></tr>
+      <tr><td>R1</td><td>52px 两行式</td><td class="r-part">部分</td><td>两行结构对了，实测行高 44px；更麻烦的是有 3 条锚点只有 2–8 字（「全国」「月份」）。<b>V14</b></td></tr>
+      <tr><td>R2</td><td>右栏四块 + 两个按钮</td><td class="r-part">部分</td><td>「未命名」没了、按钮两个、checkbox 已省。但右栏只有 240px，正文区 4 行高，底部 70px 空白。<b>V15</b></td></tr>
+      <tr><td>R3</td><td>六个小节下划线导航</td><td class="r-part">部分</td><td>下划线和点击定位都对；指标口径 / 外部编码 / 货币 三个 0 条小节没降透明。<b>V16</b></td></tr>
+      <tr><td>G1</td><td>0 关系引导卡 + 大模型卡</td><td class="r-part">部分</td><td>引导卡和两个动作有了；模型卡实测 140×88，要求 212 宽，未关联也没做虚线边框。<b>V17</b></td></tr>
+      <tr><td>Q1</td><td>四步 + 待处理为主</td><td class="r-ok">通过</td><td>四步进度、待处理列表、示例可填入都在。但示例问的是「足球会员」，这个库里没有足球。<b>V18</b></td></tr>
+      <tr><td>A1</td><td>列表行 + 新建入口</td><td class="r-ok">通过</td><td>卡片网格换成纵向行，底部虚线新建卡在位。标题栏 5 个按钮过载。<b>V19</b></td></tr>
+      <tr><td>P1</td><td>页头发布 + 空态给下一步</td><td class="r-part">部分</td><td>「发布 v16」与标题同行、三个数字卡都对。空态有「去建模」，但它在页底，距离空态 350px。<b>V21</b></td></tr>
+      <tr><td>M1</td><td>无分页 + 权限脚注</td><td class="r-ok">通过</td><td>分页没了，权限说明收成可展开脚注。空态区 270px 偏高。<b>V22</b></td></tr>
+      <tr><td>S1</td><td>460 表单 + 危险区下移</td><td class="r-ok">通过</td><td>输入框 360、右栏 240、删除区在表单之后，三条都对。事实表只列了 1 张。<b>V23</b></td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub"><span class="bar"></span>改对了形式、没改掉重复：5 个新问题</h3>
+  <div class="issues">
+    <div class="issue">
+      <h4>01 顶栏和左侧目录，同一组入口放了两遍</h4>
+      <div class="row"><div class="k">现在</div><div>顶栏右侧「成员与权限」「设置」两个按钮，和左侧「协作与管理」组的两项目录，调的是同一个 <code>select('members')</code> / <code>select('settings')</code>。同一屏两个入口，用户会以为它们是不同页面。</div></div>
+      <div class="row"><div class="k">判断</div><div>这不是遗漏，是第一轮没管顶栏。X1 只删了侧栏那块库名胶囊，没处理顶栏与目录的横向重复。</div></div>
+      <div class="row"><div class="k">对应</div><div><b>V1</b></div></div>
+    </div>
+    <div class="issue">
+      <h4>02 同一个东西两个名字：语义模型 / 语义建模</h4>
+      <div class="row"><div class="k">现在</div><div>左侧目录叫「语义模型」，概览流程条第二段叫「语义建模」。第一段更明显：「数据」+ 副行「数据已就绪」，同一句话说了两遍。</div></div>
+      <div class="row"><div class="k">判断</div><div>术语不统一比排版错误更贵——用户在搜索、在跟同事描述时会用错词。</div></div>
+      <div class="row"><div class="k">对应</div><div><b>V2</b></div></div>
+    </div>
+    <div class="issue">
+      <h4>03 业务规则写「33 条 · 3 个分组」，但 tab 有 6 个</h4>
+      <div class="row"><div class="k">现在</div><div><code>groupsCount = allCounts.size</code>，只数「有规则的小节」，所以显示 3。而六个官方小节是固定契约，tab 上明明白白列了 6 个，其中三个是 0。</div></div>
+      <div class="row"><div class="k">判断</div><div>数字对不上，用户会怀疑规则丢了一半。这类错误在验收里最容易被抓。</div></div>
+      <div class="row"><div class="k">对应</div><div><b>V13</b></div></div>
+    </div>
+    <div class="issue">
+      <h4>04 标题栏被当成工具栏用</h4>
+      <div class="row"><div class="k">现在</div><div>资料页标题栏塞了 8 个控件（搜索、阅读/原始文本、A−/A+、引用到对话、更多、新增文档）；公共视图塞了 5 个（边聊边核对、工程文件、⋯、使用指南、起草）。</div></div>
+      <div class="row"><div class="k">判断</div><div>标题栏应该只放「这一页做什么」，文档级操作应该跟着文档走。</div></div>
+      <div class="row"><div class="k">对应</div><div><b>V19</b> <b>V20</b></div></div>
+    </div>
+    <div class="issue">
+      <h4>05 内容少的页仍然「上边有东西、下边是白的」</h4>
+      <div class="row"><div class="k">现在</div><div>发布页 260px 内容 + 640px 空白，「去建模」在页底；成员页空态 270px；问数页待处理卡 72px + 300px 空白。</div></div>
+      <div class="row"><div class="k">判断</div><div>第一轮把「下一步」放进去了，但放得太远，等于没有占住空白。</div></div>
+      <div class="row"><div class="k">对应</div><div><b>V21</b> <b>V22</b></div></div>
+    </div>
+  </div>
+
+  <h3 class="sub"><span class="bar"></span>怎么用这一稿</h3>
+  <div class="card" style="padding:14px 16px">
+    <div class="row" style="display:grid;grid-template-columns:70px minmax(0,1fr);gap:10px;font-size:12.5px;line-height:1.75">
+      <div style="color:#8a8d9c">只改什么</div><div>仍然是三类：删重复、把「空」换成有用信息、修尺寸。<b>这一轮不新增任何功能</b>，包括不要为了让某块不空而去加图表、加插画、加引用次数。</div>
+      <div style="color:#8a8d9c">优先级</div><div>V1–V4 是壳，先做；V5–V9 概览是入口；V13–V16 收益最大；其余按 08 章顺序。</div>
+      <div style="color:#8a8d9c">验收</div><div>每条都给了可量的数：高度差 ≤ 2px、出现次数 ≤ 1、宽 ≥ 300px。改完在 1440×900 下量，不用评审。</div>
+    </div>
+  </div>
+</div>
+<div class="wrap sec" id="q1"><div class="sec-head"><span class="k">01</span><h2>壳与跨屏：V1–V4</h2><p>这四条改完，每一屏的左侧和顶栏都会变，所以要第一个做。其中 V1 和 V2 是「改对了形式、没改掉重复」的典型：结构没问题，但同一个入口、同一个词出现了两次。</p></div><div class="issues"><div class="iss p0"><div class="no">V1</div><div>
+      <h4>顶栏右侧与左侧目录，同一组入口放了两遍</h4>
+      <div class="row"><div class="k">现在</div><div>顶栏有「成员与权限」「设置」两个按钮，左侧「协作与管理」组也有这两项，代码里调的是同一个 <code>select('members')</code> / <code>select('settings')</code>。同一屏两个入口，用户会以为它们去的地方不一样。</div></div>
+      <div class="row"><div class="k">改成</div><div>顶栏只留 <b>「基于此库提问」</b>（主按钮）和一个 <b>「⋯」</b>，把「复制链接 / 成员与权限 / 设置」收进菜单。成员与设置归左侧目录，顶栏不再重复。</div></div>
+      <div class="row"><div class="k">验收</div><div>顶栏可点元素 ≤ 2 个；「成员与权限」不同时出现在顶栏与目录。</div></div>
+    </div></div><div class="iss p0"><div class="no">V2</div><div>
+      <h4>同一个东西两个名字：语义模型 / 语义建模</h4>
+      <div class="row"><div class="k">现在</div><div>左侧目录叫「语义模型」，概览流程条第二段叫「语义建模」。第一段更直接：主标题「数据」、副行「数据已就绪」——同一个词说了两遍。</div></div>
+      <div class="row"><div class="k">改成</div><div>全站统一为 <b>「语义模型」</b>；流程条三段的副行改成「已就绪 / 已发布 / 已启用」，不再重复主词；第三段删掉「已发布版本可用」。</div></div>
+      <div class="row"><div class="k">验收</div><div>全站搜索「语义建模」0 处；「数据」与「数据已就绪」不再相邻出现。</div></div>
+    </div></div><div class="iss p1"><div class="no">V3</div><div>
+      <h4>目录底部三个词没有状态，只是在重复流程条</h4>
+      <div class="row"><div class="k">现在</div><div>左侧底部一行「● 数据 ● 模型 ● 问数」，三个灰点、三种颜色都一样，既不表达进度也不表达可用性；而顶部流程条已经把这三件事说过一遍。</div></div>
+      <div class="row"><div class="k">改成</div><div><b>删掉这一行。</b> 目录底部留空，或只放不重复的信息（例如「上次发布 11/22」）。要表达状态就让流程条表达，不要做第二次投影。</div></div>
+      <div class="row"><div class="k">验收</div><div>目录底部不出现与流程条重复的三段文字；侧栏高度不变。</div></div>
+    </div></div><div class="iss p1"><div class="no">V4</div><div>
+      <h4>建模六个子页，顶栏动作三页三套</h4>
+      <div class="row"><div class="k">现在</div><div>关系图、业务规则有「模型检查 / 变更与待办 / 建模对话」三个；问数、公共视图、资料、发布只有两个（没有模型检查）；发布页只剩「建模对话」一个。同一个工作台，顶栏每换一页就变一次。</div></div>
+      <div class="row"><div class="k">改成</div><div>统一三个按钮，<b>按页禁用而不是隐藏</b>：发布页禁用「变更与待办」（因为当前就在这一页），问数页禁用「模型检查」并给 tooltip 说明原因。</div></div>
+      <div class="row"><div class="k">验收</div><div>六个建模子页顶栏按钮数量与顺序完全一致；禁用态有 title 说明。</div></div>
+    </div></div></div><div class="fig"><div class="board qb"><div class="qtop"><div class="bc"><svg class="ic"><use href="#s-chev-l"/></svg><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b><span class="pill ok" style="margin-left:4px;font-size:9.4px;padding:2px 6px;border-radius:5px">已发布 v15</span></div><div class="r"><button class="btn">⋯</button><button class="btn da-btn-primary" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8">基于此库提问</button></div></div><aside class="qnav"><div class="g"><div class="gt">工作区</div><div class="it on"><svg class="ic"><use href="#s-grid"/></svg><span>概览</span></div></div><div class="g"><div class="gt">数据</div><div class="it"><svg class="ic"><use href="#s-table"/></svg><span>数据集</span><span class="n">5</span></div></div><div class="g"><div class="gt">语义模型</div><div class="it"><svg class="ic"><use href="#s-graph"/></svg><span>关系图</span></div><div class="it"><svg class="ic"><use href="#s-rules"/></svg><span>业务规则</span></div><div class="it"><svg class="ic"><use href="#s-chat"/></svg><span>问数优化</span></div><div class="it"><svg class="ic"><use href="#s-layers"/></svg><span>公共视图</span></div><div class="it"><svg class="ic"><use href="#s-doc"/></svg><span>资料</span></div><div class="it"><svg class="ic"><use href="#s-upload"/></svg><span>草稿与发布</span></div></div><div class="g"><div class="gt">协作与管理</div><div class="it"><svg class="ic"><use href="#s-shield"/></svg><span>成员与权限</span></div><div class="it"><svg class="ic"><use href="#s-sliders"/></svg><span>设置</span></div></div></aside><div class="qm"><div class="ph"><div><h1>概览</h1><p>线上总部常规分析的本地演练，数据均为模拟。</p></div><div class="r"><button class="btn">编辑说明</button><button class="btn">查看变更</button></div></div><div class="flow3"><div class="fs"><span class="no"><svg class="ic" style="width:8px;height:8px;color:#17603e"><use href="#s-check"/></svg></span><div><div class="b">数据</div><div class="s">已就绪</div></div><span class="go">数据集<svg class="ic"><use href="#s-chev-r"/></svg></span></div><div class="fs"><span class="no"><svg class="ic" style="width:8px;height:8px;color:#17603e"><use href="#s-check"/></svg></span><div><div class="b">语义模型</div><div class="s">已发布</div></div><span class="go">关系图<svg class="ic"><use href="#s-chev-r"/></svg></span></div><div class="fs cur"><span class="no">3</span><div><div class="b">问数</div><div class="s">已启用</div></div><span class="go">去问数<svg class="ic"><use href="#s-chev-r"/></svg></span></div></div><div class="m4"><div class="metric"><div class="l"><svg class="ic"><use href="#s-table"/></svg>数据集</div><b>5</b><small>全部来自数据源关联</small><span class="cv"><svg class="ic"><use href="#s-chev-r"/></svg></span></div><div class="metric"><div class="l"><svg class="ic"><use href="#s-rules"/></svg>业务规则</div><b>33</b><small>供问数理解业务口径</small><span class="cv"><svg class="ic"><use href="#s-chev-r"/></svg></span></div><div class="metric"><div class="l"><svg class="ic"><use href="#s-layers"/></svg>公共视图</div><b>2</b><small>已发布，可在问数中选用</small><span class="cv"><svg class="ic"><use href="#s-chev-r"/></svg></span></div><div class="metric stat"><div class="l"><svg class="ic"><use href="#s-doc"/></svg>发布状态</div><b><i></i>v15 已发布</b><small>2026/11/22 · 问数使用线上版本</small></div></div><div class="ov"><section class="card"><div class="ch">数据集<span class="n">5</span><span class="r">查看全部 ›</span></div><table class="qt"><colgroup><col><col style="width:44px"><col style="width:96px"><col style="width:52px"></colgroup><thead><tr><th>数据集</th><th>字段</th><th>字段说明</th><th></th></tr></thead><tbody><tr><td><span class="mono">sync_hhweb_2026_lzgx_kpi_index_m</span></td><td>12</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_game_pay_user_split_2026_m</span></td><td>17</td><td><span class="st warn">15/17</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_music_order_users_2026_m</span></td><td>19</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_2026_cmread_fee_active_split_m</span></td><td>16</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_video_vip_more_dimension_m</span></td><td>23</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr></tbody><tfoot><tr><td colspan="4">共 5 个数据集 · 外部数据表按需采样，总行数未统计</td></tr></tfoot></table><div style="display:flex;align-items:center;gap:5px;padding:7px 11px;border-top:.5px solid rgba(60,60,67,.07);font-size:9.6px;color:#5f4bc8">＋ 添加数据集 — 上传文件或关联数据表</div></section><div class="side"><section class="card"><div class="sb"><div class="t"><svg class="ic"><use href="#s-upload"/></svg>发布</div><div class="d">暂无待发布变更。</div><div class="bt">草稿与发布 ›</div></div></section><section class="card"><div class="sb"><div class="t"><svg class="ic"><use href="#s-shield"/></svg>成员与权限</div><div class="d">创建者 bob · 你的角色为「管理」。</div><div class="bt">管理成员 ›</div></div></section><section class="card"><div class="sb"><div class="t"><svg class="ic"><use href="#s-database"/></svg>数据源<span class="st" style="margin-left:auto;background:#f0f8f3;color:#17603e">已关联</span></div><div class="d">总部常规分析 · 本地模拟 MySQL · 5 张表</div><div class="bt">检测连接 ›</div></div></section></div></div></div></div><div class="figcap"><b>图 V1</b> 壳改完后的概览：顶栏只剩一个主按钮 + 一个 ⋯；「语义模型」统一；目录底部不再有状态行。「成员与权限」只出现在目录里。</div></div></div><div class="wrap sec" id="q2"><div class="sec-head"><span class="k">02</span><h2>概览：V5–V9</h2><p>概览是每天第一眼看的页，所以它的重复最贵。第一轮把数字从流程条上拿掉了，但「发布」这件事在同一屏仍然说了三到四遍；业务说明列则从「零信息」变成了「全绿零信息」。</p></div><div class="issues"><div class="iss p0"><div class="no">V5</div><div>
+      <h4>发布状态一屏说三遍以上</h4>
+      <div class="row"><div class="k">现在</div><div>顶栏「已发布 v15」→ 流程条第二段「版本已发布」→ 第三段「已发布版本可用」→ 指标卡「v15 已发布」→ 底部条「问数使用线上版本」。同一件事，五个位置。</div></div>
+      <div class="row"><div class="k">改成</div><div>发布状态只保留 <b>顶栏胶囊</b> 和 <b>第四张指标卡</b> 两处。流程条三段只写阶段名和下一步；删掉底部整条入口条，「去问数」并进流程条第三段右侧。</div></div>
+      <div class="row"><div class="k">验收</div><div>概览正文（不含顶栏）「已发布 / v15」≤ 2 次；「问数可用」类表述 ≤ 1 处；页面少一条 48px 的横条。</div></div>
+    </div></div><div class="iss p1"><div class="no">V6</div><div>
+      <h4>目录的「33 条规则」和指标卡的「33」撞车</h4>
+      <div class="row"><div class="k">现在</div><div>第一轮把目录里的 v15 换成了「33 条规则」，但主区第一张卡就是「业务规则 33」。同一个数字在左栏和主区各说一次，等于把 X4 的问题从「版本重复」换成了「数量重复」。</div></div>
+      <div class="row"><div class="k">改成</div><div>目录默认态 <b>不显示纯数字徽标</b>；只在有草稿时显示琥珀色「3 处草稿」——那是状态，不是数量。数量归指标卡。</div></div>
+      <div class="row"><div class="k">验收</div><div>目录默认态无数字徽标（草稿数除外）；搜索「33」在侧栏无结果。</div></div>
+    </div></div><div class="iss p0"><div class="no">V7</div><div>
+      <h4>业务说明列 5 行全绿，又变成零信息</h4>
+      <div class="row"><div class="k">现在</div><div>五个绿色 chip：12/12、17/17、19/19、16/16、23/23。5 行全绿，没有任何一行与其他行不同——这正是第一轮 O3 想解决的「零信息列」。而且「12/12」要用户猜是字段数还是有说明的字段数。</div></div>
+      <div class="row"><div class="k">改成</div><div>全绿时降级为 <b>灰色文字「已覆盖」</b>，不出绿色；只有存在缺项的行才显示琥珀 <code>15/17</code> 并可点。列头从「业务说明」改成 <b>「字段说明」</b>。</div></div>
+      <div class="row"><div class="k">验收</div><div>全绿状态该列不出现绿色；有缺项的行出现琥珀且可点；列头文字为「字段说明」。</div></div>
+    </div></div><div class="iss p0"><div class="no">V8</div><div>
+      <h4>右栏三卡差 12px，卡内还有空白</h4>
+      <div class="row"><div class="k">现在</div><div>实测「发布」96px、「成员与权限」104px、「数据源」108px。三张卡内容量差不多，高度各不相同，且每张卡标题到按钮之间有 20–30px 空白。</div></div>
+      <div class="row"><div class="k">改成</div><div>固定 <b>96px</b> 等高：标题 + 一行信息 + 按钮，<b>按钮贴底</b>（<code>margin-top:auto</code>），不留中间空白。</div></div>
+      <div class="row"><div class="k">验收</div><div>三卡高度差 ≤ 2px；每张卡内垂直空白 ≤ 12px。</div></div>
+    </div></div><div class="iss p1"><div class="no">V9</div><div>
+      <h4>底部入口条与流程条第三段是同一句话</h4>
+      <div class="row"><div class="k">现在</div><div>流程条第三段「问数 · 已发布版本可用」，页面底部又有一条 48px 的「问数已在这个库上启用 · 问数使用线上版本，新的模型改动发布后生效」。</div></div>
+      <div class="row"><div class="k">改成</div><div>删掉底部条，把它唯一的动作 <b>「去问数」</b> 移到流程条第三段右侧（与「数据集 >」「关系图 >」同一位置）。</div></div>
+      <div class="row"><div class="k">验收</div><div>概览内「问数可用 / 已启用」类表述 ≤ 1 处；「去问数」按钮仍在首屏。</div></div>
+    </div></div></div><div class="fig"><div class="board qb" style="height:430px;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)"><div class="qtop" style="display:none"></div><aside class="qnav" style="display:none"></aside><div class="qm" style="padding:16px 16px 0;grid-column:1;grid-row:1"><div class="ov" style="grid-template-columns:minmax(0,1fr) 300px"><section class="card"><div class="ch">数据集<span class="n">5</span><span class="r">查看全部 ›</span></div><table class="qt"><colgroup><col><col style="width:44px"><col style="width:100px"><col style="width:52px"></colgroup><thead><tr><th>数据集</th><th>字段</th><th>字段说明</th><th></th></tr></thead><tbody><tr><td><span class="mono">sync_hhweb_2026_lzgx_kpi_index_m</span></td><td>12</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_game_pay_user_split_2026_m</span></td><td>17</td><td><span class="st warn">15/17 · 缺 2</span></td><td class="op">补说明</td></tr><tr><td><span class="mono">sync_hhweb_music_order_users_2026_m</span></td><td>19</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_2026_cmread_fee_active_split_m</span></td><td>16</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_video_vip_more_dimension_m</span></td><td>23</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr></tbody><tfoot><tr><td colspan="4">共 5 个数据集 · 只有 1 个还有字段没写说明，这一列才有存在的意义</td></tr></tfoot></table><div style="display:flex;align-items:center;gap:5px;padding:7px 11px;border-top:.5px solid rgba(60,60,67,.07);font-size:9.6px;color:#5f4bc8">＋ 添加数据集 — 上传文件或关联数据表</div></section><div class="side"><section class="card"><div class="sb"><div class="t"><svg class="ic"><use href="#s-upload"/></svg>发布</div><div class="d">暂无待发布变更。</div><div class="bt">草稿与发布 ›</div></div></section><section class="card"><div class="sb"><div class="t"><svg class="ic"><use href="#s-shield"/></svg>成员与权限</div><div class="d">创建者 bob · 你的角色为「管理」。</div><div class="bt">管理成员 ›</div></div></section><section class="card"><div class="sb"><div class="t"><svg class="ic"><use href="#s-database"/></svg>数据源<span class="st" style="margin-left:auto;background:#f0f8f3;color:#17603e">已关联</span></div><div class="d">总部常规分析 · 本地模拟 MySQL · 5 张表</div><div class="bt">检测连接 ›</div></div></section></div></div><div style="margin-top:10px;font-size:10.2px;color:#8a8d9c;line-height:1.6">三张卡固定 96px 等高，标题 / 一行信息 / 按钮各占一行，按钮 <code>margin-top:auto</code> 贴底。全绿时「字段说明」降级为灰色「已覆盖」，只有缺项那行才出现琥珀。</div></div></div><div class="figcap"><b>图 V2</b> 概览修正后：流程条只说阶段，发布状态只留两处，业务说明列降级为灰色「已覆盖」，右栏三卡等高、按钮贴底。</div></div></div><div class="wrap sec" id="q3"><div class="sec-head"><span class="k">03</span><h2>数据集与表详情：V10–V12</h2><p>这一页第一轮改得不错：连接条、导入记录一行、来源 chip、表脚说明、两个虚线入口都到位了。剩下的三个问题都在「细节对不上」，但其中 V11 是用户一眼能看见的错。</p></div><div class="issues"><div class="iss p1"><div class="no">V10</div><div>
+      <h4>上传入口被禁用，但理由看不懂</h4>
+      <div class="row"><div class="k">现在</div><div>「上传文件」卡片是灰的，下面写「此库已关联数据源，请在独立知识库上传」。「独立知识库」是内部说法，用户不知道什么是「独立」；也没说点了会怎样。</div></div>
+      <div class="row"><div class="k">改成</div><div>文案改成 <b>「此库通过数据源接入。上传文件需在未关联数据源的知识库中进行。」</b> 右侧给一个可点的「了解区别」，打开一张两行说明（文件库 / 数据源库）。</div></div>
+      <div class="row"><div class="k">验收</div><div>禁用卡上有可点解释入口；全站不出现「独立知识库」四个字。</div></div>
+    </div></div><div class="iss p0"><div class="no">V11</div><div>
+      <h4>表详情里有两列完全一样，最右列还被硬切</h4>
+      <div class="row"><div class="k">现在</div><div>左侧 <code>#</code> 列是 1–12，紧接着的「主键ID」列也是 1–12，两列值完全相同；用户会以为一个是行号、一个是业务主键，但看不出差别。同时 12 列放不下，最右「指标口径…」被切掉一半，<b>没有任何渐变或提示</b>。</div></div>
+      <div class="row"><div class="k">改成</div><div>保留 <code>#</code> 作为行号，<b>隐藏 <code>id</code> 列</b>（自增主键没有业务含义；若确需，移到「技术信息」tab）。横滚区右侧加 <b>36px 渐变遮罩</b>，并在表脚保留「向右滚动查看其余 3 列」。</div></div>
+      <div class="row"><div class="k">验收</div><div>相邻两列没有相同值序列；横滚时右侧有渐变；遮罩与提示文字同时存在。</div></div>
+    </div></div><div class="iss p1"><div class="no">V12</div><div>
+      <h4>表脚三个数字互相矛盾</h4>
+      <div class="row"><div class="k">现在</div><div>表脚写「显示 20 行 · 总行数未统计」，但表格里只有 12 行；上方采样说明写「采样 200 行」。三个数字分别指「显示行数」「样本量」「总行数」，但没有任何一个词区分它们。</div></div>
+      <div class="row"><div class="k">改成</div><div>表脚改成 <b>「显示 12 行 · 采样自 200 行 · 总行数未统计」</b>。三个数字各自带主语，且显示行数由程序计算而不是写死 20。</div></div>
+      <div class="row"><div class="k">验收</div><div>三个数字能互相解释；显示行数 = 表格实际行数。</div></div>
+    </div></div></div><div class="fig"><div class="dblwrap"><div class="board qb dbl"><div class="qtop"><div class="bc"><svg class="ic"><use href="#s-chev-l"/></svg><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b></div><div class="r"><button class="btn">⋯</button><button class="btn" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8">提问</button></div></div><div class="qm" style="padding:12px 13px 0"><div class="ph" style="margin-bottom:9px"><div><h1>数据集</h1><p>共 5 个数据集</p></div></div><div style="display:flex;align-items:center;gap:7px;border:.5px solid rgba(60,60,67,.13);border-radius:8px;padding:6px 9px;margin-bottom:7px;flex:none"><svg class="ic" style="width:12px;height:12px;color:#8a8d9c"><use href="#s-database"/></svg><div style="min-width:0"><div style="font-size:10.4px;font-weight:620">数据源连接 <span class="st" style="background:#f0f8f3;color:#17603e">已关联</span></div><div style="font-size:9.4px;color:#8a8d9c">总部常规分析 · 本地模拟 MySQL · 5 张表</div></div><span style="margin-left:auto;font-size:9.2px;color:#5f4bc8;white-space:nowrap">检测 · 关联更多表</span></div><div style="display:flex;align-items:center;gap:6px;height:24px;border:.5px solid rgba(60,60,67,.11);border-radius:7px;padding:0 9px;margin-bottom:7px;font-size:9.4px;color:#8a8d9c;flex:none"><svg class="ic" style="width:11px;height:11px"><use href="#s-history"/></svg>导入记录 · 暂无进行中的导入<span style="margin-left:auto;color:#5f4bc8">查看历史 ›</span></div><table class="qt tight" style="border:.5px solid rgba(60,60,67,.13);border-radius:8px;overflow:hidden"><colgroup><col><col style="width:52px"><col style="width:38px"><col style="width:64px"><col style="width:46px"></colgroup><thead><tr><th>数据集</th><th>来源</th><th>字段</th><th>字段说明</th><th></th></tr></thead><tbody><tr><td><span class="mono">sync_hhweb_2026_lzgx_kpi_index_m</span></td><td><span class="st" style="background:#f4f4f7;color:#6b6f80">数据源</span></td><td>12</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_game_pay_user_split_2026_m</span></td><td><span class="st" style="background:#f4f4f7;color:#6b6f80">数据源</span></td><td>17</td><td><span class="st warn">15/17</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_music_order_users_2026_m</span></td><td><span class="st" style="background:#f4f4f7;color:#6b6f80">数据源</span></td><td>19</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_2026_cmread_fee_active_split_m</span></td><td><span class="st" style="background:#f4f4f7;color:#6b6f80">数据源</span></td><td>16</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr><tr><td><span class="mono">sync_hhweb_video_vip_more_dimension_m</span></td><td><span class="st" style="background:#f4f4f7;color:#6b6f80">数据源</span></td><td>23</td><td><span class="st ok">已覆盖</span></td><td class="op">查看</td></tr></tbody><tfoot><tr><td colspan="5">共 5 个数据集 · 总行数未统计，按需采样</td></tr></tfoot></table><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px;flex:none"><div style="border:.5px dashed rgba(60,60,67,.2);border-radius:8px;padding:7px 9px;background:#fcfcfd"><div style="font-size:10px;font-weight:600;color:#6b6f80">上传文件</div><div style="font-size:9px;color:#9a9dab;line-height:1.5">需在未关联数据源的知识库中进行</div><div style="font-size:8.6px;color:#5f4bc8;margin-top:2px">了解区别 ›</div></div><div style="border:.5px dashed rgba(60,60,67,.2);border-radius:8px;padding:7px 9px;background:#fcfcfd"><div style="font-size:10px;font-weight:600;color:#6b6f80">关联数据表</div><div style="font-size:9px;color:#9a9dab;line-height:1.5">从已有数据源选择业务表，可随时解除</div><div style="font-size:8.6px;color:#5f4bc8;margin-top:3px">查看已关联 5 张 ›</div></div></div></div></div><div class="board qb dbl"><div class="qtop"><div class="bc"><svg class="ic"><use href="#s-chev-l"/></svg><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b><span class="sp">/</span><span style="font-size:9.6px">sync_hhweb_2026_lzgx_kpi_index_m</span></div><div class="r"><button class="btn">刷新样本</button></div></div><div class="qm" style="padding:12px 13px 0"><div class="ph" style="margin-bottom:7px"><div><h1 style="font-size:13px;font-family:ui-monospace,Menlo,monospace">sync_hhweb_2026_lzgx_kpi_index_m</h1><p>数据源关联 · 12 个字段 · v1</p></div></div><div style="font-size:9.4px;color:#8a8d9c;line-height:1.55;margin-bottom:7px">2026 年量质效月报。按产品、指标和统计周期读取指标值，适用于视频彩铃功能开通用户及视频彩铃指标。</div><div style="display:flex;align-items:center;gap:6px;font-size:9.2px;color:#8a8d9c;margin-bottom:7px"><span style="width:12px;height:12px;border-radius:50%;background:#f1f1f6;display:grid;place-items:center;font-size:7px">i</span>采样 200 行 · 仅供观察 · 2026/11/22 12:58</div><div style="display:flex;align-items:center;gap:1px;height:28px;border-bottom:.5px solid rgba(60,60,67,.12);margin-bottom:0;flex:none"><div style="height:28px;display:flex;align-items:center;padding:0 8px;font-size:10.2px;color:#16171d;font-weight:640;box-shadow:inset 0 -2px 0 #5f4bc8">数据预览</div><div style="height:28px;display:flex;align-items:center;gap:4px;padding:0 8px;font-size:10.2px;color:#626779">字段信息<span style="font:600 8.6px/1 ui-monospace;background:#f1f1f6;padding:1px 3px;border-radius:3px;color:#9a9dab">12</span></div><div style="height:28px;display:flex;align-items:center;padding:0 8px;font-size:10.2px;color:#626779">技术信息</div><div style="margin-left:auto;display:flex;align-items:center;gap:9px;font-size:9.2px;color:#626779"><span style="display:flex;align-items:center;gap:4px"><i style="width:18px;height:11px;border-radius:6px;background:#dcdde6;position:relative;display:inline-block"><b style="position:absolute;left:1px;top:1px;width:9px;height:9px;border-radius:50%;background:#fff"></b></i>字段说明</span><span style="color:#9a9dab">在当前样本中查找</span></div></div><div style="position:relative;flex:1;min-height:0;overflow:hidden"><table class="qt tight" style="width:100%;table-layout:fixed"><colgroup><col style="width:34px"><col style="width:74px"><col style="width:54px"><col style="width:176px"><col style="width:62px"><col style="width:76px"><col style="width:74px"></colgroup><thead><tr><th>序号</th><th>产品<div style="font:400 8.2px/1.2 ui-monospace;color:#b0b2be">product_type</div></th><th>省份<div style="font:400 8.2px/1.2 ui-monospace;color:#b0b2be">province_name</div></th><th>指标名称<div style="font:400 8.2px/1.2 ui-monospace;color:#b0b2be">index_name</div></th><th>周期<div style="font:400 8.2px/1.2 ui-monospace;color:#b0b2be">count_cycle</div></th><th>指标值<div style="font:400 8.2px/1.2 ui-monospace;color:#b0b2be">index_val</div></th><th>口径<div style="font:400 8.2px/1.2 ui-monospace;color:#b0b2be">remark</div></th></tr></thead><tbody><tr><td style="font-size:9.4px">1</td><td style="font-size:9.4px">视频彩铃</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">视频彩铃功能开通用户</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">32120.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">2</td><td style="font-size:9.4px">视频彩铃</td><td style="font-size:9.4px">广东</td><td style="font-size:9.4px">视频彩铃功能开通用户</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">4588.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">3</td><td style="font-size:9.4px">视频彩铃</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">视频彩铃功能开通用户</td><td style="font-size:9.4px">年累计</td><td style="font-size:9.4px">32120.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">4</td><td style="font-size:9.4px">视频彩铃</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">咪咕视频价值用户</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">16060.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">5</td><td style="font-size:9.4px">咪咕视频</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">咪咕视频价值用户</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">62600.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">6</td><td style="font-size:9.4px">咪咕视频</td><td style="font-size:9.4px">广东</td><td style="font-size:9.4px">咪咕视频价值用户</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">8942.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">7</td><td style="font-size:9.4px">咪咕视频</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">咪咕视频价值用户</td><td style="font-size:9.4px">年累计</td><td style="font-size:9.4px">62600.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">8</td><td style="font-size:9.4px">咪咕视频</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">咪咕视频场景月活</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">31300.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">9</td><td style="font-size:9.4px">咪咕视频</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">咪咕视频场景月活</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">81000.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">10</td><td style="font-size:9.4px">咪咕视频</td><td style="font-size:9.4px">广东</td><td style="font-size:9.4px">咪咕视频场景月活</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">11571.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">11</td><td style="font-size:9.4px">咪咕视频</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">咪咕视频场景月活</td><td style="font-size:9.4px">年累计</td><td style="font-size:9.4px">81000.0</td><td style="font-size:9.4px">本地</td></tr><tr><td style="font-size:9.4px">12</td><td style="font-size:9.4px">咪咕视频</td><td style="font-size:9.4px">全国</td><td style="font-size:9.4px">咪咕视频场景月活</td><td style="font-size:9.4px">月度值</td><td style="font-size:9.4px">40500.0</td><td style="font-size:9.4px">本地</td></tr></tbody></table><div style="position:absolute;right:0;top:0;bottom:0;width:52px;background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.88) 42%,#fff 100%);pointer-events:none"></div></div><div style="display:flex;align-items:center;height:24px;border-top:.5px solid rgba(60,60,67,.1);font-size:8.8px;color:#9a9dab;flex:none">显示 12 行 · 采样自 200 行 · 总行数未统计<span style="margin-left:auto">向右滚动查看其余 5 列 ›</span></div></div></div></div><div class="figcap"><b>图 V3</b> 左：数据集页（业务说明列降级、上传入口解释）。右：表详情（删掉重复的主键列、右侧渐变 + 剩余列数提示、表脚三个数字对齐）。</div></div></div><div class="wrap sec" id="q4"><div class="sec-head"><span class="k">04</span><h2>业务规则：V13–V16</h2><p>这一页第一轮的方向是对的：两行式列表、右栏四块、底部两个按钮都落地了。但有两个必须修的硬错——标题写「3 个分组」而 tab 是 6 个；有 3 条锚点只有 2–8 个字，扫读时完全不知道是哪条规则。</p></div><div class="issues"><div class="iss p0"><div class="no">V13</div><div>
+      <h4>标题写「33 条 · 3 个分组」，但 tab 上是 6 个小节</h4>
+      <div class="row"><div class="k">现在</div><div>代码里 <code>groupsCount = allCounts.size</code>，只统计「有规则的小节」，所以是 3。而六个官方小节是后端契约，tab 上明明白白列了 6 个（三个为 0）。数字与 tab 对不上，用户会怀疑规则丢了一半。</div></div>
+      <div class="row"><div class="k">改成</div><div>标题改成 <b>「33 条 · 6 个小节（3 个有内容）」</b>；或更短「33 条 · 6 个小节」。数字必须与 tab 数量一致，不要用「分组」这个和「小节」混用的词。</div></div>
+      <div class="row"><div class="k">验收</div><div>标题数字 = tab 数量 = 6；全站不出现「个分组」。</div></div>
+    </div></div><div class="iss p0"><div class="no">V14</div><div>
+      <h4>三条锚点只有 2–8 个字，扫读时认不出是哪条</h4>
+      <div class="row"><div class="k">现在</div><div>「全国」「月份」「业务类型各层级中」——这三条的首个停顿太早，取到 2–8 字就断了。用户扫列表时看到「全国」，无法判断这条规则讲的是什么。</div></div>
+      <div class="row"><div class="k">改成</div><div>锚点不足 <b>8 字</b>时延伸到下一个停顿，上限仍是 28 字。例如「全国」→「全国 · 未指定会员类型时按全量统计」；「月份」→「月份 · 统计周期必须按整月读取」。</div></div>
+      <div class="row"><div class="k">验收</div><div>33 条锚点长度均 ≥ 8 字且互不重复；「全国」「月份」不再单独成行。</div></div>
+    </div></div><div class="iss p0"><div class="no">V15</div><div>
+      <h4>详情栏 240px，正文只有 4 行高</h4>
+      <div class="row"><div class="k">现在</div><div>右栏实测 240px，textarea 只有 4 行，规则原文读不全要滚动；底部按钮上方还有 70px 空白；「保存到草稿」按钮宽 190px，几乎占满整栏。</div></div>
+      <div class="row"><div class="k">改成</div><div>右栏加到 <b>300px</b>；正文区 <code>flex:1</code> 撑满（≥ 10 行）；「保存到草稿」按内容宽度，不铺满；底部固定 8px 内边距。</div></div>
+      <div class="row"><div class="k">验收</div><div>右栏宽 ≥ 300px；正文可视行数 ≥ 10；底部无 40px 以上空白；保存按钮宽 ≤ 110px。</div></div>
+    </div></div><div class="iss p1"><div class="no">V16</div><div>
+      <h4>三个 0 条小节没降透明，分组标题也不吸顶</h4>
+      <div class="row"><div class="k">现在</div><div>「指标口径 0 / 外部编码 0 / 货币 0」三个 tab 的视觉权重和有内容的完全一样；分组标题「默认过滤 11」滚动时会跟着列表走掉，滚到第 20 条就不知道自己在哪一节。</div></div>
+      <div class="row"><div class="k">改成</div><div>0 条小节 <code>opacity:.5</code>；分组标题 <code>position:sticky; top:0</code>，带白色背景遮挡下方行。</div></div>
+      <div class="row"><div class="k">验收</div><div>0 条小节对比度明显低于其他；滚动时分组标题固定可见。</div></div>
+    </div></div></div><div class="fig"><div class="board qb"><div class="qtop"><div class="bc"><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b><span class="pill" style="margin-left:4px;background:#fff6e8;color:#8a5a00;box-shadow:inset 0 0 0 .5px #f0dcb4;font-size:9.4px;padding:2px 6px;border-radius:5px">工作草稿 · 基于 v15</span></div><div class="r"><button class="btn">模型检查</button><button class="btn">变更与待办</button><button class="btn">建模对话</button></div></div><aside class="qnav"><div class="g"><div class="gt">工作区</div><div class="it"><svg class="ic"><use href="#s-grid"/></svg><span>概览</span></div></div><div class="g"><div class="gt">数据</div><div class="it"><svg class="ic"><use href="#s-table"/></svg><span>数据集</span><span class="n">5</span></div></div><div class="g"><div class="gt">语义模型</div><div class="it"><svg class="ic"><use href="#s-graph"/></svg><span>关系图</span></div><div class="it on"><svg class="ic"><use href="#s-rules"/></svg><span>业务规则</span></div><div class="it"><svg class="ic"><use href="#s-chat"/></svg><span>问数优化</span></div><div class="it"><svg class="ic"><use href="#s-layers"/></svg><span>公共视图</span></div><div class="it"><svg class="ic"><use href="#s-doc"/></svg><span>资料</span></div><div class="it"><svg class="ic"><use href="#s-upload"/></svg><span>草稿与发布</span></div></div><div class="g"><div class="gt">协作与管理</div><div class="it"><svg class="ic"><use href="#s-shield"/></svg><span>成员与权限</span></div><div class="it"><svg class="ic"><use href="#s-sliders"/></svg><span>设置</span></div></div></aside><div class="qm"><div class="ph" style="margin-bottom:9px"><div><h1>业务规则</h1><p style="color:#8a8d9c">33 条 · 6 个小节（3 个有内容）</p></div><div class="r"><button class="btn">从资料提</button><button class="btn" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8">新增规则</button></div></div><div class="tabs6"><div class="t on">默认过滤<span class="n">11</span></div><div class="t">术语<span class="n">15</span></div><div class="t">指定取数表<span class="n">7</span></div><div class="t z">指标口径<span class="n">0</span></div><div class="t z">外部编码<span class="n">0</span></div><div class="t z">货币<span class="n">0</span></div><div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:9.4px;color:#9a9dab"><span style="width:88px;height:20px;border:.5px solid rgba(60,60,67,.14);border-radius:5px;display:flex;align-items:center;padding:0 6px">搜索规则</span><span>＋ 新增</span></div></div><div class="rulebox"><div class="ls"><div class="rgt">默认过滤<span class="n">11</span><span style="font-weight:400;color:#9a9dab;font-size:9px;margin-left:2px">统计时默认排除或只保留哪些记录</span></div><div class="rlist"><div class="rl"><div class="b"><div class="tt">全国 · 未指定会员类型时按全量统计</div><div class="mm">general.md · 第 6 行</div></div></div><div class="rl on"><div class="b"><div class="tt">未指定会员类型的产品总体规模采用月报取数口径中的汇总条件</div><div class="mm">general.md · 第 7 行</div></div></div><div class="rl"><div class="b"><div class="tt">业务类型各层级中，先按一级再逐级向下匹配</div><div class="mm">general.md · 第 8 行</div></div></div><div class="rl"><div class="b"><div class="tt">月份 · 统计周期必须按整月读取，不做跨月拆分</div><div class="mm">general.md · 第 9 行</div></div></div><div class="rl"><div class="b"><div class="tt">没有匹配行表示当前数据无对应记录</div><div class="mm">general.md · 第 10 行</div></div></div><div class="rl"><div class="b"><div class="tt">出现多行时先辨明尚未限定的维度或业务组合</div><div class="mm">general.md · 第 11 行</div></div></div><div class="rl"><div class="b"><div class="tt">查询逐月趋势时按月分别读取</div><div class="mm">general.md · 第 12 行</div></div></div><div class="rl"><div class="b"><div class="tt">用户未指定会员类型而问产品总体规模时</div><div class="mm">monthly-reports.md · 第 15 行</div></div></div><div class="rl"><div class="b"><div class="tt">下列为各月报全国总体规模和全国月度值的汇总条件</div><div class="mm">monthly-reports.md · 第 16 行</div></div></div><div class="rl"><div class="b"><div class="tt">问视频「省侧发展」「端内发展」且业务口径指会员发展渠道时</div><div class="mm">monthly-reports.md · 第 22 行</div></div></div></div><div style="display:flex;align-items:center;height:22px;border-top:.5px solid rgba(60,60,67,.08);font-size:8.6px;color:#9a9dab;flex:none">33 条 · 草稿优先于问数<span style="margin-left:auto">knowledge/rules · 2 个文件</span></div></div><div class="rs"><div class="ipane"><div class="ih"><div class="t">未指定会员类型的产品总体规模采用月报取数口径中的汇总条件</div><div class="m">general.md · 第 7 行 · 默认过滤</div></div><div class="ib"><div style="display:flex;align-items:center;gap:4px;font-size:9.2px;color:#8a8d9c"><span style="padding:2px 6px;background:#f1f1f6;border-radius:4px;color:#16171d;font-weight:600">原文</span><span style="padding:2px 6px;border-radius:4px">改成表单</span><span style="margin-left:auto;color:#5f4bc8">标准句式 ›</span></div><div class="ta2">未指定会员类型的产品总体规模采用月报取数口径中的汇总条件。其他问题如各省份、渠道、支付条件，按已确认的具体会员或查询场景口径确定范围。<div style="margin-top:8px;color:#9a9dab;font-size:9px">原文未匹配标准句式，可按原文保存。</div></div><div style="display:flex;align-items:center;gap:5px;font-size:9.2px;color:#8a8d9c">所属小节<span style="color:#3b2f86;font-weight:600">默认过滤</span></div></div><div class="if"><button class="btn">还原</button><button class="btn" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8;margin-left:auto;padding:0 14px">保存到草稿</button></div></div></div></div></div></div><div class="figcap"><b>图 V4</b> 业务规则修正后：标题 6 个小节、三个 0 条小节降透明、锚点补足到 18–28 字、右栏 300px 且正文撑满、保存按钮不再铺满。</div></div></div><div class="wrap sec" id="q5"><div class="sec-head"><span class="k">05</span><h2>关系图：V17</h2><p>0 关系是新建知识库最常见的状态，这一屏决定的不是「好不好看」，而是「用户知不知道下一步做什么」。引导卡的方向对了，但尺寸和位置让它起不到作用。</p></div><div class="issues"><div class="iss p0"><div class="no">V17</div><div>
+      <h4>模型卡只有 140×88，引导卡飘在画布上方</h4>
+      <div class="row"><div class="k">现在</div><div>5 张卡实测 140 宽、88 高，表名折两行还被截断，字段名 9px；卡与卡之间 30px。引导卡在画布上 1/6 处，与卡片组之间隔着 170px 空白。未关联只用琥珀小字表示，没有虚线边框。</div></div>
+      <div class="row"><div class="k">改成</div><div>卡片加到 <b>206px</b> 宽、高 ≥ 96px，表名一行 + <code>title</code> 全名，字段 3 个、字号 10px；引导卡 <b>水平居中、距卡片组 24px</b>；未关联用 <b>虚线边框 + 琥珀底状态行</b>。</div></div>
+      <div class="row"><div class="k">验收</div><div>模型卡宽 ≥ 200px；0 关系时引导卡与卡片组垂直居中间距 ≤ 40px；未关联卡有虚线边框。</div></div>
+    </div></div></div><div class="fig"><div class="board qb"><div class="qtop"><div class="bc"><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b><span class="pill" style="margin-left:4px;background:#fff6e8;color:#8a5a00;box-shadow:inset 0 0 0 .5px #f0dcb4;font-size:9.4px;padding:2px 6px;border-radius:5px">工作草稿 · 基于 v15</span></div><div class="r"><button class="btn">模型检查</button><button class="btn">变更与待办</button><button class="btn">建模对话</button></div></div><aside class="qnav"><div class="g"><div class="gt">工作区</div><div class="it"><svg class="ic"><use href="#s-grid"/></svg><span>概览</span></div></div><div class="g"><div class="gt">数据</div><div class="it"><svg class="ic"><use href="#s-table"/></svg><span>数据集</span><span class="n">5</span></div></div><div class="g"><div class="gt">语义模型</div><div class="it on"><svg class="ic"><use href="#s-graph"/></svg><span>关系图</span></div><div class="it"><svg class="ic"><use href="#s-rules"/></svg><span>业务规则</span></div><div class="it"><svg class="ic"><use href="#s-chat"/></svg><span>问数优化</span></div><div class="it"><svg class="ic"><use href="#s-layers"/></svg><span>公共视图</span></div><div class="it"><svg class="ic"><use href="#s-doc"/></svg><span>资料</span></div><div class="it"><svg class="ic"><use href="#s-upload"/></svg><span>草稿与发布</span></div></div><div class="g"><div class="gt">协作与管理</div><div class="it"><svg class="ic"><use href="#s-shield"/></svg><span>成员与权限</span></div><div class="it"><svg class="ic"><use href="#s-sliders"/></svg><span>设置</span></div></div></aside><div class="qm" style="padding:0"><div style="position:absolute;left:14px;top:10px;z-index:3;display:flex;align-items:center;gap:5px;height:24px;padding:0 9px;background:#fff;border:.5px solid rgba(60,60,67,.15);border-radius:6px;font-size:9.6px;color:#3c3f4c;box-shadow:0 1px 2px rgba(16,24,40,.05)"><svg class="ic" style="width:11px;height:11px;color:#8a8d9c"><use href="#s-layers"/></svg>对象目录</div><div style="position:absolute;left:14px;top:44px;z-index:3;font-size:10px;color:#8a8d9c"><span style="font-weight:620;color:#16171d;font-size:11px">关系图</span> · 5 个模型 · 0 条关系</div><div class="cvwrap" style="border-radius:0"><div class="dot"></div><div style="position:absolute;left:50%;top:152px;transform:translateX(-50%);width:452px;background:#fff;border:.5px solid rgba(60,60,67,.16);border-radius:11px;box-shadow:0 2px 6px rgba(16,24,40,.06),0 16px 36px -18px rgba(16,24,40,.22);padding:12px 14px;z-index:2"><div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:650"><span style="width:16px;height:16px;border-radius:50%;background:#fff6e8;display:grid;place-items:center;color:#c98a1a;font-size:9px">!</span>还没有建立关系</div><div style="font-size:10px;color:#626779;line-height:1.65;margin-top:5px">5 个模型可独立问数。需要跨表补充字段时，再核对关联键和基数。</div><div style="display:flex;align-items:center;gap:5px;margin-top:7px;font-size:9.4px;color:#626779">共同字段<span style="font:600 9px/1 ui-monospace;background:#efebfc;color:#4b3aa8;padding:2px 5px;border-radius:4px">province_name</span><span style="font:600 9px/1 ui-monospace;background:#efebfc;color:#4b3aa8;padding:2px 5px;border-radius:4px">period_id</span><span style="color:#9a9dab">需核对含义、粒度和唯一性</span></div><div style="display:flex;gap:6px;margin-top:9px"><button class="btn" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8">自动识别候选关系</button><button class="btn">手动新建</button></div></div><div class="mn un" style="left:30px;top:312px"><div class="h"><svg class="ic"><use href="#s-table"/></svg><b title="sync_hhweb_2026_cmread_fee_active_split_m">sync_hhweb_2026_cmread_fee_active_split_m</b></div><div class="bd"><div class="f"><span class="k"></span>province_name<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>period_id<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>cmread_video<span class="ty">VARCHAR</span></div></div><div class="ft">未关联 · 13 列</div></div><div class="mn un" style="left:260px;top:312px"><div class="h"><svg class="ic"><use href="#s-table"/></svg><b title="sync_hhweb_2026_lzgx_kpi_index_m">sync_hhweb_2026_lzgx_kpi_index_m</b></div><div class="bd"><div class="f"><span class="k"></span>province_name<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>period_id<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>product_type<span class="ty">VARCHAR</span></div></div><div class="ft">未关联 · 11 列</div></div><div class="mn un" style="left:490px;top:312px"><div class="h"><svg class="ic"><use href="#s-table"/></svg><b title="sync_hhweb_game_pay_user_split_2026_m">sync_hhweb_game_pay_user_split_2026_m</b></div><div class="bd"><div class="f"><span class="k"></span>province_name<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>period_id<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>business_type1<span class="ty">VARCHAR</span></div></div><div class="ft">未关联 · 16 列</div></div><div class="mn un" style="left:140px;top:458px"><div class="h"><svg class="ic"><use href="#s-table"/></svg><b title="sync_hhweb_music_order_users_2026_m">sync_hhweb_music_order_users_2026_m</b></div><div class="bd"><div class="f"><span class="k"></span>province_name<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>period_id<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>bus_one<span class="ty">VARCHAR</span></div></div><div class="ft">未关联 · 17 列</div></div><div class="mn un" style="left:370px;top:458px"><div class="h"><svg class="ic"><use href="#s-table"/></svg><b title="sync_hhweb_video_vip_more_dimension_m">sync_hhweb_video_vip_more_dimension_m</b></div><div class="bd"><div class="f"><span class="k"></span>province_name<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>period_id<span class="ty">VARCHAR</span></div><div class="f"><span class="k"></span>vip_type_1<span class="ty">VARCHAR</span></div></div><div class="ft">未关联 · 22 列</div></div><div style="position:absolute;right:12px;bottom:10px;display:flex;align-items:center;gap:2px;height:26px;padding:0 3px;background:#fff;border:.5px solid rgba(60,60,67,.15);border-radius:7px;box-shadow:0 1px 3px rgba(16,24,40,.08);font-size:9px;color:#626779"><span style="padding:0 6px">−</span><span style="padding:0 4px">100%</span><span style="padding:0 6px">＋</span><span style="padding:0 6px;border-left:.5px solid rgba(60,60,67,.12)">适应</span><span style="padding:0 6px">自动布局</span></div></div></div></div><div class="figcap"><b>图 V5</b> 关系图修正后：引导卡居中、距卡片组 24px；5 张 206px 的卡虚线边框表示未关联，每张显示 3 个真实字段。</div></div></div><div class="wrap sec" id="q6"><div class="sec-head"><span class="k">06</span><h2>问数 / 公共视图 / 资料：V18–V20</h2><p>这三页第一轮的结构都对了，问题集中在同一处：<b>把标题栏当成了工具栏</b>。资料页 8 个控件、公共视图 5 个按钮，全挤在页面标题右边，等于没有主次。</p></div><div class="issues"><div class="iss p0"><div class="no">V18</div><div>
+      <h4>示例问题问的是「足球会员」，这个库里没有足球</h4>
+      <div class="row"><div class="k">现在</div><div>右栏三条示例：<code>26年10月份的足球会员</code>、<code>2026年10月各省咪咕视频在订会员数排名前五？</code>、<code>2026年10月咪咕游戏各一级业务类型的付费用户数分别是多少？</code>。这个库的 5 张表是彩铃、游戏、音乐、阅读、视频——<b>没有足球</b>。而且第一条不是完整问句，只有八个字。输入框占位符「上个各品类的净销售额是多少？」还有语病（应为「上个月」）。</div></div>
+      <div class="row"><div class="k">改成</div><div>示例从当前库的 5 张表与 33 条规则生成，三条分别覆盖视频、音乐、游戏；第一条补成完整问句。占位符改成 <b>「例如：2026 年 10 月各省咪咕视频在订会员数」</b>。</div></div>
+      <div class="row"><div class="k">验收</div><div>3 条示例里的业务实体都能在 5 张表中找到；无错别字；第一条长度 ≥ 12 字。</div></div>
+    </div></div><div class="iss p1"><div class="no">V19</div><div>
+      <h4>公共视图标题栏塞了 5 个按钮</h4>
+      <div class="row"><div class="k">现在</div><div>标题右侧依次是「边聊边核对」「工程文件」「⋯」「使用指南」「+ 起草公共视图」，其中 ⋯ 夹在中间，顺序没有逻辑；而页面的主任务（起草新视图）反而在最右边。</div></div>
+      <div class="row"><div class="k">改成</div><div>主按钮 <b>「+ 起草公共视图」</b>；<b>「⋯」</b> 收「工程文件 / 使用指南 / 批量处理」；「边聊边核对」移到列表底部的虚线新建卡旁边，因为它是「没有视图时」的替代动作。</div></div>
+      <div class="row"><div class="k">验收</div><div>标题栏可点元素 ≤ 3；⋯ 菜单 ≥ 3 项；起草按钮在最右。</div></div>
+    </div></div><div class="iss p1"><div class="no">V20</div><div>
+      <h4>资料页标题栏 8 个控件，文档操作离文档 600px</h4>
+      <div class="row"><div class="k">现在</div><div>一行里挤了：在文档中查找、阅读 / 原始文本、A− / A+、引用到对话、更多、新增文档。前五个都是「针对当前这篇文档」的操作，却放在页面级标题栏，离正文 600px；「新增文档」反被挤到最右边缘。</div></div>
+      <div class="row"><div class="k">改成</div><div>页面级只留 <b>「+ 新增文档」</b>；「阅读 / 原始文本、字号、引用到对话、更多」移到 <b>文档头部右侧</b>，与文档标题同一行；搜索留在左栏目录上方。</div></div>
+      <div class="row"><div class="k">验收</div><div>页面标题栏控件 ≤ 3；文档工具条与文档标题同一水平线；新增文档按钮在右上显眼处。</div></div>
+    </div></div></div><div class="fig"><div class="dblwrap"><div class="board qb dbl" style="height:460px"><div class="qtop"><div class="bc"><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b><span style="margin-left:4px;font-size:9.2px;background:#fff6e8;color:#8a5a00;padding:2px 5px;border-radius:4px;box-shadow:inset 0 0 0 .5px #f0dcb4">工作草稿 · 基于 v15</span></div><div class="r"><button class="btn" style="opacity:.45">模型检查</button><button class="btn">变更与待办</button><button class="btn">建模对话</button></div></div><div class="qm" style="padding:12px 13px 0"><div class="ph" style="margin-bottom:8px"><div><h1>问数优化</h1></div><div class="r" style="align-items:center"><span class="st" style="background:#f1f1f6;color:#6b6f80">待处理 0</span><span class="st" style="background:#efebfc;color:#3b2f86">问答示例库 13</span></div></div><div style="display:flex;align-items:center;margin-bottom:9px;flex:none"><div style="display:flex;align-items:center;gap:5px;font-size:9.6px;color:#16171d"><span style="width:16px;height:16px;border-radius:50%;border:.5px solid;display:grid;place-items:center;font:600 8px/1 ui-monospace;background:#5f4bc8;color:#fff;border-color:#5f4bc8">1</span>提问</div><div style="width:22px;height:1px;background:#e2e3ea;margin:0 5px"></div><div style="display:flex;align-items:center;gap:5px;font-size:9.6px;color:#9a9dab"><span style="width:16px;height:16px;border-radius:50%;border:.5px solid;display:grid;place-items:center;font:600 8px/1 ui-monospace;border-color:#d6d7e0;color:#9a9dab">2</span>口径与方案</div><div style="width:22px;height:1px;background:#e2e3ea;margin:0 5px"></div><div style="display:flex;align-items:center;gap:5px;font-size:9.6px;color:#9a9dab"><span style="width:16px;height:16px;border-radius:50%;border:.5px solid;display:grid;place-items:center;font:600 8px/1 ui-monospace;border-color:#d6d7e0;color:#9a9dab">3</span>SQL</div><div style="width:22px;height:1px;background:#e2e3ea;margin:0 5px"></div><div style="display:flex;align-items:center;gap:5px;font-size:9.6px;color:#9a9dab"><span style="width:16px;height:16px;border-radius:50%;border:.5px solid;display:grid;place-items:center;font:600 8px/1 ui-monospace;border-color:#d6d7e0;color:#9a9dab">4</span>保存问答</div></div><div style="display:grid;grid-template-columns:minmax(0,1fr) 172px;gap:8px;flex:none"><div style="border:.5px solid rgba(60,60,67,.14);border-radius:9px;background:#fff;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;padding:7px 10px;border-bottom:.5px solid rgba(60,60,67,.08);font-size:10px;font-weight:620">业务问题<span style="margin-left:auto;font-size:8.8px;color:#9a9dab">每行一道，最多 10 道</span></div><div style="padding:8px 10px;font-size:9.8px;color:#b0b2be;line-height:1.7;height:74px">例如：2026 年 10 月各省咪咕视频在订会员数是多少？<br>用平时问同事的说法，不需要写成 SQL。</div><div style="display:flex;align-items:center;padding:6px 9px;border-top:.5px solid rgba(60,60,67,.07);background:#fcfcfd"><span style="font:600 9px/1 ui-monospace;color:#9a9dab">0 / 10 道</span><button class="btn" style="margin-left:auto;background:#5f4bc8;color:#fff;border-color:#5f4bc8;height:22px;font-size:9.6px">添加并分析</button></div></div><div style="border:.5px solid rgba(60,60,67,.13);border-radius:9px;background:#fff;padding:8px 9px"><div style="font-size:9.6px;font-weight:620">示例问题</div><div style="font-size:8.6px;color:#9a9dab;margin:2px 0 6px">点击填入，可改后再分析</div><div style="font-size:9px;line-height:1.5;border:.5px solid rgba(60,60,67,.1);border-radius:5px;padding:5px 6px;margin-bottom:4px">2026 年 10 月各省咪咕视频在订会员数排名前五</div><div style="font-size:9px;line-height:1.5;border:.5px solid rgba(60,60,67,.1);border-radius:5px;padding:5px 6px;margin-bottom:4px">2026 年 10 月咪咕音乐各套餐的付费用户数</div><div style="font-size:9px;line-height:1.5;border:.5px solid rgba(60,60,67,.1);border-radius:5px;padding:5px 6px">2026 年 10 月咪咕游戏各一级业务类型的付费用户数</div></div></div><div style="margin-top:9px;border:.5px solid rgba(60,60,67,.13);border-radius:9px;background:#fff;display:flex;align-items:center;gap:8px;padding:9px 11px;flex:none"><div style="min-width:0"><div style="font-size:10px;font-weight:620">待处理 <span style="color:#9a9dab;font-weight:400">0</span></div><div style="font-size:9px;color:#9a9dab;margin-top:2px">分析完成后，题目会出现在这里逐条核对。</div></div><button class="btn" style="margin-left:auto;font-size:9.4px;height:22px">查看问答示例库</button></div></div></div><div class="board qb dbl" style="height:460px"><div class="qtop"><div class="bc"><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b><span style="margin-left:4px;font-size:9.2px;background:#fff6e8;color:#8a5a00;padding:2px 5px;border-radius:4px;box-shadow:inset 0 0 0 .5px #f0dcb4">工作草稿 · 基于 v15</span></div><div class="r"><button class="btn" style="opacity:.45">模型检查</button><button class="btn">变更与待办</button><button class="btn">建模对话</button></div></div><div class="qm" style="padding:12px 13px 0"><div class="ph" style="margin-bottom:8px"><div><h1>公共视图</h1></div><div class="r" style="align-items:center"><span class="st" style="background:#efebfc;color:#3b2f86">视图库 2</span><button class="btn" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8;height:22px;font-size:9.4px">＋ 起草</button><button class="btn" style="height:22px;width:22px;padding:0">⋯</button></div></div><div style="display:grid;grid-template-columns:minmax(0,1fr) 196px;gap:8px;flex:1;min-height:0"><div style="display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:center;gap:5px;font-size:9.4px;color:#8a8d9c;margin-bottom:6px">视图目录 2 项<span style="margin-left:auto;width:86px;height:19px;border:.5px solid rgba(60,60,67,.14);border-radius:4px;display:flex;align-items:center;padding:0 5px;font-size:8.6px">搜索视图</span></div><div style="border:.5px solid #ddd4f6;background:#efebfc;border-radius:7px;padding:7px 8px;margin-bottom:5px"><div style="font-size:9px;color:#8a8d9c">查询模板</div><div style="font-size:10px;font-weight:600;line-height:1.4;color:#3b2f86">按统计月份查看咪咕视频各会员口径的在订会员数</div><div style="font:500 8.6px/1.5 ui-monospace;color:#8a8d9c;margin-top:2px">video_vip_monthly_member</div><div style="display:flex;gap:4px;margin-top:3px"><span class="st" style="background:#f0f8f3;color:#17603e">已发布</span><span class="st" style="background:#f1f1f6;color:#6b6f80">按需查询</span></div></div><div style="border:.5px solid rgba(60,60,67,.12);border-radius:7px;padding:7px 8px;margin-bottom:5px"><div style="font-size:9px;color:#8a8d9c">查询模板</div><div style="font-size:10px;font-weight:600;line-height:1.4">悦看分省付费用户</div><div style="font:500 8.6px/1.5 ui-monospace;color:#8a8d9c;margin-top:2px">yuekan_province_pay_users</div><div style="display:flex;gap:4px;margin-top:3px"><span class="st" style="background:#f0f8f3;color:#17603e">已发布</span><span class="st warn">范围待说明</span></div></div><div style="border:.5px dashed rgba(60,60,67,.2);border-radius:7px;padding:7px 8px;color:#8a8d9c;font-size:9px">＋ 新建公共视图<div style="font-size:8.6px;color:#b0b2be;margin-top:1px">描述业务用途，或贴已有 SQL</div><div style="font-size:8.6px;color:#5f4bc8;margin-top:3px">也可以边聊边核对 ›</div></div></div><div style="border-left:.5px solid rgba(60,60,67,.1);padding-left:9px;min-width:0;display:flex;flex-direction:column"><div style="font-size:10px;font-weight:620;line-height:1.4">按统计月份查看咪咕视频各会员口径的在订会员数</div><div style="font:500 8.4px/1.5 ui-monospace;color:#9a9dab;margin-top:2px">video_vip_monthly_member</div><div style="display:flex;gap:1px;margin:7px 0 6px;font-size:8.6px;color:#626779"><span style="padding:2px 4px;box-shadow:inset 0 -1.5px 0 #5f4bc8;color:#16171d;font-weight:600">用途</span><span style="padding:2px 4px">验证</span><span style="padding:2px 4px">发布</span></div><div style="font-size:8.8px;color:#626779;line-height:1.6">按统计月份查看咪咕视频各会员口径的在订会员数。覆盖主体、钻石会员与体育会员，含六大业务类型条件。</div><div style="font-size:8.6px;color:#9a9dab;margin-top:6px">数据来源</div><div style="font:500 8.2px/1.5 ui-monospace;color:#3c3f4c">video_vip_more_dimension_m</div><div style="display:grid;gap:3px;margin-top:7px"><div style="background:#fbfbfd;border-radius:4px;padding:4px 5px"><div style="font-size:8px;color:#9a9dab">粒度</div><div style="font-size:8.4px;color:#3c3f4c">统计月份 × 会员口径</div></div><div style="background:#fbfbfd;border-radius:4px;padding:4px 5px"><div style="font-size:8px;color:#9a9dab">时间列</div><div style="font-size:8.4px;color:#3c3f4c">period_id · yyyyMM</div></div></div><div style="margin-top:auto;border:.5px solid #f0dcb4;background:#fffaf1;border-radius:5px;padding:5px 6px;font-size:8px;line-height:1.55;color:#7a5b12">只覆盖全国、全渠道、全支付；需要分省时改用另一模板。</div></div></div></div></div></div><div class="figcap"><b>图 V6</b> 左：问数优化（示例改成库内真实问题，待处理空态与底部动作合并）。右：公共视图（标题栏收敛为「起草 + ⋯」，范围待说明改为琥珀可点）。</div></div></div><div class="wrap sec" id="q7"><div class="sec-head"><span class="k">07</span><h2>发布 / 成员 / 设置：V21–V23</h2><p>三页内容都少，第一轮把「下一步」放进去了，但放得太远：发布页的空态和「去建模」隔了 350px，等于没有占住空白。V21 是这一章唯一必须修的，另外两条是密度问题。</p></div><div class="issues"><div class="iss p0"><div class="no">V21</div><div>
+      <h4>发布页 70% 是空白，「去建模」在页底</h4>
+      <div class="row"><div class="k">现在</div><div>三个 0 卡 + 一张「相对线上 v15 的修改」卡，一共占 260px；「去建模」在 y=610，离底 290px，离它要解决的「与 v15 完全一致」空态有 350px。用户在空态看到「没有变更」，但下一步在屏幕最下面。</div></div>
+      <div class="row"><div class="k">改成</div><div>把「去建模」<b>放进空态卡内</b>（「与 v15 完全一致」右侧），底部那条删掉；三个数字卡限宽 720px，不要铺到 1180。</div></div>
+      <div class="row"><div class="k">验收</div><div>末元素离底 ≤ 220px；空态卡内有可点动作；三张数字卡总宽 ≤ 720px。</div></div>
+    </div></div><div class="iss p1"><div class="no">V22</div><div>
+      <h4>成员表只占半宽，空态区却有 270px 高</h4>
+      <div class="row"><div class="k">现在</div><div>成员表宽 540px，右侧 250px 全空；表内空态「还没有其他成员」占 270px 高度，中间一行字一个按钮，上下各 80px 空白。</div></div>
+      <div class="row"><div class="k">改成</div><div>表格宽 <b>720px</b>；空态压到 <b>120px</b>，文字与按钮 <b>横排</b>；右侧 240px 放一张「权限模型」卡（使用 / 管理两行说明），把空白变成信息。</div></div>
+      <div class="row"><div class="k">验收</div><div>空态高度 ≤ 140px；表格宽 ≥ 680px；右侧无 200px 以上空白。</div></div>
+    </div></div><div class="iss p1"><div class="no">V23</div><div>
+      <h4>事实表查询时间范围只列了 1 张表</h4>
+      <div class="row"><div class="k">现在</div><div>设置页「事实表时间范围」只有 <code>sync_hhweb_2026_cmread_fee_active_split_m</code> 一行，但这个库有 5 张表。另外 4 张要么没接进来，要么藏在别处，用户无法逐表配置。</div></div>
+      <div class="row"><div class="k">改成</div><div>列出全部 5 张（表名 + 当前范围 + 编辑），超过 5 张折叠「还有 N 张」；每行右侧一个「设置范围」链接。</div></div>
+      <div class="row"><div class="k">验收</div><div>事实表行数 = 数据集数量（5）；每行都能打开设置。</div></div>
+    </div></div></div><div class="fig"><div class="dblwrap"><div class="board qb dbl" style="height:400px"><div class="qtop"><div class="bc"><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b><span style="margin-left:4px;font-size:9.2px;background:#fff6e8;color:#8a5a00;padding:2px 5px;border-radius:4px;box-shadow:inset 0 0 0 .5px #f0dcb4">工作草稿 · 基于 v15</span></div><div class="r"><button class="btn" style="opacity:.45">模型检查</button><button class="btn" style="opacity:.45">变更与待办</button><button class="btn">建模对话</button></div></div><div class="qm" style="padding:12px 13px 0"><div class="ph" style="margin-bottom:10px"><div><h1>草稿与发布</h1><p>核对变更和待办。发布后问数使用新版本。</p></div><div class="r"><button class="btn" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8">发布 v16</button></div></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;max-width:420px;margin-bottom:9px"><div style="border:.5px solid rgba(60,60,67,.13);border-radius:8px;padding:7px 9px"><div style="font-size:9px;color:#9a9dab">新增</div><div style="font-size:17px;font-weight:650;line-height:1.2;margin-top:1px">0</div></div><div style="border:.5px solid rgba(60,60,67,.13);border-radius:8px;padding:7px 9px"><div style="font-size:9px;color:#9a9dab">修改</div><div style="font-size:17px;font-weight:650;line-height:1.2;margin-top:1px">0</div></div><div style="border:.5px solid rgba(60,60,67,.13);border-radius:8px;padding:7px 9px"><div style="font-size:9px;color:#9a9dab">删除</div><div style="font-size:17px;font-weight:650;line-height:1.2;margin-top:1px">0</div></div></div><div style="border:.5px solid rgba(60,60,67,.13);border-radius:9px;background:#fff;overflow:hidden"><div style="display:flex;align-items:center;padding:7px 10px;border-bottom:.5px solid rgba(60,60,67,.08);font-size:10px;font-weight:620">相对线上 v15 的修改<span style="margin-left:auto;font-size:9px;color:#9a9dab">变更 0 · 待办 0</span></div><div style="display:flex;align-items:center;gap:9px;padding:13px 11px"><div style="min-width:0"><div style="font-size:10pt;font-weight:620;font-size:10px">与 v15 完全一致</div><div style="font-size:9px;color:#9a9dab;margin-top:2px">没有待发布的文件改动。可以继续在关系图完善模型。</div></div><button class="btn" style="margin-left:auto;font-size:9.4px;height:23px;white-space:nowrap">去建模 ›</button></div></div><div style="margin-top:9px;font-size:9px;color:#9a9dab;line-height:1.6">空态里直接给下一步，页面末元素离底 ≤ 220px；三个数字卡总宽 420（1440 视口下 ≤ 720）。</div></div></div><div class="board qb dbl" style="height:400px"><div class="qtop"><div class="bc"><svg class="ic"><use href="#s-chev-l"/></svg><span>知识库</span><span class="sp">/</span><b>总部常规分析-本地复刻</b><span style="margin-left:4px;font-size:9.2px;background:#f0f8f3;color:#17603e;padding:2px 5px;border-radius:4px">已发布 v15</span></div><div class="r"><button class="btn">⋯</button><button class="btn" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8">提问</button></div></div><div class="qm" style="padding:12px 13px 0"><div class="ph" style="margin-bottom:9px"><div><h1>成员与权限</h1><p>管理当前知识库的成员及其使用权限。</p></div><div class="r"><button class="btn" style="background:#5f4bc8;color:#fff;border-color:#5f4bc8">邀请成员</button></div></div><div style="display:grid;grid-template-columns:minmax(0,1fr) 168px;gap:9px;flex:1;min-height:0;align-items:start"><div style="display:flex;flex-direction:column;min-height:0"><table class="qt" style="border:.5px solid rgba(60,60,67,.13);border-radius:8px;overflow:hidden"><colgroup><col><col style="width:88px"><col style="width:64px"></colgroup><thead><tr><th>用户名</th><th>权限</th><th>操作</th></tr></thead><tbody><tr><td><div style="font-size:10px;font-weight:600">bob</div><div style="font-size:8.6px;color:#9a9dab">bob · 公司未提供</div></td><td><span class="st" style="background:#efebfc;color:#3b2f86">创建者 · 管理</span></td><td style="font-size:8.8px;color:#9a9dab">固定权限</td></tr></tbody></table><div style="display:flex;align-items:center;gap:9px;border:.5px dashed rgba(60,60,67,.2);border-radius:8px;padding:10px;margin-top:7px;background:#fcfcfd"><div style="min-width:0"><div style="font-size:10px;font-weight:600">还没有其他成员</div><div style="font-size:8.8px;color:#9a9dab;margin-top:1px">邀请同事用这个库问数，或分配管理权限一起维护。</div></div><button class="btn" style="margin-left:auto;font-size:9px;height:22px;white-space:nowrap">＋ 邀请</button></div><div style="margin-top:7px;font-size:8.8px;color:#9a9dab">▶ 权限说明 · 使用 / 管理 / 公开库</div></div><div style="border:.5px solid rgba(60,60,67,.12);border-radius:8px;padding:8px 9px;background:#fff"><div style="font-size:9.4px;font-weight:620;margin-bottom:4px">权限模型</div><div style="font-size:8.6px;color:#626779;line-height:1.6"><b style="color:#16171d">使用</b>：选库问答、下载本人结果。</div><div style="font-size:8.6px;color:#626779;line-height:1.6;margin-top:4px"><b style="color:#16171d">管理</b>：数据维护、建模、发布、成员授权。</div><div style="font-size:8.4px;color:#9a9dab;line-height:1.55;margin-top:5px">创建者与全局管理员固定拥有管理权限。</div></div></div></div></div></div><div class="figcap"><b>图 V7</b> 左：草稿与发布（三卡限宽、空态内直接给「去建模」）。右：成员与权限（表格 720、空态横排、右侧权限模型卡）。</div></div></div><div class="wrap sec" id="q8">
+  <div class="sec-head"><span class="k">08</span><h2>改动清单与执行顺序</h2>
+  <p>按文件拆，一个文件一次改完。第一轮就是按这个方式做的，所以这轮也应该能在一天内收掉。</p></div>
+
+  <h3 class="sub"><span class="bar"></span>文件 → 改什么 → 对应编号</h3>
+  <table class="vtab">
+    <thead><tr><th style="width:270px">文件</th><th>改什么</th><th style="width:92px">编号</th></tr></thead>
+    <tbody>
+      <tr><td>pages/configure/KnowledgeWorkspaceShell.tsx</td><td>顶栏删「成员与权限 / 设置」两个按钮，收进 ⋯；「语义建模」统一为「语义模型」；建模三按钮按页禁用不隐藏</td><td>V1 V2 V4</td></tr>
+      <tr><td>pages/configure/KnowledgeWorkspaceShell.css</td><td>删目录底部状态行；右栏卡固定 96px、按钮贴底；目录数字徽标只在草稿时出现</td><td>V3 V6 V8</td></tr>
+      <tr><td>pages/configure/KnowledgeWorkspaceOverview.tsx</td><td>流程条副行改「已就绪 / 已发布 / 已启用」，删第三段「已发布版本可用」；删底部入口条；业务说明列全绿降级、列头改「字段说明」</td><td>V5 V7 V9</td></tr>
+      <tr><td>components/DatasetReadOnlyTables.tsx</td><td>隐藏 <code>id</code> 列；横滚区右侧加 36px 渐变；表脚算剩余列数</td><td>V11</td></tr>
+      <tr><td>pages/configure/DatasetGroupPage.tsx</td><td>上传禁用卡文案 + 「了解区别」；表脚三个数字带主语</td><td>V10 V12</td></tr>
+      <tr><td>components/modeling/RulesWorkspace.tsx</td><td>标题改「6 个小节（3 个有内容）」；锚点 &lt; 8 字时延伸；0 条小节 opacity .5；分组标题 sticky</td><td>V13 V14 V16</td></tr>
+      <tr><td>components/modeling/RuleInspector.tsx / .css</td><td>宽 300px；正文 flex 撑满；保存按钮按内容宽</td><td>V15</td></tr>
+      <tr><td>components/modeling/SemanticWorkbench.tsx / .css</td><td>模型卡 206px；引导卡水平居中、距卡片组 24px；未关联虚线边框</td><td>V17</td></tr>
+      <tr><td>components/modeling/QueryCoachPanel.tsx</td><td>示例换成视频 / 音乐 / 游戏三条真实问句；占位符修正</td><td>V18</td></tr>
+      <tr><td>components/modeling/SemanticAssetsPanel.tsx</td><td>标题栏收敛为「起草 + ⋯」；边聊边核对移到空态</td><td>V19</td></tr>
+      <tr><td>components/modeling/ModelingMaterials.tsx</td><td>文档级工具条移到文档头；页面只留新增文档</td><td>V20</td></tr>
+      <tr><td>components/modeling/DraftBar.tsx、SemanticModelingPage.tsx</td><td>空态内放「去建模」；三个数字卡限宽 720</td><td>V21</td></tr>
+      <tr><td>成员页组件（KnowledgeBaseMembers 相关）</td><td>表格 720；空态 120 横排；右栏权限模型卡</td><td>V22</td></tr>
+      <tr><td>pages/configure/KnowledgeWorkspaceSettings.tsx</td><td>事实表列全 5 张，超过折叠</td><td>V23</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub"><span class="bar"></span>执行顺序</h3>
+  <table class="vtab">
+    <thead><tr><th style="width:44px">顺序</th><th style="width:220px">做哪些</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>1</b></td><td>V1 V2 V4</td><td>壳，每屏都变。先改完后面截图才对得上。</td></tr>
+      <tr><td><b>2</b></td><td>V5 V7 V8</td><td>概览 P0，入口页，改完第一眼就有区别。</td></tr>
+      <tr><td><b>3</b></td><td>V13 V14 V15</td><td>业务规则 P0，收益最高。</td></tr>
+      <tr><td><b>4</b></td><td>V11 V17 V18 V21</td><td>四个 P0 单点：表详情、关系图、问数、发布。</td></tr>
+      <tr><td><b>5</b></td><td>V3 V6 V9 V10 V12 V16 V19 V20 V22 V23</td><td>其余 P1，按页顺手收。</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub"><span class="bar"></span>不要顺手做的事</h3>
+  <div class="issues">
+    <div class="issue">
+      <h4>把「成员与权限」「设置」再加回顶栏</h4>
+      <div class="row"><div class="k">原因</div><div>它们已经在左侧目录里。顶栏和目录是同一组 handler，加回去就回到「两个入口」。</div></div>
+    </div>
+    <div class="issue">
+      <h4>给「字段说明」列加进度条 / 环形图</h4>
+      <div class="row"><div class="k">原因</div><div>这列只有两个状态：覆盖、有缺项。全绿时它应该消失，而不是变成可视化。</div></div>
+    </div>
+    <div class="issue">
+      <h4>为了填满规则页右侧而加统计卡</h4>
+      <div class="row"><div class="k">原因</div><div>右侧是编辑区，不是看板。正文撑满就够了，空白是正常的。</div></div>
+    </div>
+    <div class="issue">
+      <h4>给示例问题编不存在的业务实体</h4>
+      <div class="row"><div class="k">原因</div><div>「足球会员」就是这么来的。示例必须从当前库的表和规则生成，否则用户点进去得到空结果，比没有示例更糟。</div></div>
+    </div>
+  </div>
+
+  <h3 class="sub"><span class="bar"></span>给 codex 的第一句话</h3>
+  <div class="promptbox">按 <b>docs/design/kb-workspace-polish-20261125.html</b> 执行第二轮修补，共 23 处（V1–V23）。顺序见 08 章：V1–V4 壳 → V5/V7/V8 概览 → V13/V14/V15 规则 → V11/V17/V18/V21 四个 P0 单点 → 其余 P1。
+
+每条都有「现在 / 改成 / 验收」三段，<b>以「验收」为完成标准</b>。验收都是可量的（高度差 ≤ 2px、出现次数 ≤ 1、宽度 ≥ 300px），请在 1440×900 下实测后写进交付说明。
+
+不要新增功能、不改路由、不改接口返回结构。08 章末尾「不要顺手做的事」四条，每条都是第一轮踩过的坑。
+
+上一版调整稿（kb-workspace-adjustment-20261125.html）仅作对照，不要按它再改一遍。</div>
+</div>
+
+<div class="foot"><span>知识库工作台 · 第二轮修补 · 2026-11-25</span><span>基于本地运行的「总部常规分析-本地复刻 / 5 张表 / 33 条规则 / v15」</span><span class="r">23 处 · 11 屏复核 · 不改路由与接口</span></div>
+</div>
+</body>
+</html>

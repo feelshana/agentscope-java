@@ -95,7 +95,7 @@ export default function AssociateTablesModal({
   preferBuiltin?: boolean;
   initialSourceId?: string;
   onClose: () => void;
-  onAssociated: () => void;
+  onAssociated: (problem?: string) => void;
   onError?: (message: string) => void;
   onAssociateStart?: (tables: string[]) => void;
   /** Per-table sampling progress; tables are associated one request at a time. */
@@ -264,7 +264,7 @@ export default function AssociateTablesModal({
       return;
     }
     state.phase = 'done'; report();
-    onAssociated();
+    onAssociated(failures.length ? failures.map(failure => `${failure.name}：${failure.error}`).join('；') : undefined);
   }
 
   return (

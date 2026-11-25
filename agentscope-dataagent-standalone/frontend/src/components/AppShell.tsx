@@ -10,13 +10,14 @@ import { ShellOutletContext } from './EditTierGate';
 import { ShellNavigationContext } from './ShellNavigation';
 import Icon from './Icon';
 import NewVersionBanner from './NewVersionBanner';
-import { isModelingWorkbench } from '../state/embedded';
+import { isKnowledgeWorkspace } from '../state/embedded';
 import './AppShell.css';
 
 export default function AppShell() {
   const location = useLocation();
   const [sidebarPreference, setSidebarPreference] = useState<boolean | null>(null);
-  const defaultCollapsed = isModelingWorkbench(location.pathname) || location.pathname.startsWith('/dashboards');
+  const knowledgeWorkspace = isKnowledgeWorkspace(location.pathname);
+  const defaultCollapsed = location.pathname.startsWith('/dashboards');
   const collapsed = sidebarPreference ?? defaultCollapsed;
   const sidebarAction = collapsed ? '展开侧边栏' : '收起侧边栏';
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -79,7 +80,7 @@ export default function AppShell() {
   const ctx: ShellOutletContext = { agent, agentLoading, agentError, bumpSidebar };
 
   return (
-    <ShellNavigationContext.Provider value={{ enabled: true, open: navigationOpen, toggle: toggleNavigation }}>
+    <ShellNavigationContext.Provider value={{ enabled: !knowledgeWorkspace, open: navigationOpen, toggle: toggleNavigation }}>
     <div className="app-shell">
       <a
         href="#main-content"
@@ -90,7 +91,7 @@ export default function AppShell() {
         跳到主内容
       </a>
       {navigationOpen && <button type="button" className="shell-nav-backdrop" aria-label="关闭导航" tabIndex={-1} onClick={() => setNavigationOpen(false)} />}
-      <aside ref={navigation} id="app-navigation" className={`shell-navigation${navigationOpen ? ' is-open' : ''}${railCollapsed ? ' is-collapsed' : ''}`}
+      {!knowledgeWorkspace && <aside ref={navigation} id="app-navigation" className={`shell-navigation${navigationOpen ? ' is-open' : ''}${railCollapsed ? ' is-collapsed' : ''}`}
         role={navigationOpen ? 'dialog' : undefined} aria-modal={navigationOpen || undefined} aria-label={navigationOpen ? '主导航' : undefined}>
         <button type="button" className="shell-nav-close" aria-label="关闭导航" onClick={() => setNavigationOpen(false)}><Icon name="close" size="sm" /></button>
         <SessionsSidebar refreshKey={refreshTick} collapsed={railCollapsed} onNewChat={resetSidebarForNewChat} />
@@ -99,7 +100,7 @@ export default function AppShell() {
           onClick={() => setSidebarPreference(previous => !(previous ?? defaultCollapsed))}>
           <Icon name="chevron" size="sm" />
         </button>
-      </aside>
+      </aside>}
       <main ref={content} id="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Outlet context={ctx} />
       </main>

@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { knowledgePath } from '../../pages/configure/knowledgeWorkspaceRoutes';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { diffLines } from '../../utils/diff';
 import { archiveModelingQuestion, correctModelingQuestionSql, decideModelingQuestion, editRecommendedQuestion, getQuestionSuggestions, getRecommendedTrialQuestion, planModelingQuestion, regenerateRecommendedQuestion } from '../../api/modelingQuestions';
 import type { DraftPlan, QuestionReview, RecommendedQuestion } from '../../api/modelingQuestions';
 import { decideAssetProposal } from '../../api/semanticAssets';
@@ -30,7 +33,12 @@ import './ModelingOptimization.css';
 /** Coach questions keep this id prefix, so the list survives reloads without extra storage. */
 const MAX_QUESTIONS = 10;
 const KIND: Record<string, string> = { rule: '规则', relationship: '关系', calculated_field: '计算字段', view: '查询模板' };
-const STEPS = ['分析', '口径/方案', 'SQL', '保存问答'] as const;
+const STEPS = ['提问', '口径与方案', 'SQL', '保存问答'] as const;
+const EXAMPLE_DOMAINS = [
+  { model: /video_vip|咪咕视频会员/, rule: /咪咕视频.*在订/, question: /咪咕视频.*在订会员/ },
+  { model: /music_order|咪咕音乐/, rule: /咪咕音乐|天籁会员/, question: /咪咕音乐|天籁会员|白金会员/ },
+  { model: /game_pay|咪咕游戏/, rule: /游戏.*付费|pay_uv/, question: /游戏.*付费/ },
+] as const;
 type Step = 0 | 1 | 2 | 3;
 type Group = 'analyse' | 'meaning' | 'plan' | 'sql' | 'review' | 'failed' | 'done';
 type RecommendationDialog = { mode: 'settings' | 'set'; question: string } | { mode: 'reset' };
@@ -95,7 +103,7 @@ export function questionState(r: QuestionReview | undefined, cards: number, link
  * is executed. One question at a time on the right, publishing stays in the draft bar.
  */
 export default function QueryCoachPanel({ groupId, assistantIdle, available, onRequest, confirmations = [], onAnswer, onOpenDocuments, onCompare,
-  data, selection, onSelect, onRemove, removalRequest, onRemovalRequestHandled, compact, onPublish, initialLibrary, draftChanges, readyToAsk, preview, reviewActions }: {
+  data, selection, onSelect, onRemove, compact, onPublish, initialLibrary, draftChanges, readyToAsk, preview, reviewActions }: {
   groupId: string;
   assistantIdle: boolean;
   /** The knowledge base has been published once; the coach builds on the basic model. */
@@ -110,8 +118,6 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   selection?: string;
   onSelect: (id: string | undefined) => void;
   onRemove: (id: string, online: boolean) => void;
-  removalRequest?: string;
-  onRemovalRequestHandled: () => void;
   reviewActions?: Ref<CoachReviewActions>;
   compact: boolean;
   onPublish: () => void;
@@ -129,13 +135,9 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   const [recommendationDialog, setRecommendationDialog] = useState<RecommendationDialog>();
   const [recommendationError, setRecommendationError] = useState('');
   const recommendDialog = useRef<HTMLDialogElement>(null);
-  const [removal, setRemoval] = useState<{ targets: Removal[]; batch?: boolean }>();
+  const [removal, setRemoval] = useState<{ targets: Removal[] }>();
   const [removalResult, setRemovalResult] = useState<{ removed: number; errors: string[] }>();
   const removalDialog = useRef<HTMLDialogElement>(null);
-  const openRemoval = useCallback((question: CoachQuestion, review?: QuestionReview) => {
-    setRemovalResult(undefined);
-    setRemoval({ targets: [{ question, review, label: removalLabel(review) }] });
-  }, []);
   useEffect(() => {
     if (removal && !removalDialog.current?.open) removalDialog.current?.showModal();
   }, [removal]);
@@ -171,7 +173,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     return () => { generation++; window.removeEventListener('modeling:updated', onUpdated); };
   }, [available, groupId]);
   const [batch, setBatch] = useState(false);
-  const [codeView, setCodeView] = useState<{ id: string; tab: 'current' | 'previous' | 'expanded' }>();
+  const [codeView, setCodeView] = useState<{ id: string; tab: 'current' | 'previous' | 'expanded' | 'diff' }>();
   const [plans, setPlans] = useState<Record<string, { revision: string; plan: DraftPlan }>>({});
   const [contextQuestion, setContextQuestion] = useState<string | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
@@ -229,12 +231,14 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
       .map(e => ({ id: e.id, title: e.question, source: e.source === 'liked' ? '问数点赞' : '建模确认',
         status: e.state === 'INVALID' ? '待检查' : e.source === 'liked' ? '已收录' : '草稿示例', example: e })),
   ];
+  const recentlySaved = [...library].sort((a, b) =>
+    (byId.get(b.id)?.validation?.confirmedAt ?? '').localeCompare(byId.get(a.id)?.validation?.confirmedAt ?? '')).slice(0, 3);
   const pending = questions.filter(q => states.get(q.id)?.group !== 'done')
     .sort((a, b) => queuePriority[states.get(a.id)!.group] - queuePriority[states.get(b.id)!.group]);
   const selectedReview = selection ? byId.get(selection) : undefined;
   const selected = selection ? questions.find(q => q.id === selection) ?? selectedReview?.question : undefined;
   const activeGroup = compact ? 'todo' : listGroup;
-  const inlineIntake = !compact && activeGroup === 'todo' && !pending.length && !draftChanges && !loading && !loadError;
+  const inlineIntake = !compact && activeGroup === 'todo' && !selection && !batch && !loading && !loadError;
   const boardClass = 'qc-board mo-work-grid' + (directoryOpen ? '' : ' qc-directory-collapsed');
   const shown = pending.filter(q => !filter || states.get(q.id)?.group === filter);
   const shownLibrary = library.filter(row => (!libraryStatus || row.status === libraryStatus) && (!librarySource || row.source === librarySource));
@@ -244,7 +248,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   const actionsDisabled = !readyToAsk || !assistantIdle || !!busy || loading || !!loadError;
   const displayedSqlTab = (id: string, sql?: string) => {
     const tab = codeView?.id === id ? codeView.tab : 'current';
-    return tab === 'previous' && (!previousSql[id] || previousSql[id] === sql) ? 'current' : tab;
+    return (tab === 'previous' || tab === 'diff') && (!previousSql[id] || previousSql[id] === sql) ? 'current' : tab;
   };
   const canConfirmSql = (review: QuestionReview) => {
     const { id, sql } = review.question;
@@ -252,17 +256,6 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     return !!sql && (group === 'sql' || group === 'review') && edit?.id !== id && displayedSqlTab(id, sql) !== 'previous';
   };
   const removalBlocked = !assistantIdle || !!busy || loading || !!loadError || !!edit;
-  useEffect(() => {
-    if (!compact || !available || !removalRequest || loading) return;
-    onRemovalRequestHandled();
-    if (removalBlocked) {
-      setError(edit ? '请先保存或取消正在编辑的 SQL，再移出题目。' : '问数优化当前无法移出题目，请稍后重试。');
-      return;
-    }
-    const question = questions.find(q => q.id === removalRequest);
-    if (question) openRemoval(question, byId.get(question.id));
-    else setError('这道题已移出，或当前无法读取。');
-  }, [available, byId, compact, edit, loading, onRemovalRequestHandled, openRemoval, questions, removalBlocked, removalRequest]);
   const directoryList = useRef<HTMLUListElement>(null);
   const [exampleTools, setExampleTools] = useState<HTMLDivElement | null>(null);
   const activeRow = activeGroup === 'done' ? librarySelection?.id : current?.id;
@@ -333,22 +326,13 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
       removeQuestion(target.question.id);
     }
     setPicked(previous => new Set([...previous].filter(id => !ids.has(id))));
-    const activeRemoved = removed.find(target => target.question.id === (current?.id ?? librarySelection?.id));
-    if (activeRemoved) {
-      if (!request.batch && activeRemoved.label === '下架示例') {
-        setListGroup('done'); setLibrarySource(''); setLibraryStatus('');
-        detailFocus.current = activeRemoved.question.id;
-        select(activeRemoved.question.id);
-      } else select();
-    }
+    if (ids.has(current?.id ?? librarySelection?.id ?? '')) select();
     if (failures.length) {
       setRemovalResult({ removed: removed.length, errors: failures.map(failure => `${failure.target.question.question} · ${failure.message}`) });
     } else {
       removalDialog.current?.close();
-      if (request.batch) {
-        const staged = removed.filter(target => target.label === '下架示例').length;
-        setRemovalNotice(`已处理 ${removed.length} 项问答${staged ? `，其中 ${staged} 项待发布下架` : ''}。`);
-      }
+      const staged = removed.filter(target => target.label === '下架示例').length;
+      setRemovalNotice(`已处理 ${removed.length} 项问答${staged ? `，其中 ${staged} 项待发布下架` : ''}。`);
     }
     if (request.targets.some(target => target.review || target.example)) {
       window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
@@ -475,6 +459,24 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     },
   }));
 
+  const realExamples = useMemo(() => {
+    const files = preview?.files ?? [];
+    const models = files.filter(file => file.path.startsWith('models/')).map(file => file.path + '\n' + file.content).join('\n');
+    const rules = files.filter(file => file.path.startsWith('knowledge/rules/')).map(file => file.content).join('\n');
+    const confirmed = [...new Set([
+      ...examples.filter(row => row.state !== 'INVALID' && !!row.sql).map(row => row.question.trim()),
+      ...allReviews.filter(row => row.status === 'CONFIRMED' && !!row.question.sql).map(row => row.question.question.trim()),
+    ])].filter(question => Array.from(question).length >= 12 && /[？?]$/.test(question));
+    const domains = EXAMPLE_DOMAINS.filter(item => item.model.test(models) && item.rule.test(rules));
+    return domains.length ? domains.flatMap(item => {
+      const question = confirmed.find(example => item.question.test(example));
+      return question ? [question] : [];
+    }) : confirmed.slice(0, 3);
+  }, [preview, examples, allReviews]);
+  const intakePlaceholder = realExamples.some(question => EXAMPLE_DOMAINS[0].question.test(question))
+    ? '例如：2026 年 10 月各省咪咕视频在订会员数'
+    : realExamples[0] ? '例如：' + realExamples[0] : '例如：上个月各省的业务指标是多少？';
+
   if (!available) return <section className="sm-pane qc-pane mo-optimization"><div className="da-card sm-empty">
     完成首次建模并发布后，可以在这里列出业务常问的问题，由助手分析缺少的口径并提议，你批准后再起草。</div></section>;
 
@@ -511,56 +513,63 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
 
   const questionSuggestions = [...new Set([recommended?.question || candidate, ...extraSuggestions]
     .filter((value): value is string => !!value))].slice(0, 3 + extraSuggestions.length);
-  const questionForm = (inline: boolean) => {
+  const questionForm = (inline: boolean, queue?: ReactNode) => {
+    const suggestionsToShow = inline ? realExamples : questionSuggestions;
+    const fieldId = inline ? 'qc-intake-questions' : 'qc-dialog-questions';
+    const hintId = fieldId + '-hint';
     const field = <>
       {inline ? <div className="qc-intake-field-head">
-        <label htmlFor="qc-intake-questions">业务问题</label>
-        <span id="qc-intake-hint" className="da-small">每行一道，最多 {MAX_QUESTIONS} 道</span>
-      </div> : <p id="qc-intake-hint" className="da-small">每行一道，最多 {MAX_QUESTIONS} 道。助手按当前草稿分析，生成 SQL 后逐题核对。</p>}
-      <textarea id="qc-intake-questions" className="da-input" ref={intakeInput} rows={5} aria-label={inline ? undefined : '业务问题'}
-        aria-describedby="qc-intake-hint"
-        placeholder="例如：上个月各品类的净销售额是多少？" value={input}
+        <label htmlFor={fieldId}>业务问题</label>
+        <span id={hintId} className="da-small">每行一道，最多 {MAX_QUESTIONS} 道</span>
+      </div> : <p id={hintId} className="da-small">每行一道，最多 {MAX_QUESTIONS} 道。助手按当前草稿分析，生成 SQL 后逐题核对。</p>}
+      <textarea id={fieldId} className="da-input" ref={inline ? undefined : intakeInput} rows={5} aria-label={inline ? undefined : '业务问题'}
+        aria-describedby={hintId}
+        placeholder={intakePlaceholder} value={input}
         onChange={event => { setInput(event.target.value); setIntakeError(''); }} />
       {intakeError && <p role="alert" className="mo-error">{intakeError}</p>}
-      {!readyToAsk && <p className="da-small">请先完成事实表时间配置，再分析问题。</p>}
+      {!readyToAsk && <p className="da-small qc-window-note">请先完成事实表时间配置 <Link className="da-btn da-btn-sm" to={knowledgePath(groupId) + '?section=settings#fact-window'}>去设置</Link></p>}
       {readyToAsk && !assistantIdle && <p className="da-small" role="status">助手正在处理其他问题，你可以先填写题目。</p>}
     </>;
     const suggestions = <div className="qc-intake-suggestions" role="group" aria-label="问题建议">
-      {(inline || questionSuggestions.length > 0) && <div className="qc-intake-suggestion-head">
-        <strong>问题建议</strong>
-        {questionSuggestions.length > 0 && <span className="da-small">点击填入，可修改后再分析。</span>}
+      {(inline || suggestionsToShow.length > 0) && <div className="qc-intake-suggestion-head">
+        <strong>{inline ? '示例问题' : '问题建议'}</strong>
+        {suggestionsToShow.length > 0 && <span className="da-small">点击填入，可修改后再分析。</span>}
       </div>}
-      {questionSuggestions.length > 0 && <div className="qc-chips">{questionSuggestions.map(title => {
+      {suggestionsToShow.length > 0 && <div className="qc-chips">{suggestionsToShow.map(title => {
         const filled = enteredQuestions.includes(title);
         return <button type="button" key={title} className="qc-chip" disabled={filled} aria-label={filled ? `已填入 ${title}` : `填入 ${title}`}
-          onClick={() => { setInput(previous => [previous.trim(), title].filter(Boolean).join('\n')); setIntakeError(''); intakeInput.current?.focus(); }}>
+          onClick={() => { setInput(previous => [previous.trim(), title].filter(Boolean).join('\n')); setIntakeError(''); document.getElementById(fieldId)?.focus(); }}>
           {inline ? <span className="qc-intake-suggestion-icon"><Icon name={filled ? 'check' : 'plus'} size="sm" /></span> : <Icon name={filled ? 'check' : 'plus'} size="sm" />}
           <span>{title}</span>
         </button>;
       })}</div>}
-      <div className="qc-intake-links">
+      {inline && !realExamples.length && <p className="da-small">这个知识库还没有可用示例。</p>}
+      {!inline && <div className="qc-intake-links">
         {suggestionStatus !== 'loaded' && <button type="button" className={inline ? 'da-btn da-btn-sm' : 'sm-text-link'} disabled={suggestionStatus === 'loading'}
           onClick={loadSuggestions}>{suggestionStatus === 'loading' ? '正在生成建议…' : suggestionStatus === 'error' ? '重新获取建议' : '更多问题建议'}</button>}
         {suggestionStatus === 'loaded' && !extraSuggestions.length && <span className="da-small" role="status">暂时没有更多建议。</span>}
-      </div>
+      </div>}
     </div>;
     const submit = <button type="submit" className="da-btn da-btn-primary" disabled={!enteredQuestions.length || !readyToAsk || !assistantIdle || !!busy}>
       添加并分析{inline && <Icon name="chevron" size="sm" />}
     </button>;
     return <form className={inline ? 'qc-intake-form qc-intake-form-inline' : 'qc-intake-form'} onSubmit={event => { event.preventDefault(); analyse(); }}>
       {inline ? <>
-        <div className="qc-intake-entry">
+        <div className="qc-intake-queue"><div className="qc-intake-entry">
           <div className="qc-intake-body">{field}</div>
           <div className="qc-intake-actions">
             <output className="da-small" aria-label="已填写题数">{enteredQuestions.length} / {MAX_QUESTIONS} 道</output>
             {submit}
           </div>
-        </div>
+        </div>{queue}</div>
         <aside className="qc-intake-assist" aria-label="录入帮助">
           {suggestions}
-          {library.length > 0 && <button type="button" className="qc-intake-library" onClick={() => selectGroup('done')}>
-            <Icon name="book" size="sm" />查看问答示例<Icon name="chevron" size="sm" />
-          </button>}
+          <section className="qc-recent-saved">
+            <h4>最近保存</h4>
+            {library.length ? <ul>{recentlySaved.map(row => <li key={row.id}><button type="button" className="sm-text-link"
+              onClick={() => { if (canSwitch()) { selectGroup('done'); select(row.id); } }}>{row.title}</button></li>)}</ul>
+              : <p className="da-small">还没有保存的问答示例。</p>}
+          </section>
         </aside>
       </> : <>
         <div className="mo-dialog-body qc-intake-body">{field}{suggestions}</div>
@@ -595,16 +604,10 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     onChange={checked => setPicked(previous => updateWorkspaceSelection(previous, id, checked))} />;
   const batchRemoveLabel = pickedTargets.every(target => target.label === '下架示例') ? '下架选中的问答'
     : pickedTargets.every(target => target.example) ? '删除选中的问答示例' : '移除选中的问答';
-  const openExampleRemoval = (example: SqlQaExample) => {
-    setRemovalResult(undefined);
-    setRemoval({ targets: [exampleRemoval(example)] });
-  };
   const objectActions = (q: CoachQuestion) => {
     const review = byId.get(q.id);
     if (review?.status === 'REMOVAL_PENDING') return null;
     const state = stateOf(q.id);
-    const canRegenerate = state.group === 'review' && !!review?.question.sql && edit?.id !== q.id;
-    const removeLabel = removalLabel(review);
     const resetRecommendation = state.group === 'done' && isRecommended(q.question) && recommended?.manual;
     return <>
       {onCompare && isScopedQuestion(q.id) && !compact && <button type="button" className="da-btn" onClick={() => {
@@ -615,10 +618,6 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
         onClick={() => openRecommendation(resetRecommendation ? { mode: 'reset' } : { mode: 'set', question: q.question.trim() })}>
         {resetRecommendation ? '恢复自动推荐' : '设为问数首页推荐'}
       </button>}
-      <WorkspaceMenu label="问答更多操作" items={[
-        ...(canRegenerate ? [{ label: '按当前口径重新生成 SQL', icon: 'refresh' as const, disabled: actionsDisabled, onClick: () => generate([q], '问数优化：复核 ' + q.question) }] : []),
-        { label: removeLabel, icon: 'trash', danger: true, disabled: removalBlocked, onClick: () => openRemoval(q, review) },
-      ]} />
     </>;
   };
   const focusDetail = (q: CoachQuestion, node: HTMLDivElement | null) => {
@@ -642,6 +641,12 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     const tab = displayedSqlTab(q.id, currentSql);
     const plan = review && plans[q.id]?.revision === review.revision ? plans[q.id].plan : undefined;
     const historicalSql = tab === 'previous';
+    const comparingSql = tab === 'diff' && !!priorSql && !!currentSql;
+    const canDiff = !!priorSql && !!currentSql && priorSql !== currentSql
+      && priorSql.split('\n').length * currentSql.split('\n').length <= 1_000_000;
+    const sqlDiff = comparingSql && canDiff ? diffLines(priorSql.replace(/\r\n/g, '\n'), currentSql.replace(/\r\n/g, '\n')) : null;
+    let priorLine = 0;
+    let currentLine = 0;
     const editing = edit?.id === q.id ? edit : undefined;
     const editStale = !!editing && editing.revision !== review?.revision;
     const showSqlActions = !!review && canConfirmSql(review);
@@ -664,6 +669,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
       <h4 ref={sqlHeading} tabIndex={-1}>{state.group === 'done' ? '已确认的 SQL' : '核对 SQL'}</h4>
       <div className="qc-sql-tabs" role="group" aria-label="SQL 版本">
         <button type="button" aria-pressed={tab === 'current'} onClick={() => setCodeView({ id: q.id, tab: 'current' })}>当前 SQL</button>
+        {canDiff && <button type="button" aria-pressed={tab === 'diff'} onClick={() => setCodeView({ id: q.id, tab: 'diff' })}>与上一次的差异</button>}
         {priorSql && priorSql !== currentSql && <button type="button" aria-pressed={tab === 'previous'} onClick={() => setCodeView({ id: q.id, tab: 'previous' })}>上一次 SQL</button>}
         <button type="button" aria-pressed={tab === 'expanded'} disabled={actionsDisabled} onClick={() => {
           setCodeView({ id: q.id, tab: 'expanded' });
@@ -673,7 +679,51 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     </div>;
     const editAction = review && currentSql && tab === 'current' && <button type="button" disabled={actionsDisabled}
       onClick={() => setEdit({ id: q.id, revision: review.revision, value: currentSql })}><Icon name="edit" size="sm" />编辑 SQL</button>;
+    const saveActions = showSqlActions && <div className="qc-review-actions" role="group" aria-label="SQL 核对操作">
+        <div className="qc-review-actions-copy">
+          {confirmError ? <p role="alert">确认失败。{confirmError}</p> : <span className="da-small">{review.analysis?.some(finding => !finding.ok)
+            ? '请先看核对依据中的待确认项，再确认当前 SQL。'
+            : '确认当前 SQL 后保存为草稿示例，发布后可供线上问数参考。'}</span>}
+        </div>
+        <div className="mo-work-actions">
+           <button type="button" className="da-btn da-btn-primary" disabled={actionsDisabled} onClick={() => void confirm(review)}>
+            <Icon name="check" size="sm" />
+            {busy === 'confirm' ? '正在确认…' : state.group === 'review' ? '确认现有 SQL 正确' : '确认并保存'}
+          </button>
+        </div>
+      </div>;
+    const hasEvidence = Boolean(review?.question.definition || review?.analysis?.length);
+    const definition = review?.question.definition && <section className="qc-definition-box">
+      <h4>业务口径</h4>
+      <dl>{review.question.definition.split('\n').filter(line => line.trim()).map((line, index) => {
+        const fieldLabel = /^(指标|粒度|时间范围|过滤|数据来源|假设)[：:]\s*(.*)$/;
+        const field = fieldLabel.exec(line.trim());
+        const previous = field && previousDefinitions[q.id]?.split('\n').map(value => fieldLabel.exec(value)).find(value => value?.[1] === field[1])?.[2];
+        return <div key={index} data-changed={!!previous && previous !== field?.[2] || undefined}>{field && <dt>{field[1]}</dt>}<dd>
+          {previous && previous !== field?.[2] && <del className="mo-definition-previous">{previous}</del>}
+          {previous && previous !== field?.[2] ? <strong>{field?.[2]}</strong> : field?.[2] ?? line}
+        </dd></div>;
+      })}</dl>
+    </section>;
+    const evidence = <aside className="qc-answer-evidence" aria-label="核对依据与版本">
+      <h4>核对依据</h4>
+      {!!review?.analysis?.length && <ul className="qc-findings">{review.analysis.map((finding, index) => <li key={index} className={finding.ok ? 'qc-ok' : 'qc-gap'}>
+        <span role="img" aria-label={finding.ok ? '有依据' : '待确认'}>{finding.ok ? '✓' : '!'}</span>{finding.text}
+      </li>)}</ul>}
+      {!!preview?.mdlVersion && <p>线上版本 <strong>v{preview.mdlVersion}</strong></p>}
+      <button type="button" className="sm-text-link qc-context-link" onClick={() => setContextQuestion(q.question)}>核对规则与版本</button>
+    </aside>;
     const detail = <>
+      {!compact && <header className="mo-object-heading qc-object-heading">
+        <div><h3>{q.question}</h3><p className={`qc-status-pill qc-status-${state.group}`}>{state.label}</p></div>
+      </header>}
+      <ol className="qc-review-steps" aria-label="本题处理进度">
+        {['分析', '口径与方案', '核对 SQL', '保存示例'].map((label, index) =>
+          <li key={label} aria-current={index === state.step ? 'step' : undefined} data-complete={index < state.step || undefined}>
+            <span aria-hidden="true">{index < state.step ? <Icon name="check" size="sm" /> : index + 1}</span>
+            {index === state.step ? state.label : label}
+          </li>)}
+      </ol>
       {(hint || !!review?.reviewReasons?.length) && <div className={'qc-next qc-next-' + state.group}>
         <div className="qc-next-copy">
           {hint && <p>{hint}</p>}
@@ -699,26 +749,17 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
       {linked.some(p => p.status === 'DRAFTED') && <details className="qc-detail-fold">
         <summary>查看已批准方案</summary>{proposalCards(linked.filter(p => p.status === 'DRAFTED'))}
       </details>}
-       {state.group !== 'meaning' && state.group !== 'plan' && (currentSql || review?.question.definition || !!review?.analysis?.length) && <div className={sqlText && !editing ? 'qc-answer-layout qc-fit-sql' : 'qc-answer-layout'}><div className={currentSql && (review?.question.definition || review?.analysis?.length) ? 'qc-answer-grid qc-with-definition' : 'qc-answer-grid'}>
-       {(review?.question.definition || !!review?.analysis?.length) && <div className="qc-answer-definition">
-       {review?.question.definition && <section className="qc-definition-box">
-        <h4>业务口径</h4>
-        <dl>{review.question.definition.split('\n').filter(line => line.trim()).map((line, index) => {
-          const field = /^(指标|粒度|时间范围|过滤|假设)[：:]\s*(.*)$/.exec(line.trim());
-          const previous = field && previousDefinitions[q.id]?.split('\n')
-            .map(value => /^(指标|粒度|时间范围|过滤|假设)[：:]\s*(.*)$/.exec(value))
-            .find(value => value?.[1] === field[1])?.[2];
-          return <div key={index}>{field && <dt>{field[1]}</dt>}<dd>
-            {previous && previous !== field?.[2] && <del className="mo-definition-previous">{previous}</del>}
-            {previous && previous !== field?.[2] ? <strong>{field?.[2]}</strong> : field?.[2] ?? line}
-          </dd></div>;
-        })}</dl>
-      </section>}
-      {!!review?.analysis?.length && <details className="qc-detail-fold">
-        <summary>查看核对依据</summary>
-        <ul className="qc-findings">{review.analysis.map((finding, index) => <li key={index} className={finding.ok ? 'qc-ok' : 'qc-gap'}><span aria-hidden="true">{finding.ok ? '✓' : '!'}</span>{finding.text}</li>)}</ul>
+      {state.group !== 'meaning' && state.group !== 'plan' && compact && hasEvidence && <details className="qc-evidence-fold" key={q.id}>
+        <summary className="qc-evidence-trigger">
+          <strong>核对依据</strong><span>{review?.analysis?.length ?? 0} 条依据{definition ? ' · 业务口径' : ''}</span>
+          <Icon name="chevron" size="sm" />
+        </summary>
+        <div className="qc-evidence-inline">{definition}{evidence}</div>
       </details>}
-       </div>}
+      {state.group !== 'meaning' && state.group !== 'plan' && (currentSql || hasEvidence) &&
+        <div className={sqlText && !editing ? 'qc-answer-layout qc-fit-sql' : 'qc-answer-layout'}>
+          <div className={currentSql && hasEvidence && !compact ? 'qc-answer-grid qc-with-definition' : 'qc-answer-grid'}>
+      {!compact && hasEvidence && <div className="qc-answer-definition">{definition}{evidence}</div>}
       {editing && review ? <section className="qc-sql-review mo-sql-edit">
         <h4>修改本题 SQL</h4>
         <SqlEditor value={editing.value} autoFocus rows={9} maxLength={16000} disabled={!!busy || editStale}
@@ -729,7 +770,18 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
             : <button type="button" className="da-btn da-btn-primary" disabled={actionsDisabled || !editing.value.trim() || editing.value.trim() === currentSql?.trim()} onClick={() => void editSql(review)}>保存修改</button>}
         </div>
       </section> : currentSql && <section className="qc-sql-review">
-        {!sqlText ? <>
+        {sqlDiff ? <div className="qc-diff-panel">
+          {sqlControls}
+          <div className="qc-diff-note">对比本次打开工作台后记录的上一稿与当前 SQL</div>
+          <div className="qc-diff-scroll" tabIndex={0} role="region" aria-label="SQL 行差异">
+            <pre>{sqlDiff.map(({ type, text }, index) => <span key={index} className={'qc-diff-line qc-diff-' + type}>
+              <span className="qc-diff-number" aria-hidden="true">{type === 'add' ? '' : ++priorLine}</span>
+              <span className="qc-diff-number" aria-hidden="true">{type === 'del' ? '' : ++currentLine}</span>
+              <span className="qc-diff-sign" aria-label={type === 'add' ? '新增行' : type === 'del' ? '移除行' : undefined}>{type === 'add' ? '+' : type === 'del' ? '−' : ' '}</span>
+              <code>{text}</code>
+            </span>)}</pre>
+          </div>
+        </div> : !sqlText ? <>
           {sqlControls}
           {plan?.error ? <p className="sm-issue" role="status">{plan.error}</p>
             : <p className="da-small" role="status">{busy === 'plan' ? '正在展开 SQL…' : '点「展开后的 SQL」查看规划结果。'}</p>}
@@ -737,25 +789,20 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
           text={sqlText} language="sql" title={tab === 'expanded' ? '展开后的 SQL' : tab === 'previous' ? '上一次 SQL' : '当前 SQL'}
           fitHeight header={sqlControls} actions={editAction} />}
         <div className="qc-sql-foot"><span className="da-small">{tab === 'expanded' && plan?.expanded && !plan.error ? 'SQL 规划检查通过 · 未执行查询' : 'SQL 预览 · 未执行查询'}</span>
-           <button type="button" className="sm-text-link" onClick={() => setContextQuestion(q.question)}>核对规则与版本</button>
+          {!review?.question.definition && !review?.analysis?.length &&
+            <button type="button" className="sm-text-link" onClick={() => setContextQuestion(q.question)}>核对规则与版本</button>}
         </div>
       </section>}
        </div></div>}
+      {state.group === 'review' && currentSql && !editing && <div className="qc-question-footer">
+        <button type="button" className="sm-text-link" disabled={actionsDisabled}
+          onClick={() => generate([q], '问数优化：复核 ' + q.question)}>按当前口径重新生成 SQL</button>
+      </div>}
     </>;
     return <div className="qc-question-workbench">
       <div key={q.id} className={'qc-detail' + (compact ? '' : ' mo-work-detail')} aria-label={q.question}
         tabIndex={-1} ref={node => focusDetail(q, node)}>{detail}</div>
-      {showSqlActions && <div className="qc-review-actions" role="group" aria-label="SQL 核对操作">
-        <div className="qc-review-actions-copy">
-          {confirmError ? <p role="alert">确认失败。{confirmError}</p> : <span className="da-small">核对指标、时间和过滤条件后，保存为草稿示例。</span>}
-        </div>
-        <div className="mo-work-actions">
-           <button type="button" className="da-btn da-btn-primary" disabled={actionsDisabled} onClick={() => void confirm(review)}>
-            <Icon name="check" size="sm" />
-            {busy === 'confirm' ? '正在确认…' : state.group === 'review' ? '确认现有 SQL 正确' : '确认并保存'}
-          </button>
-        </div>
-      </div>}
+      {saveActions}
       {canPublishDraft && <div className="qc-review-actions" role="group" aria-label="问答发布操作">
         <span className="da-small qc-review-actions-copy">已保存到草稿，发布后可供线上问数参考。</span>
         <div className="mo-work-actions">
@@ -772,7 +819,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
         {byId.get(current.id)?.status === 'REMOVAL_PENDING' ? '待下架' : stateOf(current.id).label}
       </span>{objectActions(current)}
     </WorkspaceObjectTools>}
-    {!compact && <WorkspaceToolbar label="问数优化范围" active={activeGroup} onSelect={selectGroup} tabs={[
+    {!compact && <WorkspaceToolbar title="问数优化" label="问数优化范围" active={activeGroup} onSelect={selectGroup} tabs={[
       { id: 'todo', label: '待处理', icon: 'list', count: pending.length },
       { id: 'done', label: '问答示例库', icon: 'book', count: library.length },
     ]} context={!directoryOpen && !batchActive ? current?.question ?? (activeGroup === 'done' ? librarySelection?.title : undefined) : undefined}
@@ -780,7 +827,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
         onClear={clearPicked} onRemove={() => {
           if (!canSwitch()) return;
           setRemovalResult(undefined);
-          setRemoval({ targets: pickedTargets, batch: true });
+          setRemoval({ targets: pickedTargets });
         }}>
         {activeGroup === 'todo' && <>{pickedRows.length > MAX_QUESTIONS && <span className="da-small">每次最多分析 {MAX_QUESTIONS} 道</span>}
         <button type="button" className="da-btn" disabled={!pickedRows.length || pickedRows.length > MAX_QUESTIONS || actionsDisabled}
@@ -788,15 +835,20 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
         <button type="button" className="da-btn" disabled={!rewritable.length || rewritable.length > MAX_QUESTIONS || actionsDisabled}
           onClick={() => generate(rewritable, '问数优化：按新口径重新生成所选题目的 SQL')}>重写 SQL</button>
         </>}
-      </WorkspaceBatchTools> : current ? objectActions(current) : activeGroup === 'done' && librarySelection?.example?.editable
+      </WorkspaceBatchTools> : current && !inlineIntake ? objectActions(current) : activeGroup === 'done' && librarySelection?.example?.editable
         ? <div ref={setExampleTools} className="mo-work-object-slot" /> : null}>
-      {!inlineIntake && <button type="button" className="da-btn da-btn-primary"
+      {!inlineIntake && (activeGroup !== 'todo' || !current || batchActive) && <button type="button" className="da-btn da-btn-primary"
         disabled={!readyToAsk} onClick={() => { setIntakeError(''); setIntakeOpen(true); }}><Icon name="plus" size="sm" />添加业务问题</button>}
-      <WorkspaceMenu label="问数优化更多" items={[
+      {activeGroup === 'todo' && !inlineIntake && pending.length > 0 && <button type="button" className="da-btn" onClick={() => {
+        if (!canSwitch()) return;
+        setBatch(false); setFilter(''); setPicked(new Set()); select();
+      }}>返回待处理</button>}
+      {(activeGroup !== 'todo' || !current || inlineIntake || batchActive) && <WorkspaceMenu label="问数优化更多" items={[
         { label: '使用指南', icon: 'info', onClick: () => helpDialog.current?.showModal() },
+        ...(inlineIntake ? [{ label: '更多问题建议', icon: 'terms' as const, onClick: () => { setIntakeError(''); setIntakeOpen(true); } }] : []),
         ...(activeGroup === 'done' ? [{ label: '问数首页推荐设置', icon: 'settings' as const,
           onClick: () => openRecommendation({ mode: 'settings', question: recommended?.question ?? candidate ?? '' }) }] : []),
-      ]} />
+      ]} />}
     </WorkspaceToolbar>}
     <dialog ref={helpDialog} className="mo-form-dialog" aria-label="问数优化使用指南">
       <header className="mo-dialog-head"><strong>使用指南</strong><button type="button" className="da-btn" onClick={() => helpDialog.current?.close()}>关闭</button></header>
@@ -842,7 +894,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     </dialog>
     <dialog ref={removalDialog} className="mo-form-dialog qc-recommend-dialog" aria-labelledby="qc-removal-title"
       onCancel={event => { if (busy === 'archive') event.preventDefault(); }} onClose={() => setRemoval(undefined)}>
-      <header className="mo-dialog-head"><strong id="qc-removal-title">{removal?.batch ? '批量移除问答' : removal?.targets[0]?.label ?? '移出题目'}</strong>
+      <header className="mo-dialog-head"><strong id="qc-removal-title">批量移除问答</strong>
         <button type="button" className="da-btn da-btn-sm" aria-label="关闭" disabled={busy === 'archive'}
           onClick={() => removalDialog.current?.close()}><Icon name="close" size="sm" /></button></header>
       {removal && <>
@@ -863,16 +915,15 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
         <footer className="mo-dialog-footer">
           <button type="button" className="da-btn" disabled={busy === 'archive'} onClick={() => removalDialog.current?.close()}>{removalResult ? '返回列表' : '取消'}</button>
           {!removalResult && <button type="button" className="da-btn da-btn-danger" disabled={removalBlocked}
-            onClick={() => void confirmRemoval(removal)}>{busy === 'archive' ? '处理中…' : removal.batch ? '确认批量移除'
-              : removal.targets[0]?.label === '下架示例' ? '确认下架' : removal.targets[0]?.example ? '确认删除' : '确认移出'}</button>}
+            onClick={() => void confirmRemoval(removal)}>{busy === 'archive' ? '处理中…' : '确认批量移除'}</button>}
         </footer>
       </>}
     </dialog>
-    {!inlineIntake && <dialog ref={intake} className="mo-form-dialog" aria-labelledby="mo-coach-intake-title" onClose={() => setIntakeOpen(false)}>
+    <dialog ref={intake} className="mo-form-dialog" aria-labelledby="mo-coach-intake-title" onClose={() => setIntakeOpen(false)}>
       <header className="mo-dialog-head"><strong id="mo-coach-intake-title">添加业务问题</strong>
         <button type="button" className="da-btn da-btn-sm" onClick={() => setIntakeOpen(false)}>关闭</button></header>
       {intakeOpen && questionForm(false)}
-    </dialog>}
+    </dialog>
     <div className="qc-list-view">
     {compact ? current ? workbench(current) : <div className="qc-detail"><p className="da-small" role="status">{loading || !assistantIdle ? '正在读取题目…' : '这道题尚未保存。'}</p></div>
       : loading && !questions.length ? <p className="da-small qc-loading" role="status">正在读取业务问题…</p>
@@ -893,23 +944,41 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
           {current ? workbench(current) : <div className="qc-detail mo-work-detail">{librarySelection?.example
             ? <SqlQaExampleDetail key={librarySelection.id} groupId={groupId} entry={librarySelection.example} leaveGuard={exampleLeaveGuard}
                 onContext={setContextQuestion} toolbarTarget={batchActive ? null : exampleTools}
-                onRemove={removalBlocked ? undefined : openExampleRemoval}
                 onChanged={() => window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }))} />
             : <WorkspaceEmpty icon="search" title="没有匹配的示例"><button type="button" className="da-btn" onClick={() => { setLibraryStatus(''); setLibrarySource(''); }}>清除筛选</button></WorkspaceEmpty>}</div>}
         </div>}
-      </> : !pending.length ? !loadError && (draftChanges ? <WorkspaceEmpty icon="check" title="当前没有待处理问题"
-        description="草稿有待发布的改动。发布后，线上问数可以使用最新版本。">
-        <button type="button" className="da-btn da-btn-primary" disabled={!assistantIdle} onClick={onPublish}>检查并发布</button>
-        {library.length > 0 && <button type="button" className="da-btn" onClick={() => selectGroup('done')}>查看问答示例</button>}
-      </WorkspaceEmpty> : inlineIntake && <div className="qc-intake-stage">
+      </> : inlineIntake ? <div className="qc-intake-stage qc-intake-overview">
         <div className="qc-intake-start">
+          <ol className="qc-home-steps" aria-label="问数优化流程">{STEPS.map((step, index) =>
+            <li key={step} aria-current={index === 0 ? 'step' : undefined}><span>{index + 1}</span>{step}</li>)}</ol>
           <header className="qc-intake-heading">
             <h3>添加业务问题</h3>
             <p>用常见问题验证当前模型草稿。生成 SQL 后，在「待处理」逐题核对。</p>
           </header>
-          {questionForm(true)}
+          {questionForm(true, <section className="qc-home-pending" aria-label="待处理问题">
+            <header><h3>待处理 <small>{pending.length}</small></h3>
+              <div className="qc-intake-links">
+              <button type="button" className="sm-text-link" onClick={() => selectGroup('done')}>示例库</button>
+              {pending.length > 1 && <button type="button" className="da-btn da-btn-sm" onClick={() => { setBatch(true); }}>批量处理</button>}
+              </div>
+            </header>
+            {pending.length ? <ul>{pending.map(q => <li key={q.id} data-attention={['sql', 'review', 'failed'].includes(states.get(q.id)!.group) || undefined}>
+              <span className="qc-pending-title"><strong>{q.question}</strong><small className={'qc-status-pill qc-status-' + states.get(q.id)!.group}>{states.get(q.id)!.label}</small></span>
+              <button type="button" className="da-btn da-btn-primary qc-review-link" aria-label={`去核对 ${q.question}`} onClick={() => {
+                if (!canSwitch()) return;
+                detailFocus.current = q.id; select(q.id);
+              }}>去核对</button>
+            </li>)}</ul> : <div className="qc-home-empty">
+              <p>写一道业务问题，分析后在这里核对。</p>
+              <p>也可以从右侧挑一个示例填入。</p>
+              <button type="button" className="da-btn da-btn-sm" onClick={() => selectGroup('done')}>查看问答示例库</button>
+            </div>}
+            {draftChanges > 0 && <button type="button" className="da-btn da-btn-sm" disabled={!assistantIdle} onClick={onPublish}>检查并发布</button>}
+          </section>)}
         </div>
-      </div>)
+      </div> : !pending.length ? <WorkspaceEmpty icon="check" title="当前没有待处理问题">
+        <button type="button" className="da-btn" onClick={() => select()}>返回录入</button>
+      </WorkspaceEmpty>
       : <div className={boardClass}>
         {directory('业务问题', '问题目录', `${shown.length} 道`,
           <select aria-label="按状态筛选" className="da-input" value={filter} onChange={e => {

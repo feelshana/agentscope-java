@@ -519,7 +519,7 @@ public class DatasetService implements DatasetContextProvider {
                 repository.findByGroupId(groupId).stream()
                         .anyMatch(dataset -> "datasource".equals(dataset.getOrigin()));
         if (hasExternal) {
-            throw new DatasetException("知识库已关联外部数据源表，不能再上传本地数据集，请使用独立知识库");
+            throw new DatasetException("此库通过数据源接入。上传文件需在未关联数据源的知识库中进行。");
         }
     }
 
@@ -530,7 +530,7 @@ public class DatasetService implements DatasetContextProvider {
         }
         for (DatasetEntity existing : repository.findByGroupId(groupId)) {
             if (!"datasource".equals(existing.getOrigin())) {
-                throw new DatasetException("知识库已包含上传数据集，不能再关联外部数据源表，请使用独立知识库");
+                throw new DatasetException("此库已包含上传数据集。关联数据表需在未上传文件的知识库中进行。");
             }
             if (!source.getId().equals(existing.getExternalDataSourceId())) {
                 throw new DatasetException("一个知识库只能关联同一个外部数据源的表");

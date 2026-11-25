@@ -4,12 +4,10 @@ import { updateSqlQaExample, type SqlQaExample } from '../../api/semanticModelin
 import Icon from '../Icon';
 import ReadableCode from '../ReadableCode';
 import SqlEditor from '../SqlEditor';
-import { WorkspaceMenu } from '../KnowledgeWorkspace';
 import './SqlQaExamplesPanel.css';
 
-export default function SqlQaExampleDetail({ groupId, entry, onChanged, onRemove, leaveGuard, onContext, toolbarTarget }: {
+export default function SqlQaExampleDetail({ groupId, entry, onChanged, leaveGuard, onContext, toolbarTarget }: {
   groupId: string; entry: SqlQaExample; onChanged: () => void;
-  onRemove?: (entry: SqlQaExample) => void;
   leaveGuard: MutableRefObject<(() => boolean) | null>;
   onContext: (question: string) => void;
   toolbarTarget: HTMLElement | null;
@@ -31,11 +29,8 @@ export default function SqlQaExampleDetail({ groupId, entry, onChanged, onRemove
     finally { setBusy(false); }
   };
   return <section className={edit || !entry.sql ? 'sqa-detail' : 'sqa-detail sqa-readonly'} aria-label={entry.question}>
-    {toolbarTarget && entry.editable && !edit && createPortal(<>
-      {!entry.sql && <button type="button" className="da-btn" onClick={startEdit}>编辑问答示例</button>}
-      <WorkspaceMenu label="问答更多操作" items={[{ label: '删除问答示例', icon: 'trash', danger: true,
-        disabled: busy || !onRemove, onClick: () => onRemove?.(entry) }]} />
-    </>, toolbarTarget)}
+    {toolbarTarget && entry.editable && !edit && !entry.sql && createPortal(
+      <button type="button" className="da-btn" onClick={startEdit}>编辑问答示例</button>, toolbarTarget)}
     {error && <p role="alert" className="mo-error">{error}</p>}
     {entry.message && <p className="da-small">{entry.message}</p>}
     {edit ? <>

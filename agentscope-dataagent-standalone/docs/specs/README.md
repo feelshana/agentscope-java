@@ -8,6 +8,8 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
+- [152 建模专用导航与关系图对象目录](152-modeling-workspace-navigation.md)
+
 - [149 对话建模与模型工作台](149-modeling-conversation-workspace.md)：对话式准备、建模和工作台切换，待产品验收。
 - [150 问数优化与建模对话联动](150-query-coach-conversation.md)：单题范围、逐题工作台和并排核对，待真实知识库体验。
 - [151 问数优化、公共视图与资料工作台](151-modeling-workbench-layout.md)：按已确认的交互设计实施。

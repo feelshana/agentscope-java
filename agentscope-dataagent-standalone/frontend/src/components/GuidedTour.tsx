@@ -65,11 +65,11 @@ function pathFor(tour: TourState): string | null {
   const group = tour.groupId ? encodeURIComponent(tour.groupId) : null;
   switch (tour.step) {
     case 'create': return '/configure/datasets?create=1';
-    case 'source': case 'sample': return group && `/configure/datasets/${group}`;
+    case 'source': case 'sample': return group && `/configure/datasets/${group}?section=datasets`;
     case 'importing': return null;
-    case 'screening': case 'window': case 'start': return group && `/configure/modeling/${group}?asset=modeling&start=1`;
+    case 'screening': case 'window': case 'start': return group && `/configure/datasets/${group}/modeling?asset=modeling&start=1`;
     case 'ask': return group ? `/chat?groups=${group}` : '/chat';
-    default: return group && `/configure/modeling/${group}?asset=modeling`;
+    default: return group && `/configure/datasets/${group}/modeling?asset=modeling`;
   }
 }
 

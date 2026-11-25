@@ -12,8 +12,10 @@ export type IconName =
   | 'arrowDown'
   | 'arrowUp'
   | 'table'
+  | 'grid'
   | 'graph'
   | 'list'
+  | 'filter'
   | 'search'
   | 'globe'
   | 'zoomIn'
@@ -52,6 +54,7 @@ export type IconName =
 
 /** Shared 24px glyphs; product icons add matching outline and solid variants. */
 const PATHS: Record<IconName, React.ReactNode> = {
+  filter: <path d="M4 6h16l-6 7v5l-4 2v-7z" />,
   globe: <><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12h18" /></>,
   circleAlert: <><circle cx="12" cy="12" r="9" /><path d="M12 6v7M12 17h.01" /></>,
   sliders: <><path d="M3 6h11m4 0h3M3 12h3m4 0h11M3 18h10m4 0h4" /><circle cx="16" cy="6" r="2" /><circle cx="8" cy="12" r="2" /><circle cx="15" cy="18" r="2" /></>,
@@ -84,6 +87,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   table: PRODUCT_ICONS.table.outline,
+  grid: <><rect x="3" y="3" width="7" height="7" rx="1.3" /><rect x="14" y="3" width="7" height="7" rx="1.3" /><rect x="3" y="14" width="7" height="7" rx="1.3" /><rect x="14" y="14" width="7" height="7" rx="1.3" /></>,
   graph: (
     <>
       <circle cx="18" cy="5" r="3" />

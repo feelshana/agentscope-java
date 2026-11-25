@@ -34,7 +34,7 @@ export default function ModelingMaterials({ groupId, tables, idle, paired, onMan
       .catch(e => { if (active) setError(e instanceof Error ? e.message : '读取字段失败'); });
     return () => { active = false; };
   }, [groupId, id, tables, retry]);
-  const toolbar = (objectActions: ReactNode, actions: ReactNode, context?: string, count = docCount) => !paired && <WorkspaceToolbar label="资料类型" active={mode} onSelect={value => setMode(value)} tabs={[
+  const toolbar = (objectActions: ReactNode, actions: ReactNode, context?: string, count = docCount) => !paired && <WorkspaceToolbar title="资料" label="资料类型" active={mode} onSelect={value => setMode(value)} tabs={[
     { id: 'documents', label: '业务文档', icon: 'file', count },
     { id: 'tables', label: '数据表', icon: 'table', count: tables?.length },
   ]} objectActions={objectActions} context={context}>{actions}</WorkspaceToolbar>;
@@ -68,6 +68,10 @@ export default function ModelingMaterials({ groupId, tables, idle, paired, onMan
             <div className="mo-work-detail mo-material-detail mo-table-detail" key={current?.datasetId}>
               {!current ? <WorkspaceEmpty icon="search" title="没有匹配的数据表"><button type="button" className="da-btn" onClick={() => setTerm('')}>清除搜索</button></WorkspaceEmpty>
                 : <>
+                  {!paired && <header className="mo-object-heading">
+                    <span className="mo-object-icon"><Icon name="table" size="sm" /></span>
+                    <div><h3>{current.name}</h3><p>{current.confirmed ? '字段范围已确认' : '待确认字段范围'}</p></div>
+                  </header>}
                   {error ? <p className="mo-error" role="alert">{error} <button type="button" className="da-btn" onClick={() => setRetry(n => n + 1)}>重试</button></p>
                     : !fields ? <p className="da-small" role="status">正在读取字段清单…</p>
                       : <MaterialFields fields={fields.fields} />}

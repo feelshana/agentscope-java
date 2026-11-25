@@ -1,12 +1,11 @@
 import { tourActive, tourLocksDraftDrawer, tourSignal, useTour } from '../../state/guidedTour';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { discardDraft, getDraftItems, getDraftReview, revertDraftFile } from '../../api/draftReview';
+import { discardDraft, getDraftItems, revertDraftFile } from '../../api/draftReview';
 import type { Confirmation, ConfirmationAnswer, DraftItem, DraftReview } from '../../api/draftReview';
-import type { QuestionReview } from '../../api/modelingQuestions';
-import { publishMdl } from '../../api/semanticModeling';
+import { publishMdl, validateMdl } from '../../api/semanticModeling';
 import type { MdlIssue, MdlPublishResult } from '../../api/semanticModeling';
-import { getAssetCatalog } from '../../api/semanticAssets';
-import type { ModelingWorkflow } from '../../api/modelingWorkflow';
+import type { AssetReviewTarget, KnowledgeReleaseDecision, ReviewSection } from './releaseDecision';
+import type { KnowledgeReleaseData } from './useKnowledgeReleaseData';
 import DraftItemsList from './DraftItemsList';
 import { draftChangeGroups } from './draftChangeGroups';
 import ConfirmationCards from './ConfirmationCards';
@@ -21,15 +20,18 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
  */
 /** What the page needs to guide the next step (spec092 §7). */
 export type DraftSummary = { changes: number; examples: number; publishing: boolean; publishedVersion: number | null; error: string | null; blocked?: string | null };
+export type CanvasDraft = { items: DraftItem[]; review: DraftReview | null };
+export type DraftUndoRequest = { path: string | null };
 
-type AssetTask = NonNullable<MdlIssue['assetReview']>;
 type CenterTab = 'changes' | 'tasks';
 
-export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, confirmations = [], onAnswer,
-  reviewQuestions, questionTitles, pendingRemovals = [], onReviewQuestion, onReviewAsset, onInspectChange, onLocateChange,
-  isUnseen, onSeen, publishSignal = 0, reviewSignal = 0, taskSignal = 0, onSummary, terms, compact = false, editingBlocked = false, checksPending = false }: {
+export default function DraftBar({ groupId, release, decision, assistantActive, pendingConfirmations, onLocate, confirmations = [], onAnswer,
+  reviewQuestions, questionTitles, onReviewQuestion, onReviewAsset, onInspectChange, onLocateChange,
+  isUnseen, onSeen, publishSignal = 0, reviewSignal = 0, taskSignal = 0, onSummary, onCanvasDraft, undoRequest, beforePublish, terms, compact = false, editingBlocked = false, checksPending = false,
+  importing = false, stateError, reviewRequested, onDismissReview, onOpenEngineering, onPrepareData, onPrepareModel, onRetryState }: {
   groupId: string;
-  workflow: ModelingWorkflow | null;
+  release: KnowledgeReleaseData;
+  decision: KnowledgeReleaseDecision;
   assistantActive: boolean;
   pendingConfirmations: number;
   /** Scrolls to "需要你确定的部分". */
@@ -38,9 +40,8 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   onAnswer?: (answers: ConfirmationAnswer[]) => void;
   reviewQuestions: { id: string; question: string; reasons?: string[] }[];
   questionTitles?: ReadonlyMap<string, string>;
-  pendingRemovals?: readonly QuestionReview[];
   onReviewQuestion: (id: string) => boolean;
-  onReviewAsset?: (target: NonNullable<MdlIssue['assetReview']>) => boolean;
+  onReviewAsset?: (target: AssetReviewTarget) => boolean;
   onInspectChange?: (path: string) => boolean;
   onLocateChange?: (item: DraftItem) => boolean;
   isUnseen?: (item: DraftItem) => boolean;
@@ -50,57 +51,43 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   reviewSignal?: number;
   taskSignal?: number;
   onSummary?: (summary: DraftSummary) => void;
+  onCanvasDraft?: (data: CanvasDraft) => void;
+  undoRequest?: DraftUndoRequest | null;
+  beforePublish?: () => boolean;
   /** A quieter presentation for the terms page; all publish checks remain shared. */
   terms?: { pending: number; editing: boolean };
   compact?: boolean;
   editingBlocked?: boolean;
   checksPending?: boolean;
+  importing?: boolean;
+  stateError?: string | null;
+  reviewRequested?: ReviewSection | null;
+  onDismissReview?: () => void;
+  onOpenEngineering?: () => boolean;
+  onPrepareData?: () => boolean;
+  onPrepareModel?: () => boolean;
+  onRetryState?: () => void;
 }) {
   const [items, setItems] = useState<DraftItem[]>([]);
-  const [review, setReview] = useState<DraftReview | null>(null);
-  const [open, setOpen] = useState(false);
+  const { workflow, review, assetTasks, incompleteViews, reload, recordPublicationFailure } = release;
+  const [open, setOpen] = useState(!!reviewRequested);
   const [tab, setTab] = useState<CenterTab>('changes');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [issues, setIssues] = useState<MdlIssue[]>([]);
-  const [assetTasks, setAssetTasks] = useState<AssetTask[]>([]);
-  const [incompleteViews, setIncompleteViews] = useState<string[]>([]);
-  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
   const [restorePath, setRestorePath] = useState<string | null>(null);
   const [repairView, setRepairView] = useState<string | null>(null);
   const [repairNotice, setRepairNotice] = useState('');
   const [result, setResult] = useState<MdlPublishResult | null>(null);
   const [publishFromPage, setPublishFromPage] = useState(false);
+  const [impactOpen, setImpactOpen] = useState(false);
   const [confirming, setConfirming] = useState<'pending' | 'others' | 'discard' | null>(null);
   const active = useRef(groupId); active.current = groupId;
   const tour = useTour();
   const drawerLocked = !terms && tourLocksDraftDrawer(tour, groupId);
   // Hide synchronously on the step change, before the spotlight measures the covered control.
   const drawerOpen = open && !drawerLocked;
-  const canLocateAssets = !!onReviewAsset;
-  useEffect(() => {
-    if (!canLocateAssets || (!compact && !drawerOpen)) return;
-    let cancelled = false;
-    let visit = 0;
-    const refresh = () => {
-      const request = ++visit;
-      void getAssetCatalog(groupId).then(catalog => {
-        if (cancelled || request !== visit) return;
-        setAssetTasks(catalog.draft.flatMap<AssetTask>(asset =>
-          asset.status === 'REVIEW_PENDING' || asset.status === 'VERIFY_PENDING'
-            ? [{ kind: asset.kind, name: asset.name, step: asset.status }] : []));
-        setIncompleteViews([...new Set(catalog.incompleteViews ?? [])]);
-        setCatalogStatus('ready');
-      }).catch(() => { if (!cancelled && request === visit) setCatalogStatus('failed'); });
-    };
-    const updated = (event: Event) => {
-      if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) refresh();
-    };
-    refresh();
-    window.addEventListener('modeling:updated', updated);
-    return () => { cancelled = true; window.removeEventListener('modeling:updated', updated); };
-  }, [groupId, drawerOpen, canLocateAssets, compact]);
   useEffect(() => {
     if (!drawerLocked) return;
     setOpen(false);
@@ -119,20 +106,30 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     lastTaskSignal.current = taskSignal;
     if (!drawerLocked) { setTab('tasks'); setOpen(true); }
   }, [taskSignal, drawerLocked]);
+  const lastUndoRequest = useRef(undoRequest);
+  useEffect(() => {
+    if (lastUndoRequest.current === undoRequest) return;
+    lastUndoRequest.current = undoRequest;
+    if (!undoRequest || drawerLocked) return;
+    setTab('changes');
+    setRestorePath(undoRequest.path);
+    setConfirming(undoRequest.path ? null : 'discard');
+    setOpen(true);
+  }, [undoRequest, drawerLocked]);
 
   const loadSequence = useRef(0);
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current;
     try {
-      const [list, r] = await Promise.all([getDraftItems(groupId), getDraftReview(groupId)]);
+      const list = await getDraftItems(groupId);
       if (active.current !== groupId || sequence !== loadSequence.current) return;
-      setItems(list); setReview(r); setLoadError(null);
+      setItems(list); setLoadError(null);
     } catch (e) { if (active.current === groupId && sequence === loadSequence.current) setLoadError(message(e)); }
   }, [groupId]);
   useEffect(() => {
-    setItems([]); setReview(null); setOpen(false); setIssues([]); setResult(null); setConfirming(null); setError(null); setPublishFromPage(false);
+    setItems([]); setOpen(false); setIssues([]); setResult(null); setConfirming(null); setError(null); setPublishFromPage(false);
     setRepairView(null); setRepairNotice(''); setRestorePath(null); setLoadError(null);
-    setAssetTasks([]); setIncompleteViews([]); setCatalogStatus('loading'); setBusy(null); setTab('changes');
+    setBusy(null); setTab('changes');
     void load();
     const update = (event: Event) => {
       if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void load();
@@ -141,23 +138,24 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     return () => window.removeEventListener('modeling:updated', update);
   }, [groupId, load]);
 
-  const heldPaths = new Set(reviewQuestions.map(question => `knowledge/sql/${question.id}.md`));
   const fileChanges = review?.changes ?? [];
-  const removedPaths = new Set(fileChanges.filter(change => change.kind === 'REMOVED').map(change => change.path));
-  const removals = pendingRemovals.map(({ question }) => question.id)
-    .filter(id => removedPaths.has(`knowledge/sql/${id}.md`));
+  const restoreFile = restorePath ? fileChanges.find(file => file.path === restorePath && file.revertible) : undefined;
+  const { changes, removals, republish, blocker, taskCount } = decision;
   const removalPaths = new Set(removals.map(id => `knowledge/sql/${id}.md`));
-  const removalDefinitions = new Set(removals.map(id => `knowledge/questions/${id}.yml`));
-  const changes = fileChanges.filter(change => !heldPaths.has(change.path) && !removalDefinitions.has(change.path));
   const changesByOthers = changes.filter(change => change.authors.some(author => author !== review?.currentUser)).length;
   const examples = changes.filter(c => c.category === 'EXAMPLE').length;
   const reviewOnly = changes.length === 0 && reviewQuestions.length > 0;
   const running = assistantActive || !!review?.assistantRunning;
-  // A change can be recorded without a file difference (e.g. confirmed while a publish ran);
-  // querying then waits for a publish, so the bar must still offer one.
-  const republish = fileChanges.length === 0 && !!workflow && workflow.publishedVersion > 0 && !workflow.queryAvailable;
-  const blocked = loadError ? '请在草稿状态恢复后发布' : checksPending || !review ? '正在读取草稿和待确认状态' : editingBlocked ? '请先保存或取消正在编辑的术语' : running ? '助手正在修改草稿，完成后才能发布'
-    : changes.length === 0 && !republish ? (reviewOnly ? '请先复核问答，再发布为问数示例' : '当前没有待发布的修改') : null;
+  useEffect(() => { onCanvasDraft?.({ items, review }); }, [onCanvasDraft, items, review]);
+  const blockerMessage = blocker?.kind === 'asset' ? `视图「${blocker.target.name}」${blocker.target.step === 'REVIEW_PENDING' ? '待核查用途与口径' : '待通过问题验证'}`
+    : blocker?.kind === 'incomplete' ? `视图「${blocker.name}」的工程文件不完整` : blocker?.message;
+  const waitingReason = stateError ? '读取发布状态失败，请重试'
+    : checksPending || !review || !workflow ? '正在读取草稿和待办'
+      : editingBlocked ? '请先保存或取消正在编辑的术语'
+        : importing ? '数据正在导入，完成后才能发布'
+          : running ? '助手正在修改草稿，完成后才能发布' : null;
+  const blocked = waitingReason ?? blockerMessage ??
+    (changes.length === 0 && !republish ? (reviewOnly ? '请先复核问答，再发布为问数示例' : '当前没有待发布的修改') : null);
 
   const ready = !blocked && pendingConfirmations === 0;
   const summary = useRef(onSummary); summary.current = onSummary;
@@ -173,11 +171,14 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       setTab('changes');
       setPublishFromPage(true);
       void publish();
+    } else if (blocker && busy === null) {
+      setTab(blocker.kind === 'asset' || blocker.kind === 'incomplete' ? 'tasks' : 'changes');
+      setOpen(true);
     }
   }, [publishSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const publish = async (skipPending = false, includeOthers = false) => {
-    if (blocked) return;
+    if (blocked || busy !== null || beforePublish?.() === false) return;
     if (!skipPending && pendingConfirmations > 0) { setConfirming('pending'); return; }
     if (!includeOthers && changesByOthers > 0) { setConfirming('others'); return; }
     setConfirming(null); setBusy('publish'); setError(null); setResult(null);
@@ -188,18 +189,35 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       const published = await publishMdl(groupId);
       if (active.current !== groupId) return;
       setResult(published);
+      recordPublicationFailure(published.ok ? undefined : published.issues.find(issue => issue.severity === 'error'));
       if (published.ok) {
         const reviewPending = published.issues.some(issue => issue.source === 'questions-review');
+        const showReport = reviewPending || published.issues.some(issue => issue.source === 'questions');
         if (reviewPending) setTab('tasks');
-        setOpen(reviewPending);
+        setOpen(showReport);
+        if (!showReport) onDismissReview?.();
         tourSignal('published', { groupId });
         // Keep the completion card in progress until the displayed draft count is refreshed.
-        await load();
+        await Promise.all([load(), reload()]);
         if (active.current !== groupId) return;
       } else if (published.issues.some(issue => issue.incompleteView || issue.assetReview)) {
         setOpen(true);
       }
       setIssues(published.issues.filter(i => i.severity === 'error'));
+      window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
+    } catch (e) { if (active.current === groupId) setError(message(e)); }
+    finally { if (active.current === groupId) setBusy(null); }
+  };
+  const checkAgain = async () => {
+    if (waitingReason || busy || beforePublish?.() === false) return;
+    setBusy('check'); setError(null); setIssues([]);
+    try {
+      const result = await validateMdl(groupId);
+      if (active.current !== groupId) return;
+      if (result.ok) recordPublicationFailure();
+      setIssues(result.issues.filter(issue => issue.severity === 'error'));
+      setRepairNotice(result.ok ? '当前草稿已通过检查。' : '');
+      await reload();
       window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
     } catch (e) { if (active.current === groupId) setError(message(e)); }
     finally { if (active.current === groupId) setBusy(null); }
@@ -225,11 +243,16 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
 
   // Confirmed questions whose SQL failed the publish dry-plan are left out of the release.
   const droppedQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions' && i.severity !== 'error') : [];
-  const label = busy === 'publish' ? '检查并发布中…' : republish ? '重新发布' : `发布 v${(workflow?.publishedVersion ?? 0) + 1}`;
-  const visitAsset = (target: NonNullable<MdlIssue['assetReview']>) =>
-    <button type="button" className="da-btn da-btn-sm" disabled={!!busy}
+  const label = busy === 'publish' ? '检查并发布中…' : republish ? '重新发布'
+    : `${workflow?.engineeringStatus !== 'PASSED' ? '检查并发布' : '发布'} v${(workflow?.publishedVersion ?? 0) + 1}`;
+  const releaseBlockers = new Set(workflow?.blockers.filter(item => item.code !== 'ENGINEERING_REQUIRED').map(item => item.message));
+  if (blockerMessage && blocker?.kind !== 'asset' && blocker?.kind !== 'incomplete') releaseBlockers.add(blockerMessage);
+  assetTasks.forEach(target => releaseBlockers.add(`视图「${target.name}」${target.step === 'REVIEW_PENDING' ? '待核查用途与口径' : '待通过问题验证'}`));
+  incompleteViews.forEach(name => releaseBlockers.add(`视图「${name}」的工程文件不完整`));
+  const visitAsset = (target: AssetReviewTarget, primary = false) =>
+    <button type="button" className={`da-btn da-btn-sm${primary ? ' da-btn-primary' : ''}`} disabled={!!busy}
       aria-label={`${target.step === 'REVIEW_PENDING' ? '去核查' : '去验证'} ${target.name}`}
-      onClick={() => { if (onReviewAsset?.(target)) dismiss(); }}>
+      onClick={() => { if (onReviewAsset?.(target)) dismiss(false); }}>
       {target.step === 'REVIEW_PENDING' ? '去核查' : '去验证'}</button>;
   const notices = <>
     {confirming === 'pending' && (compact ? <section className="modeling-publish-pending" data-tour="draft-confirm" aria-label="发布前确认">
@@ -273,14 +296,11 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     </div>}
   </>;
   const assetTaskCount = assetTasks.length + incompleteViews.length;
-  const taskCount = pendingConfirmations + reviewQuestions.length + assetTaskCount;
   const tasks = <>
     {confirmations.length > 0 && onAnswer && <div className="modeling-center-confirmations">
       <p>口径确认后才会写入草稿。发布时可选择暂缓处理这些口径。</p>
       <ConfirmationCards key={confirmations.map(card => card.id).join(',')} questions={confirmations} onSubmit={onAnswer} />
     </div>}
-    {canLocateAssets && catalogStatus === 'loading' && <p role="status" className="modeling-draft-hint">正在读取公共视图待办…</p>}
-    {canLocateAssets && catalogStatus === 'failed' && <p role="status" className="modeling-draft-hint">暂时无法读取公共视图待办，可打开公共视图查看。</p>}
     {assetTaskCount > 0 && <section className="modeling-question-review" aria-label="视图待处理">
       <strong>{assetTaskCount} 项视图待处理</strong>
       <ul>
@@ -303,15 +323,19 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
         <div><span>{question.question}</span>
           <small>{question.reasons?.length ? question.reasons.join(' · ') : '依赖的建模口径发生变化'}</small></div>
         <button type="button" className="da-btn da-btn-sm" aria-label={`去复核 ${question.question}`}
-          onClick={() => { if (onReviewQuestion(question.id)) dismiss(); }}>去复核</button>
+          onClick={() => { if (onReviewQuestion(question.id)) dismiss(false); }}>去复核</button>
       </li>)}</ul>
     </section>}
-    {!taskCount && (!canLocateAssets || catalogStatus === 'ready') && <p role="status" className="modeling-draft-hint">
+    {!taskCount && !stateError && <p role="status" className="modeling-draft-hint">
       {checksPending ? '正在读取待办…' : '暂无待办。'}</p>}
   </>;
   const hasNotices = confirming === 'pending' || confirming === 'others' || droppedQuestions.length > 0;
   const compactOpen = compact && (drawerOpen || hasNotices || (!publishFromPage && (!!error || issues.length > 0 || busy === 'publish')));
   const draftWindow = useRef<HTMLDialogElement>(null);
+  const checksRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (reviewRequested && !drawerLocked) { setTab(reviewRequested === 'tasks' ? 'tasks' : 'changes'); setOpen(true); }
+  }, [reviewRequested, drawerLocked]);
   useLayoutEffect(() => {
     const window = draftWindow.current;
     if (!compactOpen || !window) return;
@@ -320,7 +344,12 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     else window.showModal();
     return () => window.close();
   }, [compactOpen, drawerLocked]);
-  const dismiss = () => {
+  useEffect(() => {
+    if (compactOpen && reviewRequested === 'checks') checksRef.current?.focus();
+  }, [compactOpen, reviewRequested]);
+  const dismiss = (clearLocation = true) => {
+    if (clearLocation) onDismissReview?.();
+    setImpactOpen(false);
     setOpen(false);
     setConfirming(null);
     setError(null);
@@ -330,7 +359,18 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     setResult(previous => previous?.ok ? { ...previous, issues: [] } : null);
   };
   const publishButton = <button type="button" className={`da-btn ${ready || compact ? 'da-btn-primary' : ''}`} data-tour="draft-publish"
-    disabled={busy !== null || !!blocked} onClick={() => { setPublishFromPage(false); void publish(); }}>{label}</button>;
+    disabled={busy !== null || !!blocked || confirming === 'pending' || confirming === 'others'}
+    title={blocked ?? undefined} onClick={() => { setTab('changes'); setPublishFromPage(false); void publish(); }}>{label}</button>;
+  const leaveFor = (open?: () => boolean) => { if (open?.()) dismiss(false); };
+  const nextAction = waitingReason ? (stateError && <button type="button" className="da-btn da-btn-sm" onClick={onRetryState}>重试读取状态</button>)
+    : blocker?.kind === 'asset' ? visitAsset(blocker.target, true)
+      : blocker?.kind === 'incomplete' ? <button type="button" className="da-btn da-btn-primary" disabled={!!busy}
+        onClick={() => setRepairView(blocker.name)}>处理未完成视图</button>
+        : blocker?.kind === 'data' || blocker?.kind === 'model' ? <button type="button" className="da-btn da-btn-primary" disabled={!!busy}
+          onClick={() => leaveFor(blocker.kind === 'data' ? onPrepareData : onPrepareModel)}>{blocker.kind === 'data' ? '前往数据集' : '继续建模'}</button>
+          : blocker?.kind === 'engineering' ? <button type="button" className="da-btn da-btn-primary" data-tour="draft-publish" disabled={!!busy}
+            onClick={() => void checkAgain()}>{busy === 'check' ? '正在检查…' : '重新检查'}</button>
+            : (changes.length > 0 || republish) && publishButton;
   const remainingChanges = changes.filter(change => !items.some(item => item.path === change.path));
   const draftItems = <>
     {!!items.length && <DraftItemsList groupId={groupId} items={items} grouped disabled={running} onChanged={() => void load()} />}
@@ -348,9 +388,9 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   </>;
   const discardAction = changes.length > 0 && (confirming === 'discard'
     ? <div className="modeling-draft-discard"><span>放弃后草稿恢复为线上版本，修改无法找回。</span>
-        <button type="button" className="da-btn da-btn-sm" disabled={busy !== null || running} onClick={() => void discard()}>确认放弃</button>
+        <button type="button" className="da-btn da-btn-sm" disabled={busy !== null || running || !!loadError} onClick={() => void discard()}>确认放弃</button>
         <button type="button" className="da-btn da-btn-sm" onClick={() => setConfirming(null)}>取消</button></div>
-    : <button type="button" className="da-btn da-btn-sm" disabled={busy !== null || running} onClick={() => setConfirming('discard')}>放弃全部草稿</button>);
+    : <button type="button" className="da-btn da-btn-sm" disabled={busy !== null || running} onClick={() => { setRestorePath(null); setConfirming('discard'); }}>放弃全部草稿</button>);
   const draftTitle = `相对${workflow && workflow.publishedVersion > 0 ? `线上 v${workflow.publishedVersion}` : '空白工程'}的修改`;
   const draftCounts = `业务文档 ${changes.filter(c => c.category === 'DOCUMENT').length} · 问答待发布 ${examples - removals.length}`
     + (removals.length ? ` · 待下架 ${removals.length}` : '');
@@ -363,15 +403,25 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   }
   const matchedPaths = new Set(changes.map(change => change.path));
   const standaloneItems = items.filter(item => !matchedPaths.has(item.path));
+  const emptyDraft = !!review && !objectChanges.length && !standaloneItems.length;
   const unseen = isUnseen ? items.filter(isUnseen) : [];
   const structuredItems = (entries: DraftItem[]) => <DraftItemsList groupId={groupId} items={entries}
     disabled={running || !!busy} onChanged={() => void load()} isUnseen={isUnseen} onSeen={item => onSeen?.([item])}
     onLocate={onLocateChange && (item => {
-      if (onLocateChange(item)) { onSeen?.([item]); dismiss(); }
+      if (onLocateChange(item)) { onSeen?.([item]); dismiss(false); }
     })} />;
   const changeList = <>
     {loadError && <p role="alert">{loadError} <button type="button" className="da-btn da-btn-sm" onClick={() => void load()}>重试</button></p>}
     {!review && !loadError && <p className="modeling-draft-hint" role="status">正在读取草稿改动…</p>}
+    {restorePath && review && <div className="modeling-draft-discard">
+      <span>{restoreFile
+        ? restoreFile.kind === 'ADDED' ? `「${restoreFile.path}」是草稿新增文件。撤销会删除整个文件。`
+          : `恢复整个文件「${restoreFile.path}」到线上版本。同文件的所有草稿改动都会撤销。`
+        : '这个文件已经没有可撤销的改动。'}</span>
+      {restoreFile &&
+        <button type="button" className="da-btn da-btn-sm" disabled={!!busy || running || !!loadError} onClick={() => void restore(restorePath)}>确认撤销</button>}
+      <button type="button" className="da-btn da-btn-sm" disabled={!!busy} onClick={() => setRestorePath(null)}>取消</button>
+    </div>}
     {unseen.length > 1 && <div className="modeling-change-file-actions modeling-change-mark">
       <button type="button" className="da-btn da-btn-sm" onClick={() => onSeen?.(unseen)}>全部标为已看（{unseen.length}）</button>
     </div>}
@@ -388,55 +438,84 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
             <Icon name="file" size="sm" />
             <div><strong>{file.path}</strong><small>{status} · {file.summary}</small>
               {entries.length > 0 && structuredItems(entries)}
-              {restorePath === file.path && <div className="modeling-draft-discard">
-                <span>撤销会将整个文件恢复为线上版本。</span>
-                <button type="button" className="da-btn da-btn-sm" disabled={!!busy || running} onClick={() => void restore(file.path)}>确认撤销</button>
-                <button type="button" className="da-btn da-btn-sm" disabled={!!busy} onClick={() => setRestorePath(null)}>取消</button>
-              </div>}
             </div>
             <div className="modeling-change-file-actions">
               {onInspectChange && <button type="button" className="da-btn da-btn-sm" aria-label={`查看差异 ${file.path}`}
-                onClick={() => { if (onInspectChange(file.path)) { if (entries.length) onSeen?.(entries); dismiss(); } }}>查看差异</button>}
+                onClick={() => { if (onInspectChange(file.path)) { if (entries.length) onSeen?.(entries); dismiss(false); } }}>查看差异</button>}
               {file.revertible && restorePath !== file.path && <button type="button" className="da-btn da-btn-sm" disabled={!!busy || running}
-                aria-label={`撤销 ${file.path} 的改动`} onClick={() => setRestorePath(file.path)}>撤销</button>}
+                aria-label={`撤销 ${file.path} 的改动`} onClick={event => {
+                  event.currentTarget.closest('.modeling-draft-window-body')?.scrollTo({ top: 0 });
+                  setRestorePath(file.path); setConfirming(null);
+                }}>撤销</button>}
             </div>
           </li>;
         })}</ul>
       </details>;
     })}
     {standaloneItems.length > 0 && structuredItems(standaloneItems)}
-    {review && !objectChanges.length && !standaloneItems.length && <p className="modeling-draft-hint">没有待发布的文件改动。</p>}
+    {emptyDraft && <p className="modeling-draft-hint">没有待发布的文件改动。</p>}
   </>;
   if (compact && drawerLocked && !compactOpen && !changes.length && !republish && !reviewQuestions.length) return null;
+  const pendingRelease = changes.length > 0 || republish;
+  const publishChecks = <aside className="kbw-release-checks" aria-label="发布检查" ref={checksRef} tabIndex={-1}>
+    <h3><Icon name="shield" size="sm" />发布检查</h3>
+    <ul>
+      <li><strong>模型检查</strong><span>{workflow?.engineeringStatus === 'PASSED' ? '最近一次工程检查通过' : workflow?.engineeringStatus === 'FAILED' ? '最近一次工程检查未通过' : '草稿待检查，发布时校验'}</span></li>
+      <li><strong>全库问答确认情况</strong><span>{workflow ? `已确认 ${workflow.questionSummary.confirmed} / ${workflow.questionSummary.total} 条` : '正在读取问答状态'}{reviewQuestions.length > 0 && ` · ${reviewQuestions.length} 条待复核`}</span></li>
+      <li><strong>阻断项</strong><span>{stateError ? '读取失败' : checksPending ? '正在读取阻断项' : releaseBlockers.size ? '处理后可继续' : '0 条'}</span>
+        {!!releaseBlockers.size && <ul>{[...releaseBlockers].map(item => <li key={item}>{item}</li>)}</ul>}
+        {blocker?.kind === 'engineering' && <button type="button" className="sm-text-link" disabled={!!busy}
+          onClick={() => leaveFor(onOpenEngineering)}>查看工程</button>}</li>
+    </ul>
+    <button type="button" className="sm-text-link" disabled={!review} aria-expanded={impactOpen} onClick={() => setImpactOpen(value => !value)}>预览影响范围</button>
+    {impactOpen && <div className="modeling-review-impact">
+      <p>{pendingRelease ? `发布后问数使用 v${(workflow?.publishedVersion ?? 0) + 1}。` : '当前没有待发布的修改。'}</p>
+      {objectChanges.length > 0 && <ul>{objectChanges.map(object => <li key={object.key}>{object.category} · {object.title} · {object.files.length} 个文件</li>)}</ul>}
+    </div>}
+  </aside>;
+  const reviewContent = <>
+    {!drawerLocked && <div className="modeling-center-tabs" role="group" aria-label="变更与待办分类">
+      <button type="button" aria-pressed={tab === 'changes'} onClick={() => setTab('changes')}>变更 <b>{objectChanges.length}</b></button>
+      <button type="button" aria-pressed={tab === 'tasks'} onClick={() => setTab('tasks')}>待办 <b>{taskCount}</b></button>
+    </div>}
+    <div className={'modeling-review-body' + (drawerLocked ? ' modeling-review-locked' : '')}>
+      <div className="modeling-draft-window-body">
+        {notices}
+        {stateError && <p role="alert" className="modeling-draft-hint">{stateError}</p>}
+        {busy === 'publish' && <p role="status" className="modeling-draft-hint">正在校验并发布当前草稿…</p>}
+        {!drawerLocked && tab === 'changes' && <div className="modeling-review-counts" aria-label="文件变更统计">
+          {([['ADDED', '新增'], ['MODIFIED', '修改'], ['REMOVED', '删除']] as const).map(([kind, caption]) =>
+            <span key={kind}>{caption} <b>{changes.filter(change => change.kind === kind).length}</b></span>)}
+        </div>}
+        {!drawerLocked && (tab === 'changes' ? changeList : tasks)}
+        {!drawerLocked && tab === 'changes' && blocked && !blocker && !waitingReason && reviewOnly &&
+          <p className="modeling-draft-hint" role="status">{blocked}</p>}
+      </div>
+      {!drawerLocked && publishChecks}
+    </div>
+    {!drawerLocked && <footer className="modeling-draft-window-foot">
+      <div>{discardAction}</div>
+      <div className="kbw-release-action">
+        {waitingReason && busy !== 'publish' && <span className="da-small" role="status">{waitingReason}</span>}
+        {!waitingReason && blockerMessage && <span className="kbw-release-blocker" role="status">{blockerMessage}</span>}
+        {!waitingReason && !blocker && pendingRelease && (pendingConfirmations > 0 || reviewQuestions.length > 0) &&
+          <span className="kbw-release-deferrals">
+            {[pendingConfirmations ? `${pendingConfirmations} 项口径待确认` : null,
+              reviewQuestions.length ? `${reviewQuestions.length} 条问答暂缓` : null].filter(Boolean).join(' · ')}
+          </span>}
+        {confirming !== 'pending' && confirming !== 'others' && nextAction}
+      </div>
+    </footer>}
+  </>;
   return <div className={`modeling-draft-bar${compact ? ' modeling-draft-compact' : ''}`} aria-label="草稿栏" style={{ position: 'relative' }}>
-    {compact && (drawerLocked ? publishButton : <button type="button" className="da-btn da-btn-sm modeling-draft-trigger"
-      aria-expanded={compactOpen} aria-haspopup="dialog" aria-label={`变更与待办，${objectChanges.length} 项变更，${taskCount} 项待办`}
-      title="变更与待办"
-      onClick={() => { if (compactOpen) dismiss(); else { setTab(!objectChanges.length && taskCount ? 'tasks' : 'changes'); setOpen(true); } }}>
-      <Icon name="file" size="sm" /><span>变更与待办</span>
-      {objectChanges.length > 0 && <b title="待发布变更">{objectChanges.length}</b>}
-      {taskCount > 0 && <b className="modeling-review-count" title="待办">{taskCount}</b>}
-    </button>)}
+    {compact && drawerLocked && (blocker ? nextAction : publishButton)}
     {compactOpen && <dialog ref={draftWindow} className="modeling-draft-window" aria-label="变更与待办"
       onCancel={event => { event.preventDefault(); if (!busy) dismiss(); }}>
       <header className="modeling-draft-window-head">
         <div><h2>变更与待办</h2><p>{draftTitle}</p></div>
-        <button type="button" className="da-btn da-btn-sm" aria-label="关闭变更与待办" disabled={!!busy} onClick={dismiss}><Icon name="close" size="sm" /></button>
+        <button type="button" className="da-btn da-btn-sm" aria-label="关闭变更与待办" disabled={!!busy} onClick={() => dismiss()}><Icon name="close" size="sm" /></button>
       </header>
-      {!drawerLocked && <div className="modeling-center-tabs" role="group" aria-label="变更与待办分类">
-        <button type="button" aria-pressed={tab === 'changes'} onClick={() => setTab('changes')}>变更 <b>{objectChanges.length}</b></button>
-        <button type="button" aria-pressed={tab === 'tasks'} onClick={() => setTab('tasks')}>待办 <b>{taskCount}</b></button>
-      </div>}
-      <div className="modeling-draft-window-body">
-        {notices}
-        {!drawerLocked && (tab === 'changes' ? changeList : tasks)}
-        {!drawerLocked && tab === 'changes' && blocked && (changes.length > 0 || republish || reviewOnly) &&
-          <p className="modeling-draft-hint" role="status">{blocked}</p>}
-      </div>
-      {!drawerLocked && tab === 'changes' && <footer className="modeling-draft-window-foot">
-        <div>{discardAction}</div>
-        {confirming !== 'pending' && confirming !== 'others' && publishButton}
-      </footer>}
+      {reviewContent}
     </dialog>}
     {repairView && <IncompleteViewDialog key={groupId + '/' + repairView} groupId={groupId} name={repairView}
       disabled={running || !!busy} onClose={() => setRepairView(null)} onRemoved={() => {

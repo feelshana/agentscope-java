@@ -44,6 +44,7 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
   const [reading, setReading] = useState<BusinessDocument | null>(null);
   const [removal, setRemoval] = useState<BusinessDocument>();
   const [readerToolbar, setReaderToolbar] = useState<HTMLDivElement | null>(null);
+  const [readerSearch, setReaderSearch] = useState<HTMLDivElement | null>(null);
   const removalDialog = useRef<HTMLDialogElement>(null);
   const removalTitle = useId();
   const [term, setTerm] = useState('');
@@ -120,7 +121,7 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
     return <>
       {filePicker}
       {workspace.paired ? <WorkspaceObjectTools compact context={current?.name}>{readerControls}</WorkspaceObjectTools>
-        : workspace.toolbar(readerControls, add, workspace.catalogOpen ? undefined : current?.name, currentDocuments.length)}
+        : workspace.toolbar(undefined, add, undefined, currentDocuments.length)}
       {error && !removal && <div className="mo-notice mo-error" role="alert">{error}<button type="button" className="da-btn" onClick={() => void refresh()}>重试</button></div>}
       <dialog ref={removalDialog} className="mo-form-dialog" aria-labelledby={removalTitle} onClose={() => setRemoval(undefined)}
         onCancel={event => { if (busy) event.preventDefault(); }}>
@@ -141,18 +142,28 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
               <input type="search" className="da-input" placeholder="搜索文档" aria-label="搜索文档" value={term} onChange={e => setTerm(e.target.value)} />
               <select className="da-input" aria-label="筛选文档状态" value={status} onChange={e => setStatus(e.target.value as BusinessDocument['status'] | '')}><option value="">全部状态</option>
                 {Object.entries(STATUS).map(([value, view]) => <option key={value} value={value}>{view.label}</option>)}</select>
+              {workspace.catalogOpen && current && <div className="mo-reader-search-slot" ref={setReaderSearch} />}
             </>}>
             {matching.map(doc => <li key={doc.name} className={current?.name === doc.name ? 'qc-queue-selected' : ''}>
               <button type="button" aria-current={current?.name === doc.name || undefined} onClick={() => workspace.onSelect(doc.name)}>
                 <Icon name="file" size="sm" /><span className="mo-catalog-name"><strong>{doc.name}</strong>
-                  <span className={`qc-status-pill qc-status-${doc.status === 'UNCHANGED' ? 'done' : doc.status === 'DELETED' ? 'removal' : 'sql'}`}>
-                    {STATUS[doc.status].label}</span></span>
+                  <span className="mo-item-meta">
+                    <span className={`qc-status-pill qc-status-${doc.status === 'UNCHANGED' ? 'done' : doc.status === 'DELETED' ? 'removal' : 'sql'}`}>
+                      {STATUS[doc.status].label}</span>
+                    {doc.updatedAt && <time dateTime={doc.updatedAt}>{new Date(doc.updatedAt).toLocaleDateString('zh-CN')}</time>}
+                  </span></span>
               </button></li>)}
           </MaterialsCatalog>}
           <div className="mo-work-detail mo-material-detail mo-document-detail" key={current?.name}>
             {!current ? <WorkspaceEmpty icon="search" title="没有匹配的文档"><button type="button" className="da-btn" onClick={() => { setStatus(''); setTerm(''); }}>清除筛选</button></WorkspaceEmpty>
-              : <BusinessDocumentReader key={`${current.name}:${current.status}:${current.updatedAt}`} groupId={groupId} document={current}
-                toolbarTarget={readerToolbar}
+              : <>
+                {!workspace.paired && <header className="mo-object-heading">
+                  <span className="mo-object-icon"><Icon name="file" size="sm" /></span>
+                  <div><h3 translate="no">{current.name}</h3><p>{STATUS[current.status].label}</p></div>
+                  {readerControls}
+                </header>}
+                <BusinessDocumentReader key={`${current.name}:${current.status}:${current.updatedAt}`} groupId={groupId} document={current}
+                toolbarTarget={readerToolbar} searchTarget={readerSearch}
                 onQuote={quote => { workspace.onSelect(current.name); workspace.onReference(current.name, quote); }}
                 actions={<>
                   {current.status !== 'UNCHANGED' && <button type="button" className="da-btn da-btn-sm"
@@ -161,7 +172,8 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
                     { label: '替换文档', icon: 'upload', disabled: mutationBlocked, onClick: () => pick(current.name) },
                     { label: '从草稿移除', icon: 'trash', danger: true, disabled: mutationBlocked, onClick: () => { setError(null); setRemoval(current); } },
                   ]} />}
-                </>} />}
+                </>} />
+              </>}
           </div>
         </div>}
     </>;

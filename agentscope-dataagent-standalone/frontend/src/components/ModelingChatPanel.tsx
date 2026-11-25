@@ -394,6 +394,7 @@ export default function ModelingChatPanel({
   coachScope,
   onChooseCoachQuestion,
   intro,
+  assetChat = false,
   quickPrompts,
   composerNotice,
   composerHint,
@@ -432,6 +433,7 @@ export default function ModelingChatPanel({
   coachScope?: ReactNode;
   onChooseCoachQuestion?: () => void;
   intro?: ReactNode;
+  assetChat?: boolean;
   quickPrompts?: ModelingPrompt[];
   composerNotice?: ReactNode;
   composerHint?: string;
@@ -971,15 +973,19 @@ export default function ModelingChatPanel({
           {!intro && messages.length === 0 && (
             <div className="mc-welcome" style={S.welcome}>
               <div style={S.welcomeTitle}>
-                <ModelingAssistantIcon /> 建模助手
+                <ModelingAssistantIcon /> {assetChat ? '核对公共视图' : '建模助手'}
               </div>
-              <div style={S.welcomeDesc}>告诉助手要完善的字段、关系或业务口径。你可以在模型中检查改动，准备好后发布。</div>
-              {!quickPrompts && <div className="mc-welcome-examples">{[
+              <div style={S.welcomeDesc}>{assetChat ? '从一个问题开始，核对视图的使用范围。' : '告诉助手要完善的字段、关系或业务口径。你可以在模型中检查改动，准备好后发布。'}</div>
+              {(!quickPrompts || assetChat) && <div className="mc-welcome-examples">{(assetChat ? [
+                ['能不能拆维度', '核对这张视图能按哪些维度拆分，哪些会改变统计粒度。'],
+                ['口径对不对', '对照来源检查指标、过滤条件和关联口径。'],
+                ['加一句使用限制', '帮我说明这张视图适用和不适用的场景。'],
+              ] : [
                 ['增加术语', '"金卡客户"指会员等级为金卡会员的客户'],
                 ['增加规则', '统计有效订单时，默认排除已取消的订单'],
                 ['补充字段说明', '给订单表的金额字段补充说明和单位'],
                 ['新增关系', '订单表按客户编号关联客户表，每笔订单对应一个客户'],
-              ].map(([title, text]) => <button key={title} type="button" className="mc-ex" style={S.welcomeExample}
+              ]).map(([title, text]) => <button key={title} type="button" className="mc-ex" style={S.welcomeExample}
                 title="填入输入框，可修改后发送" onClick={() => setInput(`${title}：${text}`)}>
                 <strong style={{ color: 'var(--da-text)', fontSize: 13.5, fontWeight: 650, letterSpacing: '-.01em' }}>{title}</strong>
                 <span style={{ fontSize: 12.5, lineHeight: 1.5 }}>{text}</span>
@@ -989,7 +995,7 @@ export default function ModelingChatPanel({
           {messages.map(m => (
             <div key={m.id} className={m.role === 'assistant' && variant === 'dock' ? 'mc-assistant-row' : undefined} style={m.role === 'user' ? S.row : S.botRow}>
               {m.role === 'assistant' && variant !== 'dock' && <ModelingAssistantIcon message />}
-              <div style={m.role === 'user' ? S.userBubble : S.botBubble}>
+              <div className={m.role === 'user' ? 'mc-user-bubble' : 'mc-assistant-bubble'} style={m.role === 'user' ? S.userBubble : S.botBubble}>
                 {m.role === 'assistant' ? (
                   <>
                     {variant === 'dock' && <ModelingAssistantIcon message />}

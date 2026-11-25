@@ -1,12 +1,13 @@
 import { tourActive, tourSignal } from '../../state/guidedTour';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useHref, useNavigate, useSearchParams } from 'react-router-dom';
 import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import KnowledgeBaseMembersModal from '../../components/KnowledgeBaseMembersModal';
 import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon from '../../components/Icon';
 import { toast } from '../../components/Toast';
 import { createGroup, DatasetGroup, deleteGroup, listGroups, updateGroup } from '../../api/datasets';
+import { knowledgePath, modelingPath } from './knowledgeWorkspaceRoutes';
 import './DatasetsPage.css';
 
 const NAME_RE = /^[一-龥A-Za-z0-9_-]{1,100}$/;
@@ -34,6 +35,7 @@ function groupStatus(group: DatasetGroup): GroupStatus {
 
 export default function DatasetsPage() {
   const navigate = useNavigate();
+  const libraryUrl = useHref('/configure/datasets');
   const [groups, setGroups] = useState<DatasetGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const creating = useRef(false);
@@ -132,7 +134,7 @@ export default function DatasetsPage() {
       setDescription('');
       toast(editGroup ? '知识库已更新' : '知识库已创建', 'success');
       await refresh();
-      if (!editGroup) { tourSignal('kb-created', { groupId: g.id }); navigate(`/configure/datasets/${g.id}`); }
+      if (!editGroup) { tourSignal('kb-created', { groupId: g.id }); navigate(`${knowledgePath(g.id)}?section=datasets`); }
     } catch (e) {
       const text = e instanceof Error ? e.message : String(e);
       // The tour's suggested name may be taken; a new one lets the user just click again.
@@ -180,9 +182,17 @@ export default function DatasetsPage() {
     setStatus('all');
     setPage(0);
   };
-  const openCard = (group: DatasetGroup) => {
+  const openCard = (group: DatasetGroup, section?: 'datasets') => {
     if (group.deletionPending) return;
-    navigate(`/configure/datasets/${group.id}`);
+    const suffix = section ? '?section=datasets' : '';
+    // The initial same-origin page inherits tab-scoped authentication. Detach it before loading the workspace.
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) {
+      navigate(knowledgePath(group.id) + suffix);
+      return;
+    }
+    tab.opener = null;
+    tab.location.replace(`${libraryUrl}/${encodeURIComponent(group.id)}${suffix}`);
   };
   return (
     <div className="kw-page workspace-overview kb-library">
@@ -239,11 +249,11 @@ export default function DatasetsPage() {
           {!loading && visible.map(g => {
             const state = groupStatus(g);
             const preparing = !g.publishedVersion && g.canManage;
-            const detailPath = `/configure/datasets/${g.id}`;
+            const detailPath = knowledgePath(g.id);
             const action = preparing
               ? state === 'data'
-                ? { label: '添加数据', icon: 'database', path: detailPath } as const
-                : { label: '进入建模', icon: 'model', path: `/configure/modeling/${g.id}` } as const
+                ? { label: '添加数据', icon: 'database', path: `${detailPath}?section=datasets` } as const
+                : { label: '进入建模', icon: 'model', path: modelingPath(g.id) } as const
               : { label: '开始提问', icon: 'chat', path: `/chat?groups=${encodeURIComponent(g.id)}` } as const;
             const owner = g.ownerUsername || '已移除用户';
             const created = g.createdAt ? new Date(g.createdAt) : null;
@@ -264,11 +274,11 @@ export default function DatasetsPage() {
               </div>
               <div className="kb-card-controls">
                 <WorkspaceMenu label={`${g.name}的更多操作`} items={g.canManage ? [
-                { label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(detailPath) },
+                { label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => openCard(g) },
                 { label: '编辑名称和说明', icon: 'edit', disabled: busy || g.deletionPending, onClick: () => openEdit(g) },
                 { label: '成员与权限', icon: 'user', disabled: g.deletionPending, onClick: () => setMemberGroup(g) },
                 { label: g.deletionPending ? '重试删除' : '删除知识库', icon: 'trash', danger: true, disabled: busy, onClick: () => void handleDelete(g.id) },
-                ] : [{ label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(detailPath) }]} />
+                ] : [{ label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => openCard(g) }]} />
               </div>
             </div>
             <div className="kb-card-description">
@@ -287,7 +297,7 @@ export default function DatasetsPage() {
               {g.deletionPending ? g.canManage && (
                 <button type="button" className="kb-view-data" disabled={busy} onClick={e => handleDelete(g.id, e)}>重试删除</button>
               ) : <>
-                <button type="button" className="kb-view-data" onClick={e => { e.stopPropagation(); openCard(g); }}>
+                <button type="button" className="kb-view-data" onClick={e => { e.stopPropagation(); openCard(g, 'datasets'); }}>
                   查看数据<Icon name="chevron" size="sm" />
                 </button>
                 <button type="button" className="kb-ask"

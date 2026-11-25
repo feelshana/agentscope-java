@@ -18,8 +18,8 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
 }
 
 const base = (groupId: string) => `/api/dataset-groups/${encodeURIComponent(groupId)}/members`;
-export const listMembers = (groupId: string, page: number, signal?: AbortSignal) =>
-  request<MemberPage>(`${base(groupId)}?page=${page}&size=20`, { signal });
+export const listMembers = (groupId: string, page: number, signal?: AbortSignal, size = 20) =>
+  request<MemberPage>(`${base(groupId)}?page=${page}&size=${size}`, { signal });
 export const searchMemberUsers = (groupId: string, search: string, page: number, signal?: AbortSignal, company = '', department = '', size = 20) =>
   request<MemberPage>(`${base(groupId)}/users?${new URLSearchParams({ search, company, department, page: String(page), size: String(size) })}`, { signal });
 export const grantMember = (groupId: string, userId: string, role: KnowledgeBaseRole) =>

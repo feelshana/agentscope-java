@@ -39,7 +39,7 @@ export function WorkspaceMenu({ label, items, triggerLabel, triggerIcon = 'setti
     };
     const close = () => setPosition(null);
     const keys = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setPosition(null); trigger.current?.focus(); }
+      if (e.key === 'Escape') { e.preventDefault(); setPosition(null); trigger.current?.focus(); }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         const buttons = Array.from(panel.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);

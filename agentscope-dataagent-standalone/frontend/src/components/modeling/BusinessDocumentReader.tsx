@@ -55,10 +55,10 @@ export const BusinessDocumentArticle = memo(function BusinessDocumentArticle({ c
 });
 
 /** Read the selected document on demand; no prefetch or second document store. */
-export default function BusinessDocumentReader({ groupId, document, onClose, onQuote, actions, toolbarTarget }: {
+export default function BusinessDocumentReader({ groupId, document, onClose, onQuote, actions, toolbarTarget, searchTarget }: {
   groupId: string; document: BusinessDocument; onClose?: () => void;
   onQuote?: (quote?: string) => void;
-  actions?: ReactNode; toolbarTarget?: HTMLElement | null;
+  actions?: ReactNode; toolbarTarget?: HTMLElement | null; searchTarget?: HTMLElement | null;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const article = useRef<HTMLElement>(null);
@@ -112,8 +112,7 @@ export default function BusinessDocumentReader({ groupId, document, onClose, onQ
   };
   const quoteAction = onQuote && content?.trim() && <button type="button" className="da-btn" onClick={() => onQuote(quote || undefined)}>
     <Icon name="chat" size="sm" />{quote ? '引用所选原文' : '引用到对话'}</button>;
-  const tools = <>{!deleted && <>
-      <div className="mo-reader-find">
+  const findControls = <div className="mo-reader-find">
         <label className="mo-reader-search"><Icon name="search" size="sm" /><input type="search" name="document-search" autoComplete="off"
           aria-label="在文档中查找" placeholder="在文档中查找" value={query} disabled={content === null}
           onChange={event => setQuery(event.target.value)} onKeyDown={event => {
@@ -123,7 +122,9 @@ export default function BusinessDocumentReader({ groupId, document, onClose, onQ
           <button type="button" className="da-btn" aria-label="上一处匹配" onClick={() => goToMatch(-1)}><Icon name="chevron" size="sm" /></button>
           <button type="button" className="da-btn" aria-label="下一处匹配" onClick={() => goToMatch(1)}><Icon name="chevron" size="sm" /></button>
         </div>}
-      </div>
+      </div>;
+  const tools = <>{!deleted && <>
+        {!searchTarget && findControls}
         <div className="mo-reader-display">
           <div className="mo-reader-mode" role="group" aria-label="文档显示方式"><button type="button" aria-pressed={!raw} onClick={() => setRaw(false)}>阅读</button><button type="button" aria-pressed={raw} onClick={() => setRaw(true)}>原始文本</button></div>
           <div className="mo-reader-font" role="group" aria-label="阅读字号"><button type="button" disabled={fontSize <= 12} onClick={() => setFontSize(n => n - 1)} aria-label="减小字号">A−</button><button type="button" disabled={fontSize >= 18} onClick={() => setFontSize(n => n + 1)} aria-label="增大字号">A＋</button></div>
@@ -140,6 +141,7 @@ export default function BusinessDocumentReader({ groupId, document, onClose, onQ
       </div>;
   if (!onClose) return <section className="mo-reader-inline" aria-label="业务文档正文">
     {toolbarTarget && createPortal(tools, toolbarTarget)}
+    {!deleted && searchTarget && createPortal(findControls, searchTarget)}
     {body}
   </section>;
   return <dialog ref={dialog} className="mo-document-reader" aria-labelledby={`${prefix}-title`} onClose={onClose}

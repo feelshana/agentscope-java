@@ -1,2 +1,2 @@
-/** The knowledge-base modeling workbench, where the work area needs the width most. */
-export const isModelingWorkbench = (pathname: string) => /^\/configure\/modeling\/[^/]+/.test(pathname);
+/** A single knowledge base supplies its own persistent navigation. */
+export const isKnowledgeWorkspace = (pathname: string) => /^\/configure\/(datasets|modeling)\/[^/]+/.test(pathname);

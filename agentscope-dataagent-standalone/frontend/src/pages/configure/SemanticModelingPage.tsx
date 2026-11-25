@@ -1,13 +1,13 @@
 import { tourHoldsQuery, tourLocksDraftDrawer, tourSignal, useTour } from '../../state/guidedTour';
 import { FactQueryWindowSettings } from '../../components/FactQueryWindowSettings';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ModelingChatPanel from '../../components/ModelingChatPanel';
 import type { AssistantState } from '../../components/ModelingChatPanel';
 import { confirmationRequest } from '../../components/modeling/modelingHistory';
 import { getModelingPrompts } from '../../components/modeling/modelingPrompts';
 import SemanticWorkbench from '../../components/modeling/SemanticWorkbench';
-import { WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import { changeKey } from '../../components/modeling/SemanticWorkbench';
 import type { ChangeMark, WorkbenchView } from '../../components/modeling/SemanticWorkbench';
 import { getDraftItems } from '../../api/draftReview';
@@ -21,47 +21,44 @@ import type { ScreeningSelection } from '../../components/modeling/FieldScreenin
 import ModelingPreparation from '../../components/modeling/ModelingPreparation';
 import Icon from '../../components/Icon';
 import type { FieldAdjustment } from '../../components/modeling/FieldScreeningPanel';
-import { getScreeningStatus } from '../../api/fieldScreening';
 import type { ScreeningStatus } from '../../api/fieldScreening';
 import ConfirmationCards from '../../components/modeling/ConfirmationCards';
 import { questionRequest } from '../../components/modeling/QuestionIntakeForm';
 import { getModelingQuestions, interpretCoachConversation } from '../../api/modelingQuestions';
 import type { CoachConversationTurn } from '../../api/modelingQuestions';
 import DraftBar from '../../components/modeling/DraftBar';
-import type { DraftSummary } from '../../components/modeling/DraftBar';
+import type { CanvasDraft, DraftSummary, DraftUndoRequest } from '../../components/modeling/DraftBar';
 import NextStepCard from '../../components/modeling/NextStepCard';
 import TurnResultCard from '../../components/modeling/TurnResultCard';
-import AdvancedModelingPanel from '../../components/modeling/AdvancedModelingPanel';
+import KnowledgeEngineeringPage from './KnowledgeEngineeringPage';
 import AssetProposalCards from '../../components/modeling/AssetProposalCards';
 import QueryCoachPanel, { questionState } from '../../components/modeling/QueryCoachPanel';
 import type { CoachReviewActions } from '../../components/modeling/QueryCoachPanel';
-import { useQueryCoachData } from '../../components/modeling/useQueryCoachData';
 import { coachIntent, coachQuestionRequest, isScopedQuestion, newCoachQuestion, resolveCoachTarget } from '../../components/modeling/queryCoachScope';
 import type { CoachQuestion } from '../../components/modeling/queryCoachScope';
-import { listGroupCards } from '../../api/datasets';
 import type { DatasetGroup } from '../../api/datasets';
 import { getKnowledgeBaseBrowse, getMdlView, getMdlPreview } from '../../api/semanticModeling';
 import type { KnowledgeBaseBrowse, MdlView, MdlPreview, MdlIssue } from '../../api/semanticModeling';
-import type { AssetKind } from '../../api/semanticAssets';
-import { getModelingWorkflow } from '../../api/modelingWorkflow';
-import type { ModelingWorkflow } from '../../api/modelingWorkflow';
-import { listConfirmations, resolveConfirmations } from '../../api/draftReview';
-import type { Confirmation, ConfirmationAnswer } from '../../api/draftReview';
+import type { AssetKind, SemanticAsset } from '../../api/semanticAssets';
+import { resolveConfirmations } from '../../api/draftReview';
+import type { ConfirmationAnswer } from '../../api/draftReview';
+import type { ReviewSection } from '../../components/modeling/releaseDecision';
 import type { TurnPurpose } from '../../api/chat';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
 import SemanticAssetsPanel from '../../components/modeling/SemanticAssetsPanel';
+import { knowledgePath, modelingParams, type KnowledgeModelingHost, type ModelingSection } from './knowledgeWorkspaceRoutes';
 import './SemanticModelingPage.css';
 import '../../components/modeling/ModelingSetup.css';
+import '../../components/modeling/ModelingNavigation.css';
 
-type Tab = 'semantic' | 'coach' | 'assets' | 'overview';
+type Tab = 'semantic' | 'coach' | 'assets' | 'overview' | 'engineering';
 // spec092 §7: the conversation is the workspace; review happens inline, publishing in the draft bar.
 // spec117: models, relations and business knowledge are one 语义模型 tab; older addresses still work.
 const LEGACY_TABS: Record<string, Tab> = {
   models: 'semantic', relations: 'semantic', knowledge: 'semantic', modeling: 'semantic', qa: 'coach',
-  schema: 'semantic', derived: 'semantic', views: 'semantic', cubes: 'semantic', mdl: 'semantic', glossary: 'semantic', sql: 'coach',
+  schema: 'semantic', derived: 'semantic', views: 'engineering', cubes: 'engineering', mdl: 'engineering', glossary: 'semantic', sql: 'coach',
 };
-const TAB_KEYS: Tab[] = ['semantic', 'coach', 'assets', 'overview'];
-const ADVANCED = new Set(['views', 'cubes', 'mdl']);
+const TAB_KEYS: Tab[] = ['semantic', 'coach', 'assets', 'overview', 'engineering'];
 const RULE_ADDRESSES = new Set(['knowledge', 'glossary']);
 const tabOf = (asset: string | null, kind: string | null): Tab | null => {
   // spec111: a bare ?asset=assets is the new page; with a kind it is the older address.
@@ -103,25 +100,9 @@ type Request = { id: number; text: string; purpose?: TurnPurpose; documents?: st
 /** The guided tour takes the user to the query page itself once querying is ready. */
 const TOUR_QUERY_HINT = '引导会在问数准备好后带你去问数';
 
-export default function SemanticModelingPage() {
-  const { groupId = '' } = useParams();
-  const [params] = useSearchParams();
-  const [access, setAccess] = useState<DatasetGroup | null>(null);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    const controller = new AbortController();
-    setAccess(null); setError('');
-    void listGroupCards([groupId], controller.signal).then(cards => {
-      if (controller.signal.aborted) return;
-      const card = cards.find(item => item.id === groupId && !item.deletionPending);
-      if (!card) throw new Error('知识库不存在或未授权');
-      setAccess(card);
-    }).catch(e => { if (!controller.signal.aborted) setError(message(e)); });
-    return () => controller.abort();
-  }, [groupId]);
-  if (error) return <div className="mw-content"><div role="alert" className="da-alert da-alert-error">{error}</div></div>;
-  if (access?.id !== groupId) return <div className="modeling-workbench mw"><div className="mw-content"><GraphLoading /></div></div>;
-  return access.canManage ? <ModelingWorkbench key={groupId} group={access} /> : <SemanticReadOnlyWorkspace groupId={groupId} requested={tabOf(params.get('asset'), params.get('kind'))} />;
+export default function SemanticModelingPage({ group, host }: { group: DatasetGroup; host: KnowledgeModelingHost }) {
+  return group.canManage ? <ModelingWorkbench key={group.id} group={group} host={host} />
+    : <SemanticReadOnlyWorkspace key={group.id} groupId={group.id} host={host} />;
 }
 
 function GraphLoading() {
@@ -131,7 +112,7 @@ function GraphLoading() {
   </div>;
 }
 
-function ModelingWorkbench({ group }: { group: DatasetGroup }) {
+function ModelingWorkbench({ group, host }: { group: DatasetGroup; host: KnowledgeModelingHost }) {
   const groupId = group.id;
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -140,9 +121,10 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const explicitTab = tabOf(asset, params.get('kind'));
   const [view, setView] = useState<MdlView | null>(null);
   const [preview, setPreview] = useState<MdlPreview | null>(null);
-  const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
-  const [confirmations, setConfirmations] = useState<Confirmation[]>([]);
-  const [confirmationsReady, setConfirmationsReady] = useState(false);
+  const { review, workflow, screening, setScreening, reload: reloadRelease } = host.release;
+  const confirmations = host.release.confirmations ?? [];
+  const confirmationsReady = !!host.release.confirmations && !host.release.loading;
+  const { coach: coachData, onActivity } = host;
   const [error, setError] = useState('');
   const [queue, setQueue] = useState<{ groupId: string; items: Request[] }>({ groupId, items: [] });
   const pending = queue.groupId === groupId ? queue.items : [];
@@ -154,17 +136,18 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const windowReadyRef = useRef(false);
   const updateWindowReady = useCallback((ready: boolean) => { windowReadyRef.current = ready; setReadyGroup(ready ? groupId : null); }, [groupId]);
   // spec093: tables waiting for field screening; null until loaded.
-  const [screening, setScreening] = useState<ScreeningStatus[] | null>(null);
   const screeningPending = !!screening?.some(t => !t.confirmed);
   const preparationKey = `modeling-prepare:${groupId}`;
   const [setupPhase, setSetupPhase] = useState<'fields' | 'prepare' | null>(() => {
     if (params.get('start') === '1') return 'prepare';
+    if (params.get('mode') === 'board' || explicitTab === 'engineering') return null;
     try { return sessionStorage.getItem(preparationKey) === '1' ? 'prepare' : null; } catch { return null; }
   });
   const [fieldEditor, setFieldEditor] = useState<ScreeningSelection | null>(null);
   const [confirmingScreening, setConfirmingScreening] = useState(false);
+  const [firstBuildRequested, setFirstBuildRequested] = useState(false);
   const [startSignal, setStartSignal] = useState(0);
-  const setupFields = screeningPending || (screening === null && setupPhase !== null) || setupPhase === 'fields' || fieldEditor !== null;
+  const setupFields = explicitTab !== 'engineering' && (((params.get('mode') !== 'board' || setupPhase !== null) && screeningPending) || (screening === null && setupPhase !== null) || setupPhase === 'fields' || fieldEditor !== null);
   const setupActive = setupFields || setupPhase !== null;
   const setupLeaveGuard = useRef<(() => Promise<boolean>) | null>(null);
   const [adjusting, setAdjusting] = useState<string | null>(null);
@@ -174,9 +157,9 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     const dialog = adjustmentDialog.current;
     if (adjusting && dialog && !dialog.open) dialog.showModal();
   }, [adjusting]);
-  const [windowSignal, setWindowSignal] = useState(0);
   const [draftSummary, setDraftSummary] = useState<DraftSummary>({ changes: 0, examples: 0, publishing: false, publishedVersion: null, error: null });
   const [publishSignal, setPublishSignal] = useState(0);
+  const [checkTarget, setCheckTarget] = useState<HTMLDivElement | null>(null);
   const [reviewDraftSignal, setReviewDraftSignal] = useState(0);
   const [prefill, setPrefill] = useState<{ id: number; text: string } | null>(null);
   const [focusRelation, setFocusRelation] = useState<string | null>(null);
@@ -185,25 +168,24 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const fieldEditGuard = useRef<(() => boolean) | null>(null);
   const canLeaveField = () => fieldEditGuard.current?.() ?? true;
   const [browse, setBrowse] = useState<KnowledgeBaseBrowse | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(() => ADVANCED.has(legacyAsset ?? ''));
-  const [draftInspectPath, setDraftInspectPath] = useState<string>();
-  useEffect(() => { if (ADVANCED.has(legacyAsset ?? '')) setAdvancedOpen(true); }, [legacyAsset]);
+  const [canvasDraft, setCanvasDraft] = useState<CanvasDraft>();
+  const hasModelingChanges = review?.changes.some(change =>
+    change.sources.includes('auto') || change.sources.includes('confirm')) === true;
+  const [undoRequest, setUndoRequest] = useState<DraftUndoRequest | null>(null);
   const publishedVersion = workflow?.publishedVersion ?? group.publishedVersion ?? 0;
   const tab: Tab = explicitTab ?? 'semantic';
   const mode = params.get('mode');
-  const inChat = setupActive || mode === 'chat' || (mode !== 'board' && (!explicitTab || asset === 'modeling'));
+  const inChat = tab !== 'engineering' && (setupActive || mode === 'chat' || (mode !== 'board' && (!explicitTab || asset === 'modeling')));
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [coachSelection, setCoachSelection] = useState<string | undefined>(() => params.get('question') ?? undefined);
   const coachReviewActions = useRef<CoachReviewActions>(null);
   const [coachScope, setCoachScope] = useState<CoachQuestion>();
-  const [coachRemoval, setCoachRemoval] = useState<string>();
-  const clearCoachRemoval = useCallback(() => setCoachRemoval(undefined), []);
   const [resourceScope, setResourceScope] = useState<{
     kind: 'view' | 'document' | 'table'; name: string; quote?: string; assetKind?: AssetKind;
     version?: 'published' | 'draft'; publishedEvidence?: { description: string; sql: string };
   }>();
   const [composerFocus, setComposerFocus] = useState(0);
-  const [coachPicker, setCoachPicker] = useState<{ ids?: string[]; hint?: string; request?: string; removal?: boolean }>();
+  const [coachPicker, setCoachPicker] = useState<{ ids?: string[]; hint?: string; request?: string }>();
   const [coachSearch, setCoachSearch] = useState('');
   const chosenForRequest = useRef<{ text: string; id: string }>();
   const [coachSplitSide, setCoachSplitSide] = useState<'question' | 'chat'>('question');
@@ -231,14 +213,18 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [reveal, setReveal] = useState<{ id: number; item: DraftItem } | null>(null);
 
-  const activeGroup = useRef(groupId); activeGroup.current = groupId;
+  const activeGroup = useRef(groupId);
+  useLayoutEffect(() => {
+    activeGroup.current = groupId;
+    return () => { activeGroup.current = ''; };
+  }, [groupId]);
   const generation = useRef(0);
   const sequence = useRef(0);
-  const selectTab = (key: Tab) => {
+  const selectTab = (key: Tab, nextView?: WorkbenchView) => {
     if (canLeaveField()) {
       setComparisonOpen(false);
       setCoachScope(undefined); setResourceScope(undefined);
-      setParams({ asset: key, mode: 'board' });
+      setParams({ asset: key, mode: 'board', ...(nextView ? { view: nextView } : {}) });
     }
   };
   /** {@code label} is what the conversation shows for a request the platform wrote. */
@@ -280,11 +266,10 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
       await refresh();
     } catch (e) { if (activeGroup.current === groupId) setError(message(e)); }
   };
-  const refresh = useCallback(async () => {
+  const refreshGraph = useCallback(async () => {
     const current = ++generation.current;
     const isCurrent = () => current === generation.current && activeGroup.current === groupId;
     setError('');
-    setConfirmationsReady(false);
     const load = async <T,>(request: Promise<T>, apply: (value: T) => void) => {
       try {
         const value = await request;
@@ -293,29 +278,23 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
         if (isCurrent()) setError(previous => previous || message(e));
       }
     };
-    const graph = load(getMdlView(groupId), setView);
-    const checks = [
-      load(getModelingWorkflow(groupId), setWorkflow),
-      load(listConfirmations(groupId), items => { setConfirmations(items); setConfirmationsReady(true); }),
-      load(getScreeningStatus(groupId), setScreening),
-    ];
-    await graph;
+    await load(getMdlView(groupId), setView);
     if (isCurrent()) await load(getMdlPreview(groupId), setPreview);
-    await Promise.all(checks);
   }, [groupId]);
+  const refresh = async () => { await Promise.all([refreshGraph(), reloadRelease()]); };
   useEffect(() => {
     setReadyGroup(null); windowReadyRef.current = false;
-    setView(null); setPreview(null); setWorkflow(null); setConfirmations([]); setScreening(null); setAdjusting(null);
+    setView(null); setPreview(null); setAdjusting(null);
     setPrefill(null); setFocusRelation(null); setChangeMark(null); setMarked([]); setReveal(null);
-    setDraftInspectPath(undefined);
+    setCanvasDraft(undefined); setUndoRequest(null);
     try { setSeen(new Set(JSON.parse(localStorage.getItem(`sw-seen:${groupId}`) ?? '[]') as string[])); } catch { setSeen(new Set()); } setVersionChoice('draft'); setBrowse(null);
-    void refresh();
+    void refreshGraph();
     const update = (event: Event) => {
-      if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void refresh();
+      if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void refreshGraph();
     };
     window.addEventListener('modeling:updated', update);
     return () => { generation.current++; window.removeEventListener('modeling:updated', update); };
-  }, [groupId, refresh]);
+  }, [groupId, refreshGraph]);
   useEffect(() => {
     if (params.get('start') === '1') setSetupPhase('prepare');
   }, [params]);
@@ -341,12 +320,14 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   }, [tourStep, idle, workflow, confirmationsReady, confirmations.length, groupId]);
   // No skip buttons in the tour, so after a reload it recovers from what the page shows.
   useEffect(() => {
-    if (tourStep !== 'modeling' || !idle || !(draftSummary.changes > 0 || workflow?.queryAvailable)) return;
+    if (tourStep !== 'modeling' || !idle || !confirmationsReady
+      || !(workflow?.engineeringStatus === 'PASSED' || workflow?.queryAvailable || confirmations.length > 0 || hasModelingChanges && workflow?.engineeringStatus === 'NOT_CHECKED')) return;
     const timer = window.setTimeout(() => tourSignal('model-idle', { groupId }), 4000);
     return () => window.clearTimeout(timer);
-  }, [tourStep, idle, draftSummary.changes, workflow?.queryAvailable, groupId]);
+  }, [tourStep, idle, confirmationsReady, confirmations.length, workflow?.engineeringStatus, workflow?.queryAvailable, hasModelingChanges, groupId]);
   const startModeling = () => {
-    if (!request(AUTO_MODELING_REQUEST, 'auto', '开始自动建模')) return;
+    if (!idle || screeningPending || !request(AUTO_MODELING_REQUEST, 'auto', '开始自动建模')) return;
+    setFirstBuildRequested(true);
     tourSignal('model-started', { groupId });
     setSetupPhase(null);
     try { sessionStorage.removeItem(preparationKey); } catch { /* Resume is optional. */ }
@@ -354,11 +335,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   };
 
   const selected = params.get('selected');
-  const engineeringPath = selected
-    ? view?.views.find(item => item.name === selected)?.path ?? view?.cubes.find(item => item.name === selected)?.path ?? selected
-    : undefined;
   const hasPublished = publishedVersion > 0;
-  const coachData = useQueryCoachData(groupId, hasPublished && !setupActive);
   const reviewQuestions = useMemo(() => coachData.reviews
     .filter(review => review.status === 'REVIEW')
     .map(review => ({ id: review.question.id, question: review.question.question, reasons: review.reviewReasons })), [coachData.reviews]);
@@ -366,7 +343,6 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     .map(({ question }) => [question.id, question.question])), [coachData.reviews, coachData.pendingRemovals]);
   const coachQuestions = useMemo(() => coachData.reviews.filter(r => isScopedQuestion(r.question.id))
     .map(r => r.question), [coachData.reviews]);
-  const removalQuestions = useMemo(() => coachData.reviews.map(r => r.question), [coachData.reviews]);
   const coachQuestionState = (review: (typeof coachData.reviews)[number]) => {
     const id = review.question.id;
     const cards = confirmations.filter(card => card.questionIds?.includes(id));
@@ -376,14 +352,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const resolveCoachRequest = (text: string) => {
     const intent = coachIntent(text);
     if (intent?.kind === 'remove') {
-      const scopeId = coachScope?.id ?? (comparingCoach ? coachSelection : undefined);
-      const matches = removalQuestions.filter(q => intent.text ? q.question.trim() === intent.text : q.id === scopeId);
-      if (matches.length === 1 && !coachData.loading && !coachData.error) {
-        return openCoachRemoval(matches[0]) ? 'handled' as const : null;
-      }
-      setCoachPicker({ removal: true, ids: matches.length > 1 ? matches.map(q => q.id) : undefined,
-        hint: matches.length > 1 ? '找到多道同名题。请选择要移出的一道。'
-          : intent.text && !coachData.loading ? '未找到完全匹配的题名。可以搜索并手动选择。' : '请选择要移出的一道题。' });
+      setError('请在问数优化中打开「批量处理」，勾选要移除的问答。');
       return 'handled' as const;
     }
     if (resourceScope && !intent) {
@@ -427,8 +396,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
       hint: matches.length > 1 ? '找到了多道相关问题。请选一道，再发送这条消息。' : '请选择要处理的题目，输入内容会保留。' });
     return null;
   };
-  const pickerQuestions = coachPicker?.removal ? removalQuestions : coachQuestions;
-  const pickerOptions = coachPicker ? pickerQuestions.filter(q =>
+  const pickerOptions = coachPicker ? coachQuestions.filter(q =>
     (!coachPicker.ids || coachPicker.ids.includes(q.id)) &&
     q.question.toLocaleLowerCase().includes(coachSearch.trim().toLocaleLowerCase())) : [];
   const quickPrompts = useMemo(() => hasPublished && !setupActive ? getModelingPrompts(view) : undefined, [hasPublished, setupActive, view]);
@@ -450,9 +418,6 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const baseline = useMemo(() => version === 'draft' && browse ? publishedSnapshot(browse) : null, [version, browse]);
   const baselineFiles = useMemo(() => version === 'draft' && hasPublished && preview ? new Map(preview.publishedFiles.map(f => [f.path, f.content])) : null, [version, hasPublished, preview]);
   const workbenchView = workbenchViewOf(asset, params.get('view'));
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'semantic', label: '语义建模' }, { key: 'coach', label: '问数优化' }, { key: 'assets', label: '公共视图' }, { key: 'overview', label: '资料' },
-  ];
   // A turn's changes are marked when it ends; marks accumulate from the earliest unmarked turn.
   const turnStart = useRef<string | null>(null);
   useEffect(() => {
@@ -464,11 +429,12 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     if (hasPublished) setChangeMark(previous => previous ?? { since });
   }, [assistantState, head, hasPublished]);
   useEffect(() => {
-    if (!changeMark) { setMarked([]); return undefined; }
+    const since = changeMark?.since;
+    if (!since) { setMarked([]); return undefined; }
     let cancelled = false;
-    void getDraftItems(groupId, changeMark.since ?? undefined).then(items => { if (!cancelled) setMarked(items); }).catch(() => undefined);
+    void getDraftItems(groupId, since).then(items => { if (!cancelled) setMarked(items); }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [groupId, changeMark, preview]);
+  }, [groupId, changeMark?.since, preview]);
   const isSeen = useCallback((item: DraftItem) => seen.has(changeKey(item)), [seen]);
   const markSeen = (items: DraftItem[]) => setSeen(previous => {
     const next = new Set(previous);
@@ -476,7 +442,8 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     try { localStorage.setItem(`sw-seen:${groupId}`, JSON.stringify([...next].slice(-500))); } catch { /* per-browser only */ }
     return next;
   });
-  const markedKeys = useMemo(() => new Set(marked.map(changeKey)), [marked]);
+  const scopeItems = changeMark?.since ? marked : canvasDraft?.items;
+  const markedKeys = useMemo(() => new Set(scopeItems?.map(changeKey)), [scopeItems]);
   const revealChange = (item: DraftItem) => {
     if (!canLeaveField()) return false;
     setComparisonOpen(false);
@@ -485,10 +452,16 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     setReveal({ id: ++sequence.current, item });
     return true;
   };
-  const inspectChange = (path: string) => {
+  const openEngineering = (path?: string, compare = false) => {
     if (!canLeaveField()) return false;
-    setDraftInspectPath(path);
-    setAdvancedOpen(true);
+    setComparisonOpen(false);
+    setParams({ ...modelingParams('engineering'), ...(path ? { path } : {}), ...(compare ? { compare: '1' } : {}),
+      ...(version === 'published' && !compare ? { version: 'published' } : {}) });
+    return true;
+  };
+  const requestDraftUndo = (path: string | null) => {
+    if (!idle || draftSummary.publishing || tourLocksDraftDrawer(tour, groupId) || !canLeaveField()) return false;
+    setUndoRequest({ path });
     return true;
   };
   /** Fills the conversation's input; the user reads it and decides whether to send. */
@@ -501,25 +474,19 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const showVersion = (next: typeof versionChoice) => {
     if (next !== versionChoice && canLeaveField()) setVersionChoice(next);
   };
-  const versionBar = <div className="sm-version">
-    {hasPublished && <WorkspaceMenu label="版本" triggerLabel="版本" items={[
-      { label: `查看线上 v${publishedVersion}`, icon: 'globe', disabled: !browse || version === 'published', onClick: () => showVersion('published') },
-      { label: '与线上对比', icon: 'graph', disabled: !browse || comparing, onClick: () => showVersion('compare') },
-      ...(version === 'published' || comparing
-        ? [{ label: '返回工作台', icon: 'back' as const, onClick: () => showVersion('draft') }] : []),
-    ]} />}
-    {version === 'published' && <>
-      <span className="sm-version-status">正在查看线上 v{publishedVersion}（只读）</span>
-      <button type="button" className="da-btn da-btn-sm" onClick={() => showVersion('draft')}>返回工作台</button>
-    </>}
-  </div>;
+  const versionPicker = hasPublished ? <select className="da-input mw-version-select" aria-label="切换模型版本"
+    value={versionChoice ?? 'draft'} onChange={event => showVersion(event.target.value as 'draft' | 'published' | 'compare')}>
+    <option value="draft">工作草稿 · 基于 v{publishedVersion}</option>
+    <option value="published" disabled={!browse}>线上 v{publishedVersion} · 只读</option>
+    <option value="compare" disabled={!browse}>对比线上 v{publishedVersion}</option>
+  </select> : undefined;
   const waiting = pending.length;
   const assistantLabel = assistantState === 'awaiting' ? '助手有待确认提案'
     : assistantState === 'running' ? (waiting ? `助手运行中 · ${waiting} 个请求排队` : '助手运行中')
     : waiting ? '请求排队中' : '助手空闲';
   const toQuery = workflow?.queryAvailable ? () => { if (canLeaveField()) navigate(`/chat?groups=${encodeURIComponent(groupId)}`); } : undefined;
   const preparationVersion = Math.max(workflow?.publishedVersion ?? 0, draftSummary.publishedVersion ?? 0);
-  const preparing = useQueryReadiness(groupId, preparationVersion);
+  const preparing = useQueryReadiness(preparationVersion > 0 ? groupId : undefined, preparationVersion);
   const publishDraft = () => { if (canLeaveField()) setPublishSignal(n => n + 1); };
   // Indexing and warm-up run right after publishing; the first question should not wait for them.
   useEffect(() => {
@@ -533,16 +500,27 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   };
   const locateConfirmations = () => { if (canLeaveField()) setTaskSignal(n => n + 1); };
 
-  const exitSetup = async (destination: string) => {
-    if (confirmingScreening) return;
-    if (setupLeaveGuard.current && !await setupLeaveGuard.current()) return;
+  const exitSetup = async () => {
+    if (confirmingScreening) return false;
+    if (setupLeaveGuard.current && !await setupLeaveGuard.current()) return false;
     try { sessionStorage.setItem(preparationKey, '1'); } catch { /* Resume is optional. */ }
-    navigate(destination);
+    return true;
   };
-  const returnToModeling = () => {
-    if (setupActive) void exitSetup('/configure/modeling');
-    else if (canLeaveField()) navigate('/configure/modeling');
-  };
+  useLayoutEffect(() => {
+    const guard = () => {
+      if (draftSummary.publishing) return false;
+      return setupActive ? exitSetup() : canLeaveField();
+    };
+    const select = async (section: ModelingSection) => {
+      if (!await guard()) return;
+      if (setupActive) { setFieldEditor(null); setSetupPhase(null); }
+      setComparisonOpen(false); setCoachScope(undefined); setResourceScope(undefined);
+      setParams(modelingParams(section));
+    };
+    host.leave.current = guard;
+    host.select.current = section => void select(section);
+    return () => { if (host.leave.current === guard) { host.leave.current = null; host.select.current = null; } };
+  });
   const finishScreening = (tables: ScreeningStatus[]) => {
     setFieldEditor(null);
     setScreening(tables);
@@ -558,6 +536,14 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const currentCoachRoute = useRef(coachRoute);
   currentCoachRoute.current = coachRoute;
   const comparingResource = comparingConversation && (tab === 'assets' || tab === 'overview');
+  const comparingAsset = comparingResource && tab === 'assets';
+  const splitReview = comparingCoach || comparingResource;
+  const assetChatTrigger = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => {
+    if (comparingAsset) return;
+    assetChatTrigger.current?.focus({ preventScroll: true });
+    assetChatTrigger.current = null;
+  }, [comparingAsset]);
   const chatConfirmations = comparingCoach
     ? confirmations.filter(card => !coachSelection || !card.questionIds?.includes(coachSelection)) : confirmations;
   const visibleBoard = !inChat || comparingConversation;
@@ -619,12 +605,6 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     setCoachSelection(id);
     return null;
   };
-  const openCoachRemoval = (question: CoachQuestion) => {
-    if (!comparingCoach && !pairCoachQuestion(question, 'chat')) return false;
-    setCoachSplitSide('question');
-    setCoachRemoval(question.id);
-    return true;
-  };
   const finishCoachRemoval = (id: string, online: boolean) => {
     setCoachScope(scope => scope?.id === id ? undefined : scope);
     if (online) return;
@@ -637,17 +617,24 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
       return next;
     }, { replace: true });
   };
-  const pairResource = (scope: NonNullable<typeof resourceScope>) => {
+  const viewScope = (view: Pick<SemanticAsset, 'kind' | 'name'>, version: 'published' | 'draft', published?: SemanticAsset) => ({
+    kind: 'view' as const, name: view.name, assetKind: view.kind, version,
+    publishedEvidence: published ? { description: published.description?.slice(0, 3000) ?? '', sql: published.sql.slice(0, 5000) } : undefined,
+  });
+  const pairResource = (scope?: NonNullable<typeof resourceScope>, trigger?: HTMLButtonElement) => {
     if (!canLeaveField()) return;
+    if (trigger) assetChatTrigger.current = trigger;
     coachSplitOrigin.current = 'board';
     setCoachScope(undefined); setResourceScope(scope);
     setCoachSplitSide('chat');
     setComparisonOpen(true); setComposerFocus(n => n + 1);
-    if (scope.kind === 'view') {
+    if (!scope || scope.kind === 'view') {
       const next = new URLSearchParams(params);
       next.set('asset', 'assets'); next.set('mode', 'chat');
-      next.set('viewItem', `${scope.assetKind ?? 'view'}:${scope.name}`);
-      if (scope.version) next.set('viewVersion', scope.version);
+      if (scope) {
+        next.set('viewItem', `${scope.assetKind ?? 'view'}:${scope.name}`);
+        if (scope.version) next.set('viewVersion', scope.version);
+      }
       setParams(next);
     } else setParams({ asset: 'overview', mode: 'chat' });
   };
@@ -710,60 +697,141 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     return true;
   };
   const openFirstBuild = () => {
-    if (!canLeaveField()) return;
+    if (!canLeaveField()) return false;
     setSetupPhase('prepare');
     setComparisonOpen(false);
+    setParams({ asset: 'modeling', start: '1' });
+    return true;
   };
 
-  return <div className={`modeling-workbench mw mw-conversation-workspace ${inChat ? 'mw-conversation' : 'mw-board'}${comparingConversation ? ' mw-comparing' : ''}${comparingCoach || comparingResource ? ' mw-coach-comparing' : ''}${setupActive ? ' mw-preparation' : ''}`} data-coach-side={comparingCoach || comparingResource ? coachSplitSide : undefined}>
-    <div className="mw-top">
-      <header className="mw-head">
-        <div className="mw-crumb">
-          <button type="button" className="mw-crumb-link" title="返回语义建模列表" disabled={confirmingScreening} onClick={returnToModeling}>语义建模</button><span className="mw-crumb-sep">/</span>
-          <h1 className="mw-title" title={group.name}>{group.name}</h1>
-          <span className={`mw-pill ${hasPublished ? 'mw-pill-ok' : ''}`}
-            title={hasPublished && workflow && !workflow.queryAvailable ? '当前不可问数' : undefined}>{hasPublished && <span className="mw-dot" />}{hasPublished ? `线上 v${publishedVersion}` : '尚未发布'}</span>
-        </div>
-        <div className="mw-actions">
-          {!setupActive && <>
-            {workflow && <DraftBar key={groupId} groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length}
-              checksPending={!confirmationsReady || screening === null || coachData.loading} compact onLocate={locateConfirmations}
-              reviewQuestions={reviewQuestions} questionTitles={questionTitles} pendingRemovals={coachData.pendingRemovals} onReviewQuestion={openQuestionReview}
-              onReviewAsset={openAssetReview} confirmations={confirmations} onAnswer={answers => void answered(answers)}
-              onInspectChange={inspectChange} onLocateChange={revealChange}
-              isUnseen={item => !!changeMark && markedKeys.has(changeKey(item)) && !isSeen(item)} onSeen={markSeen}
-              publishSignal={publishSignal} reviewSignal={reviewDraftSignal} taskSignal={taskSignal} onSummary={setDraftSummary} />}
-            {comparingConversation && <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={closeComparison}>结束对照</button>}
-            <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={inChat ? showBoard : openAssistant}
-              aria-label={inChat ? '查看模型' : '建模对话'} title={inChat ? '查看模型' : assistantLabel}>
-              <Icon name={inChat ? 'model' : 'chat'} size="sm" /><span>{inChat ? tab === 'coach' ? '问数优化' : '查看模型' : '建模对话'}</span>
-              {!idle && !inChat && <i className="mw-dot" aria-label={assistantLabel} />}
-            </button>
-          </>}
-          {setupActive ? <button type="button" className="mw-back-to-library" disabled={confirmingScreening} onClick={() => void exitSetup(`/configure/datasets/${groupId}`)}>
-            <Icon name="book" size="sm" />回到知识库
-          </button> : <WorkspaceMenu label="更多操作" items={[
-            ...(!hasPublished && screening?.length ? [{ label: '准备自动建模', icon: 'model' as const, disabled: !idle || draftSummary.publishing, onClick: openFirstBuild }] : []),
-            ...(screening !== null ? [{ label: '事实表时间范围', icon: 'clock' as const, disabled: !idle, onClick: () => setWindowSignal(n => n + 1) }] : []),
-            { label: '工程与快照', icon: 'file', onClick: () => setAdvancedOpen(true) },
-            ...(toQuery ? [{ label: '去问数', icon: 'chat' as const, disabled: !!preparing || queryHeld, onClick: toQuery }] : []),
-            { label: '回到知识库', icon: 'book', onClick: () => { if (canLeaveField()) navigate(`/configure/datasets/${groupId}`); } },
-          ]} />}
-        </div>
-      </header>
-      {!setupActive && advancedOpen && <AdvancedModelingPanel key={`${groupId}:${draftInspectPath ?? ''}`} groupId={groupId}
-        onClose={() => { setAdvancedOpen(false); setDraftInspectPath(undefined); }}
-        initialVersion={draftInspectPath ? 'draft' : version} preview={preview} initialPath={draftInspectPath ?? engineeringPath}
-        initialCompare={!!draftInspectPath}
-        initialDirectory={legacyAsset === 'views' ? 'views/' : legacyAsset === 'cubes' ? 'cubes/' : undefined}
-        initialTab={!draftInspectPath && legacyAsset === 'mdl' ? 'compiled' : 'files'} />}
-      {visibleBoard && <nav aria-label="语义建模页面" className="mw-tabs">
-        {tabs.map(item => <button key={item.key} type="button" aria-current={tab === item.key ? 'page' : undefined} className={`mw-tab ${tab === item.key ? 'mw-tab-on' : ''}`} onClick={() => selectTab(item.key)}>{item.label}</button>)}
-      </nav>}
-    </div>
+  const modelCheckOnPage = visibleBoard && tab === 'semantic';
+  const currentModule = tab === 'semantic' ? workbenchView : tab;
+  const compactWorkbench = visibleBoard && currentModule !== 'graph' && !setupActive;
+  const reviewChanges = () => { if (canLeaveField()) setReviewDraftSignal(n => n + 1); };
+  const goToRelease = () => {
+    if (host.decision.blocker?.kind === 'asset' || host.decision.blocker?.kind === 'incomplete') { locateConfirmations(); return; }
+    if (host.decision.blocker?.kind === 'engineering') {
+      if (canLeaveField()) setParams(previous => { const next = new URLSearchParams(previous); next.set('review', 'checks'); return next; });
+      return;
+    }
+    reviewChanges();
+  };
+  const reviewParam = params.get('review');
+  const reviewRequested: ReviewSection | null = reviewParam === '1' ? 'changes'
+    : reviewParam === 'tasks' || reviewParam === 'checks' ? reviewParam : null;
+  const clearReviewRequest = () => {
+    if (!reviewRequested) return;
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.delete('review');
+      return next;
+    }, { replace: true });
+  };
+  const serverModeling = review?.assistantRunning === true;
+  const headerAssistant = idle ? 'idle' : assistantState === 'awaiting' ? 'awaiting' : 'running';
+  useLayoutEffect(() => {
+    onActivity({ setup: setupActive, assistant: headerAssistant, publishing: draftSummary.publishing });
+  }, [onActivity, setupActive, headerAssistant, draftSummary.publishing]);
+  useLayoutEffect(() => () => onActivity(null), [onActivity]);
+
+  const [focusConfirmation, setFocusConfirmation] = useState(false);
+  useEffect(() => {
+    if (!focusConfirmation || !inChat) return;
+    const target = conversationConfirmation.current;
+    if (target) {
+      target.scrollIntoView({ block: 'start' });
+      target.focus({ preventScroll: true });
+    }
+    setFocusConfirmation(false);
+  }, [focusConfirmation, inChat]);
+  const goToConfirmation = () => {
+    if (!canLeaveField()) return;
+    openAssistant();
+    setFocusConfirmation(true);
+  };
+
+  const firstRelease = !hasPublished && !draftSummary.publishedVersion;
+  const firstStep = (() => {
+    if (!firstRelease || draftSummary.publishing || setupActive) return null;
+    if (assistantState === 'awaiting' || (idle && !serverModeling && confirmationsReady && confirmations.length > 0)) {
+      return {
+        title: '还有口径待确认', detail: '到建模对话确认关系或业务口径，助手会继续完善草稿。',
+        label: inChat && assistantState === 'awaiting' ? undefined : inChat ? '查看待确认项' : '去确认口径', action: goToConfirmation,
+      };
+    }
+    if (!idle || serverModeling) return {
+      title: '正在建模', detail: '助手正在完善模型草稿，完成后这里会显示下一步。',
+      label: inChat ? undefined : '查看建模进度', action: openAssistant,
+    };
+    if (!workflow || screening === null || !confirmationsReady) return null;
+    if (screeningPending) return {
+      title: '确认建模字段', detail: '先核对纳入建模的表和字段，然后进入准备清单。',
+      label: '去确认字段', action: openFirstBuild,
+    };
+    const blocker = host.decision.blocker;
+    if (blocker?.kind === 'asset' || blocker?.kind === 'incomplete') return {
+      title: '还有视图待处理', detail: '核查用途、完成验证或补齐文件后，再发布当前草稿。',
+      label: '查看视图待办', action: goToRelease,
+    };
+    if (blocker?.kind === 'engineering') return {
+      title: '模型校验未通过', detail: '查看发布检查中的具体问题，修正后再发布。',
+      label: '查看校验问题', action: goToRelease,
+    };
+    if (workflow.canPublish && draftSummary.changes > 0) return null;
+    if (workflow.stage !== 'DATA_PREPARATION' && hasModelingChanges && draftSummary.changes > 0) return {
+      title: '建模草稿待发布', detail: '建模改动已保存。审阅后，系统会在发布时校验当前草稿。',
+      label: '审阅并发布', action: goToRelease,
+    };
+    if (firstBuildRequested) return {
+      title: '建模尚未完成', detail: '确认建模结果后再继续发布。可以在对话中查看结果或重试。',
+      label: inChat ? '重试自动建模' : '查看建模对话', action: inChat ? startModeling : openAssistant,
+    };
+    return {
+      title: '字段已确认，准备建模', detail: '核对查询时间范围，可以选传业务文档，然后开始自动建模。',
+      label: '进入建模准备', action: openFirstBuild,
+    };
+  })();
+  const nextStep = (onBoard: boolean) => firstStep ? <section className="mw-publish-card" aria-label="首次建模下一步">
+    <span className="mw-publish-card-icon"><Icon name="model" /></span>
+    <div className="mw-publish-card-copy" role="status"><h2>{firstStep.title}</h2><p>{firstStep.detail}</p></div>
+    {firstStep.label && <div className="mw-publish-card-actions">
+      <button type="button" className="da-btn da-btn-primary" onClick={firstStep.action}>{firstStep.label}<Icon name="chevron" size="sm" /></button>
+    </div>}
+  </section> : (!firstRelease || draftSummary.publishing || (workflow?.canPublish && confirmationsReady
+    && screening !== null && !screeningPending && idle && !serverModeling)) && <NextStepCard summary={draftSummary}
+    nextVersion={publishedVersion + 1} firstPublishedVersion={workflow?.publishedVersion === 1 && !workflow.draftChanged ? 1 : null}
+    preparing={preparing} onView={onBoard ? undefined : showBoard} onPublish={tourStep === 'publish' ? publishDraft : goToRelease}
+    publishLabel={tourStep === 'publish' ? undefined : '审阅并发布'} onQuery={toQuery} queryHeldHint={queryHeld ? TOUR_QUERY_HINT : undefined} />;
+  return <div className={`modeling-workbench mw mw-workspace-layout mw-in-knowledge mw-conversation-workspace ${inChat ? 'mw-conversation' : 'mw-board'}${comparingConversation ? ' mw-comparing' : ''}${splitReview ? ' mw-coach-comparing' : ''}${setupActive ? ' mw-preparation' : ''}${compactWorkbench ? ' mw-compact-workbench' : ''}`} data-coach-side={splitReview ? coachSplitSide : undefined}>
+    {host.versionTarget && visibleBoard && tab === 'semantic' && versionPicker && createPortal(versionPicker, host.versionTarget)}
+    {host.actionsTarget && createPortal(<>
+      {!setupActive && <>
+        {modelCheckOnPage && snapshot && <div className="mw-header-check" ref={setCheckTarget} />}
+        <DraftBar key={groupId} groupId={groupId} release={host.release} decision={host.decision} assistantActive={!idle} pendingConfirmations={confirmations.length}
+          checksPending={!confirmationsReady || screening === null || coachData.loading} stateError={host.release.error ?? coachData.error}
+          importing={host.importing} compact onLocate={locateConfirmations}
+          reviewQuestions={reviewQuestions} questionTitles={questionTitles} onReviewQuestion={openQuestionReview}
+          onReviewAsset={openAssetReview} confirmations={confirmations} onAnswer={answers => void answered(answers)}
+          onInspectChange={path => openEngineering(path, true)} onLocateChange={revealChange}
+          isUnseen={item => !!changeMark && markedKeys.has(changeKey(item)) && !isSeen(item)} onSeen={markSeen}
+          publishSignal={publishSignal} reviewSignal={reviewDraftSignal} taskSignal={taskSignal} onSummary={setDraftSummary}
+          onCanvasDraft={setCanvasDraft} undoRequest={undoRequest} beforePublish={canLeaveField}
+          reviewRequested={reviewRequested} onDismissReview={clearReviewRequest}
+          onOpenEngineering={() => openEngineering()} onPrepareData={() => { if (!canLeaveField()) return false; navigate(knowledgePath(groupId) + '?section=datasets'); return true; }}
+          onPrepareModel={openFirstBuild} onRetryState={() => { void reloadRelease(); coachData.reload(); }} />
+        <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={comparingConversation ? closeComparison : inChat ? showBoard : tab === 'engineering' ? () => setParams({ asset: 'semantic', mode: 'chat' }) : openAssistant}
+          aria-label={inChat ? '查看模型' : '建模对话'} title={inChat ? '查看模型' : assistantLabel}>
+          <Icon name={inChat ? 'model' : 'chat'} size="sm" /><span>{inChat ? tab === 'coach' ? '问数优化' : '查看模型' : '建模对话'}</span>
+          {!idle && !inChat && <i className="mw-dot" aria-label={assistantLabel} />}
+        </button>
+      </>}
+      {setupActive && <button type="button" className="mw-back-to-library" disabled={confirmingScreening} onClick={async () => { if (await exitSetup()) navigate(knowledgePath(groupId) + '?section=datasets'); }}>
+        <Icon name="back" size="sm" />返回数据集
+      </button>}
+    </>, host.actionsTarget)}
     <div className="mw-content">
     {error && <div role="alert" className="da-alert da-alert-error">{error}<button className="da-btn da-btn-sm" onClick={() => void refresh()}>刷新</button></div>}
-    {screening !== null && !setupActive && <FactQueryWindowSettings key={groupId} groupId={groupId} automatic initiallyReady={windowReadyRef.current} onReady={updateWindowReady} hideButton openSignal={windowSignal} />}
+    {screening !== null && !setupActive && tab !== 'engineering' && <FactQueryWindowSettings key={groupId} groupId={groupId} automatic initiallyReady={windowReadyRef.current} onReady={updateWindowReady} hideButton />}
     {editingScreening && <div className="mw-field-overlay" role="dialog" aria-modal="true" aria-label="整理字段">
       <div className="mw-field-editor">
         <header><strong>整理字段</strong><button type="button" className="da-btn da-btn-sm" autoFocus={fieldEditor !== null} disabled={guidedScreening}
@@ -785,35 +853,41 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
             if (remodel && request(remodelRequest(change), 'auto', remodelLabel(change))) openAssistant();
           }} />
     </dialog>}
-    {(comparingCoach || comparingResource) && <div className="qc-mobile-switch" role="group" aria-label="切换并排区域">
+    {splitReview && <div className="qc-mobile-switch" role="group" aria-label="切换并排区域">
       <button type="button" className="da-btn da-btn-sm" aria-pressed={coachSplitSide === 'question'} onClick={() => setCoachSplitSide('question')}>{comparingCoach ? '题目详情' : tab === 'assets' ? '视图详情' : '资料详情'}</button>
       <button type="button" className="da-btn da-btn-sm" aria-pressed={coachSplitSide === 'chat'} onClick={() => setCoachSplitSide('chat')}>建模对话</button>
     </div>}
     <div className="modeling-workbench-body mw-body">
       <div className="mw-main" hidden={!visibleBoard}>
+      {tab === 'engineering' && <KnowledgeEngineeringPage key={groupId} groupId={groupId} canManage />}
       {tab === 'overview' && <ModelingMaterials key={groupId} groupId={groupId} tables={screening} idle={idle} paired={comparingResource}
-        onManageData={() => navigate(`/configure/datasets/${groupId}`)} onAdjust={setAdjusting} onDocumentsChanged={documentsChanged}
+        onManageData={() => navigate(knowledgePath(groupId) + '?section=datasets')} onAdjust={setAdjusting} onDocumentsChanged={documentsChanged}
         onReference={(name, quote) => pairResource({ kind: 'document', name, quote })}
         onTable={table => pairResource({ kind: 'table', name: table.name })}
         onPublish={() => setReviewDraftSignal(n => n + 1)} />}
       {tab === 'semantic' && <section className="sm-pane">
+        {visibleBoard && !comparingConversation && workbenchView === 'graph' && <header className="kbw-graph-heading">
+          <h2>关系图</h2>{snapshot && <p>{snapshot.models.length} 个模型 · {snapshot.relations.length} 条关系</p>}
+        </header>}
+        {!inChat && workbenchView === 'graph' && (!hasPublished || publishedVersion === 1 || draftSummary.publishing || draftSummary.publishedVersion) &&
+          <div className="mw-graph-next">{nextStep(true)}</div>}
         {!snapshot ? <GraphLoading /> : <SemanticWorkbench key={groupId} groupId={groupId} snapshot={snapshot}
-          baseline={baseline} files={snapshotFiles} baselineFiles={baselineFiles} compareWithBaseline={comparing} fieldEditGuard={fieldEditGuard}
+          baseline={baseline} files={snapshotFiles} baselineFiles={baselineFiles} rulesReady={!!preview} compareWithBaseline={comparing} fieldEditGuard={fieldEditGuard}
           views={version === 'draft' ? (view?.views ?? []).map(v => ({ name: v.name, sql: v.sql, description: v.description })) : []}
-          issues={version === 'draft' ? (view?.issues ?? []).map(i => i.message) : []}
-          editable={version === 'draft'} blocked={!idle ? '建模助手正在运行，完成后才能在页面上修改。' : screening === null ? '正在读取字段状态…' : null}
-          view={workbenchView} onViewChange={setWorkbenchView} focusRelation={focusRelation} focusModel={selected}
-          onChanged={turnDone} onAsk={askAssistant} toolbar={versionBar} changes={version === 'draft' ? changeMark : null} onChanges={setChangeMark}
-          marked={marked} isSeen={isSeen} onSeen={item => markSeen([item])} onOpenPending={locateConfirmations} reveal={reveal} showDetail={!comparingConversation}
-          publication={version === 'draft' && (draftSummary.changes > 0 || draftSummary.publishing || draftSummary.publishedVersion !== null)
-            ? { summary: draftSummary, nextVersion: publishedVersion + 1, pending: confirmations.length, onPublish: publishDraft,
-                onQuery: toQuery, queryReady: preparing === null && !queryHeld, preparing } : null} />}
+          issues={version === 'draft' ? view?.issues ?? [] : []}
+          editable={version === 'draft'} blocked={!idle || serverModeling ? '建模助手正在运行，完成后才能在页面上修改。' : screening === null ? '正在读取字段状态…' : null}
+          view={workbenchView} onViewChange={setWorkbenchView} focusRelation={focusRelation} focusModel={selected} defaultRailOpen={false}
+          onChanged={turnDone} onAsk={askAssistant} checkTarget={checkTarget} fullscreenVersion={versionPicker} changes={version === 'draft' ? changeMark : null} onChanges={setChangeMark}
+          marked={scopeItems} canvasDraft={canvasDraft} onUndoDraft={requestDraftUndo}
+          isSeen={isSeen} onSeen={item => markSeen([item])} onReviewChanges={reviewChanges} reveal={reveal}
+          onEngineering={path => { openEngineering(path); }}
+          onReviewAsset={openAssetReview} onDocuments={() => selectTab('overview')}
+          showDetail={!comparingConversation} onExpandBoard={showBoard} />}
       </section>}
-      {tab === 'assets' && <SemanticAssetsPanel key={groupId} groupId={groupId} assistantIdle={idle} paired={comparingResource} publishedVersion={publishedVersion}
-        onAsk={(view, version, published) => pairResource({
-          kind: 'view', name: view.name, assetKind: view.kind, version,
-          publishedEvidence: published ? { description: published.description?.slice(0, 3000) ?? '', sql: published.sql.slice(0, 5000) } : undefined,
-        })} onPublish={() => setReviewDraftSignal(n => n + 1)}
+      {tab === 'assets' && <SemanticAssetsPanel key={groupId} groupId={groupId} assistantIdle={idle} paired={comparingAsset} publishedVersion={publishedVersion}
+        onDiscuss={trigger => pairResource(undefined, trigger)}
+        onAsk={(view, version, published, trigger) => pairResource(viewScope(view, version, published), trigger)}
+        onPublish={() => setReviewDraftSignal(n => n + 1)}
         onDraft={(text, label) => {
           const sent = request(text, 'asset', label);
           if (sent) {
@@ -826,7 +900,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
       <div className="mw-coach">
         <QueryCoachPanel key={groupId} groupId={groupId} assistantIdle={idle} available={hasPublished} onRequest={request} preview={preview}
           data={coachData} selection={coachSelection} onSelect={setCoachSelection}
-          onRemove={finishCoachRemoval} removalRequest={coachRemoval} onRemovalRequestHandled={clearCoachRemoval}
+          onRemove={finishCoachRemoval}
           compact={comparingCoach} onPublish={() => setReviewDraftSignal(n => n + 1)}
           initialLibrary={asset === 'qa' || asset === 'sql'} draftChanges={draftSummary.changes} reviewActions={coachReviewActions}
           readyToAsk={windowReady}
@@ -835,14 +909,22 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
       </div>
       </div>}
       </div>
-      <section className="mw-conversation-pane" aria-label="建模对话" hidden={!inChat}>
-        <ModelingChatPanel key={groupId} groupId={groupId} variant="dock" intro={preparation}
+      <section className="mw-conversation-pane" data-review-chat={comparingAsset || comparingCoach || undefined}
+        aria-label={comparingAsset ? '公共视图边聊边核对' : '建模对话'} data-asset-chat={comparingAsset || undefined} hidden={!inChat}
+        onKeyDown={comparingAsset || comparingCoach ? event => {
+          if (event.key === 'Escape' && !event.defaultPrevented) closeComparison();
+        } : undefined}>
+        {(comparingAsset || comparingCoach) && <header className="mw-review-chat-heading">
+          <strong>边聊边核对</strong>
+          <button type="button" className="da-btn da-btn-sm" aria-label="关闭对话" onClick={closeComparison}><Icon name="close" size="sm" /></button>
+        </header>}
+        <ModelingChatPanel key={groupId} groupId={groupId} variant="dock" intro={preparation} assetChat={comparingAsset}
           onClose={showBoard} composerLocked={setupActive || !windowReady} onCompose={setupActive ? setupCommand : undefined}
           composerFocus={composerFocus}
           composerHint={setupActive ? (setupFields ? '输入「查看字段」' : '输入「开始自动建模」')
             : coachScope ? '描述这道题要修改的口径或 SQL…'
             : resourceScope?.kind === 'document' ? '输入要从这份资料核对的业务口径…'
-              : resourceScope ? '描述要核对或调整的内容…' : undefined}
+              : resourceScope || comparingAsset ? '描述要核对或调整的内容…' : undefined}
           composerSuggestion={setupActive && screening?.length ? (setupFields ? '查看字段' : '开始自动建模') : undefined}
           composerNotice={idle && !setupActive && chatConfirmations.length > 0 ? <button type="button" className="mw-conversation-pending" onClick={() => {
             const target = conversationConfirmation.current;
@@ -870,46 +952,36 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           onTurnDone={turnDone} draftPurpose={head?.purpose} draftLabel={head?.label} draftQuestionId={head?.questionId} onActivityChange={setAssistantState}
           renderTurnResult={((hasPublished && draftSummary.changes > 0) || tourStep === 'review') ? since => <TurnResultCard groupId={groupId} since={since} disabled={!idle}
             onView={turn => inspectTurn(turn)} onCompare={turn => inspectTurn(turn, true)} /> : undefined}
-          footer={!idle || setupActive ? null : <>
+          footer={setupActive || (!idle && assistantState !== 'awaiting') ? null : <>
             <AssetProposalCards groupId={groupId} disabled={!idle} refreshKey={assistantState}
               onDraft={(text, label) => request(text, 'asset', label)} />
             {chatConfirmations.length ? <div ref={conversationConfirmation} className="mw-conversation-confirmation" data-tour="confirm-cards" tabIndex={-1}>
               <ConfirmationCards key={chatConfirmations.map(c => c.id).join(',')} questions={chatConfirmations} onSubmit={answers => void answered(answers)} />
-            </div> : !comparingCoach && !comparingResource && <NextStepCard summary={draftSummary} nextVersion={publishedVersion + 1}
-              firstPublishedVersion={workflow?.publishedVersion === 1 && !workflow.draftChanged ? 1 : null} preparing={preparing}
-              onView={showBoard}
-              onPublish={publishDraft} onQuery={toQuery} queryHeldHint={queryHeld ? TOUR_QUERY_HINT : undefined} />}
+            </div> : !comparingCoach && !comparingResource && nextStep(false)}
           </>} />
       </section>
     </div>
     <dialog ref={coachDialog} className="mo-form-dialog qc-picker" aria-labelledby="qc-picker-title" onClose={() => setCoachPicker(undefined)}>
-      {coachPicker && <><header className="mo-dialog-head"><strong id="qc-picker-title">{coachPicker.removal ? '选择要移出的题目' : '选择要优化的题目'}</strong>
+      {coachPicker && <><header className="mo-dialog-head"><strong id="qc-picker-title">选择要优化的题目</strong>
         <button type="button" className="da-btn da-btn-sm" onClick={() => setCoachPicker(undefined)}>关闭</button></header>
         <div className="mo-dialog-body">
           {coachPicker.hint && <p className="da-small">{coachPicker.hint}</p>}
-          {coachData.loading && !pickerQuestions.length ? <p className="da-small" role="status">正在读取业务问题…</p>
+          {coachData.loading && !coachQuestions.length ? <p className="da-small" role="status">正在读取业务问题…</p>
             : coachData.error ? <p className="da-small" role="alert">{coachData.error} <button type="button" className="sm-text-link" onClick={coachData.reload}>重试</button></p>
-            : !pickerQuestions.length ? <p className="da-small">{coachPicker.removal ? '当前没有可移出的业务问题。' : '还没有业务问题，可以先添加一道。'}</p>
+            : !coachQuestions.length ? <p className="da-small">还没有业务问题，可以先添加一道。</p>
             : <><input type="search" className="da-input" aria-label="搜索题目" placeholder="搜索题目" value={coachSearch} onChange={e => setCoachSearch(e.target.value)} />
               {!pickerOptions.length && <p role="status" className="da-small">没有匹配的题目，试试其他关键词。</p>}
               <div className="qc-picker-questions">{pickerOptions.map(q =>
               <button key={q.id} type="button" className="da-btn" onClick={() => {
-                if (coachPicker.removal) {
-                  if (openCoachRemoval(q)) {
-                    coachDialog.current?.close();
-                    setCoachPicker(undefined);
-                  }
-                  return;
-                }
                 chosenForRequest.current = coachPicker.request ? { text: coachPicker.request, id: q.id } : undefined;
                 setResourceScope(undefined);
                 setCoachScope(q); setCoachSelection(q.id); setCoachPicker(undefined);
-              }}><span>{q.question}{coachPicker.removal && coachPicker.ids && <small className="qc-picker-id">{q.id}</small>}</span><Icon name="chevron" size="sm" /></button>)}</div></>}
+              }}><span>{q.question}</span><Icon name="chevron" size="sm" /></button>)}</div></>}
         </div>
-        {!coachPicker.removal && <footer className="mo-dialog-footer"><button type="button" className="da-btn da-btn-sm" onClick={() => {
+        <footer className="mo-dialog-footer"><button type="button" className="da-btn da-btn-sm" onClick={() => {
           setCoachPicker(undefined); setCoachScope(undefined);
           setPrefill({ id: ++sequence.current, text: '添加业务问题：' });
-        }}><Icon name="plus" size="sm" />添加一道业务问题</button></footer>}</>}
+        }}><Icon name="plus" size="sm" />添加一道业务问题</button></footer></>}
     </dialog>
     </div>
   </div>;

@@ -1,0 +1,98 @@
+/* Shared by the compact modeling workspaces and the standalone rules panel. */
+.sw.sw-rules, .mw.mw-compact-workbench {
+  --wb-bg: #f7f7fa;
+  --wb-surface: #fff;
+  --wb-inset: #fafafc;
+  --wb-sunken: #f1f1f6;
+  --wb-text: #16171d;
+  --wb-text-2: #4a4e5c;
+  --wb-muted: #737889;
+  --wb-quiet: #a3a8b8;
+  --wb-border: rgba(60, 60, 67, .10);
+  --wb-border-strong: rgba(60, 60, 67, .16);
+  --wb-primary: #5f4bc8;
+  --wb-primary-soft: #efebfc;
+  --wb-primary-line: rgba(95, 75, 200, .22);
+  --wb-gradient: linear-gradient(180deg, #6855e4, #5642cf);
+  --wb-primary-shadow: inset 0 .5px 0 rgba(255, 255, 255, .26), 0 2px 5px rgba(86, 66, 207, .30);
+  --wb-warn-bg: #faf0de;
+  --wb-warn-ink: #8c5a0c;
+  --wb-warn-line: rgba(169, 106, 18, .22);
+  --wb-selected: #f7f5fe;
+  --wb-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --wb-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font: 400 13px/1.5 var(--wb-font);
+  color: var(--wb-text);
+}
+/* Shared controls retain their existing actions and use the rules page's compact chrome. */
+.mw-compact-workbench .mw-workspace-header {
+  min-height: 54px; gap: 8px; padding: 0 14px 0 0;
+  border-color: var(--wb-border); background: var(--wb-surface);
+}
+.mw-compact-workbench .mw-library-identity { gap: 7px; }
+.mw-compact-workbench .mw-library-link {
+  width: 30px; height: 30px; margin-inline: 19px; border-radius: 9px; color: #fff;
+  background: linear-gradient(165deg, #6e59e6, #523fcc); box-shadow: var(--wb-primary-shadow);
+}
+.mw-compact-workbench .mw-library-link svg { width: 15px; height: 15px; }
+.mw-compact-workbench .mw-library-identity h1 { font-size: 12.5px; font-weight: 650; letter-spacing: -.18px; color: var(--wb-text); }
+.mw-workspace-scope { display: none; }
+.mw-compact-workbench .mw-workspace-scope { display: inline; color: var(--wb-muted); font-size: 10.5px; white-space: nowrap; }
+.mw-compact-workbench .mw-library-status :is(.kw-menu-trigger, .mw-pill) {
+  min-height: 22px; padding: 1px 7px; gap: 4px; border: 1px solid var(--wb-border);
+  border-radius: 6px; background: var(--wb-sunken); color: var(--wb-text-2); font-size: 10px; line-height: 18px;
+}
+.mw-compact-workbench .mw-library-status .mw-pill-ok { color: #17603e; background: #e7f5ed; border-color: transparent; }
+.mw-compact-workbench .mw-workspace-header .mw-actions { gap: 7px; }
+.mw-compact-workbench .mw-workspace-header .mw-actions :is(.da-btn, .kw-more) {
+  min-height: 27px; padding: 0 9px; gap: 5px; border: 1px solid var(--wb-border-strong); border-radius: 7px;
+  background: var(--wb-surface); color: var(--wb-text-2); font-size: 11px; font-weight: 500; line-height: 1.3;
+  box-shadow: 0 1px 1px rgb(16 24 40 / 3%);
+}
+.mw-compact-workbench .mw-workspace-header .mw-actions .kw-more { width: 25px; padding: 0; border-color: transparent; box-shadow: none; }
+.mw-compact-workbench .mw-workspace-header .mw-actions svg { width: 12px; height: 12px; }
+.mw-compact-workbench .mw-workspace-header .mw-actions .sw-check-trigger[data-issues] {
+  background: var(--wb-warn-bg); border-color: var(--wb-warn-line); color: var(--wb-warn-ink);
+}
+.mw-compact-workbench .mw-workspace-header .mw-actions .modeling-draft-trigger[data-pending],
+.mw-compact-workbench .mw-workspace-header .mw-actions .da-btn-primary {
+  background: var(--wb-gradient); border-color: transparent; color: #fff; box-shadow: var(--wb-primary-shadow); font-weight: 600;
+}
+.mw-compact-workbench .mw-workspace-header .mw-actions :is(.sw-issue-count, .modeling-draft-trigger b) {
+  min-width: 14px; padding: 0 3px; border-radius: 4px; font-size: 8.4px; line-height: 1.5;
+}
+.mw-compact-workbench .mw-workspace-header .mw-actions .modeling-draft-trigger[data-pending] b { background: rgb(255 255 255 / 19%); color: inherit; }
+@media (min-width: 761px) {
+  .mw.mw-workspace-layout.mw-compact-workbench { grid-template-columns: 68px minmax(0, 1fr); }
+  .mw-compact-workbench .mw-module-sidebar { border-color: var(--wb-border); background: var(--wb-inset); }
+  .mw-compact-workbench .mw-module-tree { align-items: center; gap: 2px; padding: 9px 0; }
+  .mw-compact-workbench .mw-module-heading { display: none; }
+  .mw-compact-workbench .mw-module-group { gap: 2px; }
+  .mw-compact-workbench .mw-module-group-secondary {
+    position: relative; margin-top: 6px; padding-top: 8px; border-top: 0;
+  }
+  .mw-compact-workbench .mw-module-group-secondary::before {
+    content: ""; position: absolute; top: 0; left: 15px; width: 26px; height: 1px; background: var(--wb-border-strong);
+  }
+  .mw-compact-workbench .mw-module-link {
+    width: 56px; min-height: 54px; padding: 0; justify-content: center; flex-direction: column; gap: 4px;
+    border-radius: 13px; color: var(--wb-muted); font-size: 9.5px; font-weight: 500; line-height: 1; white-space: nowrap;
+  }
+  .mw-compact-workbench .mw-module-link svg { width: 20px; height: 20px; stroke-width: 1.5; }
+  .mw-compact-workbench .mw-module-link[aria-current="page"] {
+    color: var(--wb-primary); background: linear-gradient(#f4f0fe, #ede7fc);
+    box-shadow: inset 0 0 0 1px var(--wb-primary-line), 0 1px 2px rgb(95 75 200 / 10%); font-weight: 600;
+  }
+  .mw-compact-workbench .mw-module-link[aria-current="page"] svg { stroke-width: 1.8; }
+  .mw-compact-workbench .mw-module-tree .mw-engineering { width: 34px; min-height: 34px; border-radius: 10px; }
+  .mw-compact-workbench .mw-engineering span {
+    position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+@media (max-width: 760px) {
+  .mw-compact-workbench .mw-workspace-header { padding: 6px 8px; gap: 5px; }
+  .mw-compact-workbench .mw-library-link { margin-inline: 0; }
+  .mw-compact-workbench .mw-workspace-scope { display: none; }
+  .mw-compact-workbench .mw-workspace-header .mw-actions { gap: 4px; }
+  .mw-compact-workbench .mw-workspace-header .mw-actions :is(.da-btn, .kw-more) { min-height: 32px; }
+}

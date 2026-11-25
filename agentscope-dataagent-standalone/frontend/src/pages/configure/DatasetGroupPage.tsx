@@ -1,15 +1,20 @@
-import { FactQueryWindowSettings } from '../../components/FactQueryWindowSettings';
-import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Navigate, useLocation, useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import KnowledgeBaseMembersModal from '../../components/KnowledgeBaseMembersModal';
 import AssociationProgress from '../../components/AssociationProgress';
 import type { AssociationState } from '../../components/AssociationProgress';
 import AssociateTablesModal from '../../components/AssociateTablesModal';
 import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon from '../../components/Icon';
-import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
+import { WorkspaceMenu } from '../../components/KnowledgeWorkspace';
+import { releaseDecision } from '../../components/modeling/releaseDecision';
+import type { ReviewSection } from '../../components/modeling/releaseDecision';
+import { useKnowledgeReleaseData } from '../../components/modeling/useKnowledgeReleaseData';
+import { useQueryCoachData } from '../../components/modeling/useQueryCoachData';
+import { getDraftReview } from '../../api/draftReview';
 import { getModelingWorkflow } from '../../api/modelingWorkflow';
-import type { ModelingWorkflow } from '../../api/modelingWorkflow';
+import { getKnowledgeBaseBrowse, getMdlPreview } from '../../api/semanticModeling';
+import { parseRuleFile } from '../../components/modeling/ruleText';
 import {
   DatasetUploadError,
   getUploadPolicy,
@@ -21,7 +26,6 @@ import {
   GroupDetail,
   listSheets,
   uploadDataset,
-  updateGroup,
 } from '../../api/datasets';
 import {
   getUploadStatuses,
@@ -34,12 +38,18 @@ import { settleUploads } from '../../api/uploadQueue';
 import { getToken } from '../../api/auth';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
 import { fetchSample, refreshOnboarding, useOnboarding } from '../../api/onboarding';
-import { tourActive, tourSignal } from '../../state/guidedTour';
+import { tourActive, tourHoldsQuery, tourLocksDraftDrawer, tourSignal, useTour } from '../../state/guidedTour';
+import KnowledgeWorkspaceShell from './KnowledgeWorkspaceShell';
+import KnowledgeWorkspaceOverview, { describedColumns, WorkspaceHeading } from './KnowledgeWorkspaceOverview';
+import KnowledgeWorkspaceSettings from './KnowledgeWorkspaceSettings';
+import KnowledgeSourceConnection from './KnowledgeSourceConnection';
+import DatasetDetailPage from './DatasetDetailPage';
+import { datasetPath, knowledgePath, modelingParams, modelingPath, modelingPreparationPath, modelingReviewPath, modelingSection, type KnowledgeModelingHost, type KnowledgeSection, type ModelingHeaderActivity } from './knowledgeWorkspaceRoutes';
 import './DatasetGroupPage.css';
 import '../../detail-surfaces.css';
 import './KnowledgeDetails.css';
 
-type View = 'files' | 'modeling';
+const SemanticModelingPage = lazy(() => import('./SemanticModelingPage'));
 
 const STATUS_LABEL: Record<UploadStatus['status'], string> = {
   queued: '排队中',
@@ -54,23 +64,51 @@ const STATUS_LABEL: Record<UploadStatus['status'], string> = {
 
 const ACTIVE_UPLOAD: UploadStatus['status'][] = ['uploading', 'queued', 'importing', 'publishing'];
 
-/** Knowledge workspace with a common header, top tabs and a single content area.
- * Upload/import progress and retry actions remain visible above the active view.
- * Modeling keeps its existing full-screen route and legacy URL redirect.
- */
 export default function DatasetGroupPage() {
   const { groupId = '' } = useParams();
+  return <KnowledgeBaseWorkspace key={groupId} groupId={groupId} />;
+}
+
+function KnowledgeBaseWorkspace({ groupId }: { groupId: string }) {
+  const modelRoute = !!useMatch('/configure/datasets/:groupId/modeling');
+  const datasetId = useMatch('/configure/datasets/:groupId/table/:datasetId')?.params.datasetId;
+  const rootPath = knowledgePath(groupId);
+  const modelPath = modelingPath(groupId);
   const navigate = useNavigate();
+  const location = useLocation();
+  const currentLocation = useRef(location.key);
+  currentLocation.current = location.key;
   const activeGroup = useRef<string | null>(groupId);
   useEffect(() => { activeGroup.current = groupId; return () => { activeGroup.current = null; }; }, [groupId]);
   const uploadScope = `${getToken() ?? ''}:${groupId}`;
   const [searchParams, setSearchParams] = useSearchParams();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
-  const canManage = detail?.group.canManage === true;
-  const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
-  const [windowSignal, setWindowSignal] = useState(0);
+  const canManage = detail?.group.canManage === true && !detail.group.deletionPending;
+  const hasExternalDatasets = detail?.datasets.some(dataset => dataset.origin === 'datasource') ?? false;
+  const fileCount = detail?.datasets.length ?? 0;
+  const knownVersion = detail?.publishedVersion ?? detail?.group.publishedVersion ?? 0;
+  const release = useKnowledgeReleaseData(groupId, canManage, fileCount > 0 || knownVersion > 0);
+  const { reload: reloadRelease } = release;
+  const workflow = canManage ? release.workflow : null;
+  const publishedVersion = workflow?.publishedVersion ?? knownVersion;
+  const queryAvailable = workflow?.queryAvailable ?? publishedVersion > 0;
+  const coach = useQueryCoachData(groupId, canManage && publishedVersion > 0);
+  const [modelActivity, setModelActivity] = useState<ModelingHeaderActivity | null>(null);
+  const lastModelActivity = useRef<ModelingHeaderActivity | null>(null);
+  const updateModelActivity = useCallback((activity: ModelingHeaderActivity | null) => {
+    // Recheck the server when leaving the chat with a running turn. The workbench no longer owns its progress.
+    if (!activity && lastModelActivity.current?.assistant === 'running') void reloadRelease();
+    lastModelActivity.current = activity;
+    setModelActivity(activity);
+  }, [reloadRelease]);
+  const tour = useTour();
+  const singleViewTour = tourLocksDraftDrawer(tour, groupId);
+  const [ruleCount, setRuleCount] = useState<number>();
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const preparing = useQueryReadiness(workflow?.queryAvailable ? groupId : undefined, workflow?.publishedVersion);
+  const queryAllowed = !!detail?.group.canQuery && queryAvailable && !detail.group.deletionPending;
+  const queryPreparation = useQueryReadiness(queryAllowed ? groupId : undefined, publishedVersion);
+  const preparing = queryPreparation ?? null;
   const [busy, setBusy] = useState(false);
   const [uploadPolicy, setUploadPolicy] = useState<UploadPolicy | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -78,7 +116,7 @@ export default function DatasetGroupPage() {
   useEffect(() => {
     if (!canManage || searchParams.get('upload') !== '1') return;
     setUploadOpen(true);
-    setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('upload'); return next; }, { replace: true });
+    setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('upload'); next.set('section', 'datasets'); return next; }, { replace: true });
   }, [canManage, searchParams, setSearchParams]);
   const [sampleBusy, setSampleBusy] = useState(false);
   const onboarding = useOnboarding();
@@ -89,16 +127,13 @@ export default function DatasetGroupPage() {
   const openUpload = () => { tourSignal('source-chosen', { groupId, route: 'upload' }); setUploadOpen(true); };
   const openAssociate = () => { tourSignal('source-chosen', { groupId, route: 'datasource' }); setAssociateOpen(true); };
   const [query, setQuery] = useState('');
-  const [editingGroup, setEditingGroup] = useState(false);
-  const [groupName, setGroupName] = useState('');
-  const [groupDescription, setGroupDescription] = useState('');
   const uploadStatuses = useSyncExternalStore(subscribeUploadStatuses, () =>
     getUploadStatuses(uploadScope),
   );
-  const [membersOpen, setMembersOpen] = useState(false);
   const [associateOpen, setAssociateOpen] = useState(false);
   const [associatingTables, setAssociatingTables] = useState<Set<string>>(new Set());
   const [association, setAssociation] = useState<AssociationState | null>(null);
+  const [importHistoryOpen, setImportHistoryOpen] = useState(false);
   /** 多工作表选择弹窗。 */
   interface SheetPick {
     file: File;
@@ -110,9 +145,16 @@ export default function DatasetGroupPage() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const hasPendingUploads = uploadStatuses.some(item => ['uploading', 'importing', 'publishing', 'uncertain'].includes(item.status));
-  useEffect(() => { getUploadPolicy().then(setUploadPolicy).catch(e => setError(String(e))); }, []);
   useEffect(() => {
-    if (!canManage || !uploadPolicy?.statusAvailable) return;
+    if (!canManage) return;
+    let active = true;
+    void getUploadPolicy().then(policy => { if (active) setUploadPolicy(policy); }).catch(e => {
+      if (active) setError(e instanceof Error ? e.message : String(e));
+    });
+    return () => { active = false; };
+  }, [canManage]);
+  useEffect(() => {
+    if (!canManage || hasExternalDatasets || !uploadPolicy?.statusAvailable) return;
     let cancelled = false;
     let fetching = false;
     const poll = async () => {
@@ -145,40 +187,87 @@ export default function DatasetGroupPage() {
     void poll();
     const timer = busy || hasPendingUploads ? window.setInterval(() => void poll(), 1500) : undefined;
     return () => { cancelled = true; if (timer) window.clearInterval(timer); };
-  }, [groupId, uploadScope, busy, hasPendingUploads, uploadPolicy?.statusAvailable, canManage]);
+  }, [groupId, uploadScope, busy, hasPendingUploads, uploadPolicy?.statusAvailable, canManage, hasExternalDatasets]);
 
-  // Retired graph/tree deep links show datasets without mounting their components.
-  const view: View = canManage && searchParams.get('view') === 'modeling' ? 'modeling' : 'files';
-  const setView = (v: View) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('view', v);
-    setSearchParams(next, { replace: true });
-  };
-
+  const refreshSequence = useRef(0);
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
+    const isCurrent = () => activeGroup.current === groupId && sequence === refreshSequence.current;
     try {
       const next = await getGroupDetail(groupId);
-      if (activeGroup.current !== groupId) return;
+      if (!isCurrent()) return;
       setDetail(next);
-      const nextWorkflow = next.group.canManage ? await getModelingWorkflow(groupId).catch(() => null) : null;
-      if (activeGroup.current !== groupId) return;
-      setWorkflow(nextWorkflow);
       setError(null);
+      const mayManage = next.group.canManage && !next.group.deletionPending;
+      const hasPublished = (next.publishedVersion ?? next.group.publishedVersion ?? 0) > 0;
+      const ruleFiles = mayManage && (next.datasets.length > 0 || hasPublished)
+        ? getMdlPreview(groupId).then(preview => {
+          if (isCurrent()) setPublishedAt(preview.mdlPublishedAt);
+          return preview.files;
+        })
+        : !next.group.deletionPending && next.group.canQuery && hasPublished
+          ? getKnowledgeBaseBrowse(groupId).then(browse => browse.knowledge)
+          : Promise.resolve(undefined);
+      void ruleFiles.then(files => {
+        if (!isCurrent()) return;
+        setRuleCount(files?.filter(file => /^knowledge\/rules\/[^/]+\.md$/.test(file.path))
+          .reduce((count, file) => count + parseRuleFile(file.path, file.content).length, 0));
+      }).catch(() => { if (isCurrent()) setRuleCount(undefined); });
       setAssociatingTables(new Set());
+      return next;
     } catch (e) {
-      if (activeGroup.current !== groupId) return;
-      setDetail(null); setWorkflow(null);
+      if (!isCurrent()) return;
+      setDetail(null); setRuleCount(undefined);
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [groupId]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    void refresh();
+    const onUpdate = (event: Event) => {
+      if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void refresh();
+    };
+    window.addEventListener('modeling:updated', onUpdate);
+    return () => window.removeEventListener('modeling:updated', onUpdate);
+  }, [groupId, refresh]);
 
-  // Uploads currently use the synchronous API; only track its actual progress.
+  useEffect(() => {
+    if (!canManage || !release.review?.assistantRunning || (modelRoute && modelActivity?.assistant === 'running')) return;
+    let cancelled = false;
+    let timer: number;
+    const watch = async () => {
+      try {
+        const draft = await getDraftReview(groupId);
+        if (cancelled) return;
+        if (!draft.assistantRunning) {
+          window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
+          return;
+        }
+      } catch { /* Keep the last reported run state until the server responds again. */ }
+      if (!cancelled) timer = window.setTimeout(watch, 2500);
+    };
+    timer = window.setTimeout(watch, 2500);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [modelRoute, modelActivity?.assistant, canManage, release.review?.assistantRunning, groupId]);
 
-  // Always default to the files view on entry.
+  const startsFirstModel = detail?.datasets.length === 0
+    && !(detail.publishedVersion ?? detail.group.publishedVersion);
+  const refreshDetail = async () => { await Promise.all([refresh(), reloadRelease()]); };
+
+  async function finishImport(startFirstModel: boolean, startedAt: string, problem?: string) {
+    const updated = await refresh();
+    if (activeGroup.current !== groupId || currentLocation.current !== startedAt) return;
+    void reloadRelease();
+    if (problem) {
+      setError(problem);
+      setImportHistoryOpen(true);
+      return;
+    }
+    if (startFirstModel && updated?.datasets.length && updated.group.canManage && !updated.group.deletionPending
+      && !(updated.publishedVersion ?? updated.group.publishedVersion)) {
+      navigate(modelingPreparationPath(groupId));
+    }
+  }
 
   function patchStatus(name: string, patch: Partial<UploadStatus>) {
     mutateUploadStatuses(uploadScope, prev =>
@@ -190,6 +279,7 @@ export default function DatasetGroupPage() {
     files: File[],
     sheetMap: Map<string, string>,
   ) {
+    const startedAt = currentLocation.current;
     let prepared = 0;
     const batchErrors: string[] = [];
     const policy = await getUploadPolicy();
@@ -239,11 +329,15 @@ export default function DatasetGroupPage() {
           `数据集「${names}」已存在，是否覆盖？新版本通过完整校验后替换当前数据。`,
         )
       ) {
-        const overwriteResults = await settleUploads(overwriteCandidates, policy.concurrentFiles, c => uploadDataset(groupId, c.name, c.file, true, c.selectedSheet, crypto.randomUUID()));
+        const overwriteResults = await settleUploads(overwriteCandidates, policy.concurrentFiles, candidate => {
+          const uploadId = crypto.randomUUID();
+          patchStatus(candidate.file.name, { status: 'uploading', uploadId, error: undefined });
+          return uploadDataset(groupId, candidate.name, candidate.file, true, candidate.selectedSheet, uploadId);
+        });
         overwriteResults.forEach((r, i) => {
           if (r.status === 'fulfilled') {
             prepared++;
-            mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== overwriteCandidates[i].file.name));
+            patchStatus(overwriteCandidates[i].file.name, { status: 'ready', datasetId: r.value.id, file: undefined, error: undefined });
           } else {
             const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
             batchErrors.push(`${overwriteCandidates[i].file.name}：${msg}`);
@@ -261,8 +355,7 @@ export default function DatasetGroupPage() {
     }
 
     setBusy(false);
-    await refresh();
-    if (prepared > 0 && activeGroup.current === groupId) navigate(`/configure/modeling/${groupId}?asset=modeling&start=1`, { state: { intakeErrors: batchErrors } });
+    await finishImport(!!startsFirstModel && prepared === files.length, startedAt, batchErrors.join('、') || undefined);
   }
 
   // spec105: the built-in files take the normal upload path; each uses its first worksheet.
@@ -369,7 +462,7 @@ export default function DatasetGroupPage() {
     setBusy(true);
     try {
       await deleteDataset(id);
-      await refresh();
+      await refreshDetail();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -377,66 +470,163 @@ export default function DatasetGroupPage() {
     }
   }
 
-  const fileCount = detail?.datasets.length ?? 0;
-  const publishedVersion = workflow?.publishedVersion ?? detail?.publishedVersion ?? detail?.group.publishedVersion ?? 0;
-  const queryAvailable = workflow?.queryAvailable ?? publishedVersion > 0;
   const visibleDatasets = detail?.datasets.filter(d => `${d.name} ${d.sourceFileName ?? ''} ${d.description ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())) ?? [];
   const hasUncountedExternalTables = detail?.datasets.some(d => d.origin === 'datasource' && d.rowCount == null);
+  const hasLocalDatasets = detail?.datasets.some(dataset => dataset.origin !== 'datasource') ?? false;
+  const importing = !!association && association.phase !== 'done' || uploadStatuses.some(item => ACTIVE_UPLOAD.includes(item.status));
+  useEffect(() => {
+    if (importing) setImportHistoryOpen(true);
+  }, [importing]);
 
-  function openGroupEditor() {
-    setGroupName(detail?.group.name ?? '');
-    setGroupDescription(detail?.group.description ?? '');
-    setError(null);
-    setEditingGroup(true);
-  }
+  const requestedSection = searchParams.get('section');
+  const current: KnowledgeSection = modelRoute ? modelingSection(searchParams)
+    : datasetId || requestedSection === 'datasets' || searchParams.get('upload') === '1' || searchParams.get('view') === 'files' ? 'datasets'
+    : requestedSection === 'members' || requestedSection === 'settings' ? requestedSection : 'overview';
+  const leave = useRef<(() => boolean | Promise<boolean>) | null>(null);
+  const selectModel = useRef<KnowledgeModelingHost['select']['current']>(null);
+  const [versionTarget, setVersionTarget] = useState<HTMLDivElement | null>(null);
+  const [actionsTarget, setActionsTarget] = useState<HTMLDivElement | null>(null);
+  const decision = releaseDecision({
+    workflow, files: release.review?.changes ?? [], assetTasks: release.assetTasks, incompleteViews: release.incompleteViews,
+    confirmations: release.confirmations?.length ?? 0,
+    questionIds: coach.reviews.filter(question => question.status === 'REVIEW').map(question => question.question.id),
+    removalIds: coach.pendingRemovals.map(({ question }) => question.id),
+    publicationFailure: release.publicationFailure,
+  });
+  const host: KnowledgeModelingHost = { versionTarget, actionsTarget, leave, select: selectModel, release, decision, coach, importing, onActivity: updateModelActivity };
+  const go = async (destination: string) => {
+    if (!leave.current || await leave.current()) navigate(destination);
+  };
+  const openDataset = (id: string, tab?: 'fields') => {
+    if (id !== datasetId || tab) void go(datasetPath(groupId, id) + (tab ? '?tab=' + tab : ''));
+  };
+  const select = (section: KnowledgeSection) => {
+    if (section === 'overview' || section === 'datasets' || section === 'members' || section === 'settings') {
+      if (section !== current || datasetId) void go(rootPath + (section === 'overview' ? '' : `?section=${section}`));
+      return;
+    }
+    if (modelRoute && selectModel.current) { selectModel.current(section); return; }
+    const params = new URLSearchParams(modelingParams(section));
+    void go(`${modelPath}?${params}`);
+  };
+  const activity = modelRoute ? modelActivity : null;
+  const canAsk = queryAllowed && queryPreparation === null && !activity?.setup && !tourHoldsQuery(tour, groupId);
+  const releaseStatus = release.loading || coach.loading ? 'loading' : release.error || coach.error ? 'failed' : 'ready';
+  const ask = () => void go(`/chat?groups=${encodeURIComponent(groupId)}`);
+  const review = (section: ReviewSection = 'changes') => {
+    const params = modelRoute ? new URLSearchParams(searchParams) : new URLSearchParams(modelingParams('graph'));
+    params.set('review', section === 'changes' ? '1' : section);
+    void go(`${modelPath}?${params}`);
+  };
+  const showImport = () => { setImportHistoryOpen(true); select('datasets'); };
+  const statusAction = (() => {
+    if (detail?.group.deletionPending) return <span className="kbw-flow-status" role="status">正在清理知识库</span>;
+    if (activity?.setup || singleViewTour) return null;
+    if (activity?.publishing) return <span className="kbw-flow-status" role="status">正在检查并发布…</span>;
+    if (canManage && importing) return { label: '正在导入 · 查看进度', action: showImport };
+    if (canManage && activity?.assistant === 'awaiting') return {
+      label: '查看助手待处理项', action: release.confirmations?.length ? () => review('tasks') : () => void go(modelPath + '?asset=modeling&mode=chat'),
+    };
+    if (canManage && (activity?.assistant === 'running' || release.review?.assistantRunning)) {
+      return { label: '正在建模 · 查看进度', action: () => void go(modelPath + '?asset=modeling&mode=chat') };
+    }
+    if (preparing) return <span className="kbw-flow-status" role="status" title={preparing}>正在准备问数…</span>;
+    if (!canManage) return queryAllowed && queryPreparation === undefined
+      ? <span className="kbw-flow-status" role="status">正在读取问数状态…</span> : null;
+    if (releaseStatus === 'loading') return <span className="kbw-flow-status" role="status">正在读取知识库状态…</span>;
+    if (releaseStatus === 'failed') return { label: '重试读取状态', action: () => { void reloadRelease(); coach.reload(); } };
+    if (!fileCount) return { label: '添加数据集', action: () => current === 'datasets' && !datasetId ? openUpload() : select('datasets') };
+    if (decision.blocker?.kind === 'data') return { label: '检查数据集', action: () => select('datasets') };
+    if (decision.blocker?.kind === 'model') return { label: '继续建模', action: () => void go(modelingPreparationPath(groupId)) };
+    if (decision.blocker?.kind === 'incomplete') return { label: '处理未完成视图', action: () => review('tasks'), tone: 'blocked' };
+    if (decision.blocker?.kind === 'asset') {
+      const target = decision.blocker.target;
+      const verify = target.step === 'VERIFY_PENDING';
+      const params = new URLSearchParams({ asset: 'assets', mode: 'board', viewGroup: 'pending', viewItem: `${target.kind}:${target.name}`,
+        viewVersion: 'draft', viewStage: verify ? 'verify' : 'overview' });
+      return { label: verify ? '去验证视图' : '去核查视图', action: () => void go(`${modelPath}?${params}`), tone: 'blocked' };
+    }
+    if (decision.blocker?.kind === 'engineering') return { label: '查看校验问题', action: () => review('checks'), tone: 'blocked' };
+    if (!publishedVersion && release.screening?.some(table => !table.confirmed)) {
+      return { label: '确认建模字段', action: () => void go(modelingPreparationPath(groupId)) };
+    }
+    if (!publishedVersion && !workflow?.canPublish && !release.review?.changes.some(change => change.sources.includes('auto') || change.sources.includes('confirm'))) {
+      return decision.taskCount ? { label: `处理待办 · ${decision.taskCount} 项`, action: () => review('tasks'), tone: 'pending' }
+        : { label: '继续建模', action: () => void go(modelingPreparationPath(groupId)) };
+    }
+    if (decision.objectCount) return { label: `审阅草稿 · ${decision.objectCount} 项`, action: () => review() };
+    if (decision.republish) return { label: '审阅并重新发布', action: () => review() };
+    if (decision.taskCount) return { label: `处理待办 · ${decision.taskCount} 项`, action: () => review('tasks'), tone: 'pending' };
+    return !publishedVersion ? { label: '继续建模', action: () => void go(modelingPreparationPath(groupId)) } : null;
+  })();
+  const hasStatusAction = statusAction !== null && 'action' in statusAction;
+  const hasReleaseWork = decision.objectCount > 0 || decision.taskCount > 0 || decision.republish || !!decision.blocker;
 
-  async function saveGroupInfo() {
-    if (!/^[一-龥A-Za-z0-9_-]{1,100}$/.test(groupName.trim()) || groupDescription.length > 1000) { setError('名称需为 1-100 个中文、字母、数字、- 或 _；说明不能超过 1000 字'); return; }
-    setBusy(true);
-    try { await updateGroup(groupId, groupName.trim(), groupDescription.trim()); setEditingGroup(false); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  }
-
+  if (modelRoute && searchParams.get('asset') === 'publish') return <Navigate to={modelingReviewPath(groupId)} replace />;
+  if (searchParams.get('view') === 'modeling' && !modelRoute && canManage) return <Navigate to={modelPath} replace />;
   return (
-    <div className="kw-page dataset-workspace kd-page">
-      {canManage && <FactQueryWindowSettings key={groupId} groupId={groupId} hideButton openSignal={windowSignal} />}
-      <KnowledgeBreadcrumb items={[{ label: '知识库', to: '/configure/datasets' }, { label: detail?.group.name ?? '加载中…' }]} />
-      <div className="kw-scroll"><div className="kw-content">
-        <div className="dw-header kd-head">
-          <div className="dw-identity"><div className="dw-heading"><h1>{detail?.group.name ?? '知识库'}</h1>
-            <div className="dw-meta"><span>{fileCount} 个数据集</span>{detail?.group.createdAt && <><span aria-hidden="true">·</span><span>创建于 {new Date(detail.group.createdAt).toLocaleDateString('zh-CN')}</span></>}{detail?.group.ownerUsername && <><span>·</span><span>创建人 {detail.group.ownerUsername}</span></>}</div>
-            <div className="kd-description"><p>{detail?.group.description || '还没有业务说明。补充这个知识库包含什么数据、用于哪些业务。'}</p>{canManage && <button className="dw-text" disabled={!detail || busy} onClick={openGroupEditor}>{detail?.group.description ? '编辑' : '添加业务说明'}</button>}</div>
-          </div></div>
-          <div className="dw-header-actions">{canManage && <><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="shield" size="sm" />成员与权限</button><WorkspaceMenu label="知识库设置" triggerLabel="设置" triggerIcon="sliders" items={[{ label: '编辑信息', icon: 'edit', disabled: busy, onClick: openGroupEditor }, { label: '事实表时间范围', icon: 'clock', onClick: () => setWindowSignal(n => n + 1) }]} /></>}<button className="da-btn da-btn-primary" disabled={!detail || !queryAvailable || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
-        </div>
+    <KnowledgeWorkspaceShell detail={detail} current={current} datasetId={datasetId}
+      version={publishedVersion} draftCount={releaseStatus === 'ready' ? decision.objectCount : undefined}
+      statusAction={hasStatusAction ? <button type="button" className="da-btn da-btn-primary kbw-flow-action"
+        data-tone={statusAction.tone} onClick={statusAction.action}>{statusAction.label}</button> : statusAction}
+      queryAction={canAsk && <button type="button" className={`da-btn kbw-query-action${hasStatusAction ? '' : ' da-btn-primary'}`} onClick={ask}>
+        <Icon name="chat" size="sm" />去问数</button>}
+      onLibrary={() => void go('/configure/datasets')}
+      onSelect={select} onDataset={openDataset} versionRef={setVersionTarget} actionsRef={setActionsTarget}>
+      {error && current !== 'datasets' && <div className="kbw-error kw-alert" role="alert">{error}</div>}
+      {!detail && !error && <div className="kbw-loading" role="status">正在打开知识库…</div>}
+      {detail && current === 'overview' && <KnowledgeWorkspaceOverview detail={detail} decision={decision} releaseStatus={releaseStatus} publishedViews={release.publishedViews}
+        version={publishedVersion} ruleCount={ruleCount} publishedAt={canManage ? publishedAt : null}
+        queryAvailable={queryAvailable} preparing={preparing} onGo={select}
+        onReview={canManage && fileCount > 0 && releaseStatus === 'ready' && hasReleaseWork && !singleViewTour
+          ? () => review(decision.blocker?.kind === 'engineering' ? 'checks' : decision.objectCount || decision.republish ? 'changes' : 'tasks') : undefined}
+        onDataset={openDataset}
+        onAsk={canAsk ? ask : undefined}
+        onUpload={() => { select('datasets'); openUpload(); }} onAssociate={() => { select('datasets'); openAssociate(); }} />}
+      {detail && datasetId && <DatasetDetailPage key={datasetId} detail={detail} datasetId={datasetId} leave={leave} onChanged={refreshDetail} />}
+      {detail && modelRoute && (fileCount > 0 || !!publishedVersion) && !detail.group.deletionPending && <Suspense fallback={<div className="kbw-loading" role="status">正在加载语义模型…</div>}>
+        <SemanticModelingPage group={detail.group} host={host} />
+      </Suspense>}
+      {detail && modelRoute && !fileCount && !publishedVersion && !detail.group.deletionPending && <div className="kbw-page">
+        <WorkspaceHeading title="语义模型" description="先添加数据集，再整理字段和业务口径。" />
+        <section className="kbw-card kbw-empty-intro"><div className="kbw-empty-icon"><Icon name="graph" /></div><h2>还没有可建模的数据集</h2>
+          <p>上传数据文件或关联数据库表后，可以在这里查看模型、关系和业务规则。</p>
+          <button type="button" className="da-btn da-btn-primary" onClick={() => select('datasets')}>前往数据集<Icon name="chevron" size="sm" /></button></section>
+      </div>}
+      {detail?.group.deletionPending && modelRoute && <div className="kbw-page"><p className="kw-alert" role="status">知识库正在清理。</p>
+        {detail.group.canManage && <button type="button" className="da-btn" onClick={() => select('settings')}>查看删除状态</button>}</div>}
+      {detail && current === 'members' && (canManage
+        ? <KnowledgeBaseMembersModal key={groupId} groupId={groupId} name={detail.group.name} onChanged={() => void refresh()} inline />
+        : <div className="kbw-page"><WorkspaceHeading title="成员与权限" /><section className="kbw-card kbw-card-pad"><h2>使用权限</h2><p>你可以查看数据集、浏览已发布的语义模型并基于此库提问。联系知识库管理者变更授权。</p></section></div>)}
+      {detail && current === 'settings' && <KnowledgeWorkspaceSettings key={groupId} detail={detail} version={publishedVersion} workflow={workflow}
+        leave={leave} onChanged={refreshDetail} onPublish={() => void go(modelingReviewPath(groupId))} />}
+      <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv" hidden onChange={e => { if (e.target.files?.length) void uploadFiles(e.target.files); e.target.value = ''; }} />
+      {current === 'datasets' && !datasetId && <div className="kbw-page kbw-data-page kd-page dataset-workspace">
+        <WorkspaceHeading title="数据集" description={detail ? `共 ${fileCount} 个数据集${fileCount ? '' : ' · 添加数据后可以整理字段和建模'}` : undefined}>
+          {canManage && !fileCount && <WorkspaceMenu label="添加数据集" triggerLabel="添加数据集" triggerIcon="plus" items={[
+            { label: '上传文件', icon: 'upload', disabled: busy, onClick: openUpload },
+            { label: '关联数据源', icon: 'database', disabled: busy, onClick: openAssociate },
+          ]} />}
+        </WorkspaceHeading>
         {error && <div className="kw-alert" role="alert">{error}</div>}
-        {detail && <div className="kd-process" aria-label="知识库准备状态">
-          <div className={`kd-step${fileCount ? ' done' : ' current'}`}><span>{fileCount ? <Icon name="check" size="sm" /> : '1'}</span><div><strong>数据</strong><small>{fileCount ? `${fileCount} 个数据集 · ${hasUncountedExternalTables ? '总行数未统计' : detail.datasets.reduce((n, d) => n + (d.rowCount ?? 0), 0).toLocaleString() + ' 行'}` : '上传文件或关联数据表'}</small></div></div>
-          <div className={`kd-step${queryAvailable ? ' done' : fileCount ? ' current' : ''}`}><span>{queryAvailable ? <Icon name="check" size="sm" /> : '2'}</span><div><strong>语义建模</strong><small>{queryAvailable ? `v${publishedVersion} 已发布${workflow?.draftChanged ? ' · 有草稿待发布' : ''}` : fileCount ? '待建模并发布' : '准备数据后开始'}</small></div></div>
-          <div className={`kd-step${queryAvailable && !preparing ? ' current' : ''}`}><span>3</span><div><strong>问数</strong><small>{preparing ? '问数准备中…' : queryAvailable ? '已发布版本可用' : '发布后可用'}</small></div></div>
-          <div className="kd-process-tail"><span className="kd-process-note">{queryAvailable ? '业务口径可继续完善，问数使用已发布版本。' : '完成建模并发布后，即可基于此库问数。'}</span>{canManage && fileCount > 0 && <button className="da-btn da-btn-primary kd-model-action" onClick={() => navigate(`/configure/modeling/${groupId}`)}>{queryAvailable ? '完善建模' : '去建模'}<Icon name="chevron" size="sm" /></button>}</div>
-        </div>}
-        <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} />
-        {association && <div style={{ margin: '12px 0' }}><AssociationProgress state={association} /></div>}
-        {uploadStatuses.length > 0 && (() => {
-          const doneCount = uploadStatuses.filter(s => s.status === 'ready').length;
-          const failedCount = uploadStatuses.filter(s => s.status === 'failed').length;
-          const running = uploadStatuses.some(s => ACTIVE_UPLOAD.includes(s.status));
-          const uncertain = uploadStatuses.some(s => s.status === 'uncertain');
-          const pending = uploadStatuses.some(s => s.status === 'model_pending');
-          const needsAttention = failedCount > 0 || uncertain || pending;
-          const progressTitle = running ? '正在导入文件' : failedCount ? '部分文件导入失败' : uncertain ? '导入结果待确认' : pending ? '文件已导入，模型待检查' : '文件已全部导入';
-          return <details className={`kw-up${doneCount === uploadStatuses.length ? ' is-complete' : ''}`} open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0}>
-            <summary className="kw-up-head">
-              <span className={`kw-up-headicon${running ? ' is-running' : needsAttention ? ' is-attention' : ' is-done'}`} aria-hidden="true">
-                {running ? <span className="da-spinner da-spinner-sm" /> : <Icon name={needsAttention ? 'warn' : 'check'} size="sm" />}
-              </span>
-              <span className="kw-up-title">{progressTitle}</span>
-              <span className="kw-up-count">已完成 {doneCount}/{uploadStatuses.length}{failedCount > 0 && `，失败 ${failedCount}`}</span>
-              <span className="kw-up-bar" aria-hidden="true"><span style={{ width: `${Math.round(doneCount * 100 / uploadStatuses.length)}%` }} /></span>
-              <Icon name="chevron" size="sm" className="kw-up-chevron" />
-            </summary>
+        {canManage && fileCount > 0 && !publishedVersion && !importing && <section className="kbw-card kbw-data-next" aria-label="首次建模下一步">
+          <span className="kbw-empty-icon"><Icon name="model" size="sm" /></span>
+          <div><h2>接下来完成首次建模</h2><p>在建模对话中确认字段、完善模型并发布。发布后即可基于此库问数。</p></div>
+          <button type="button" className="da-btn da-btn-primary" onClick={() => void go(modelPath)}>进入建模对话<Icon name="chevron" size="sm" /></button>
+        </section>}
+        {detail && <KnowledgeSourceConnection datasets={detail.datasets} canManage={canManage} onAssociate={openAssociate} />}
+        <details className="kbw-card kbw-imports" aria-label="导入记录" open={importing || importHistoryOpen}>
+          <summary className="kbw-import-summary" onClick={event => {
+            event.preventDefault();
+            if (!importing) setImportHistoryOpen(value => !value);
+          }}>
+            <Icon name="upload" size="sm" /><strong>导入记录</strong><span>·</span>
+            <span>{importing ? '正在导入' : '暂无进行中的导入'}</span>
+            {!importing && <em>{importHistoryOpen ? '收起历史' : '查看历史'}<Icon name="chevron" size="sm" /></em>}
+          </summary>
+          {!association && !uploadStatuses.length && <p className="kbw-card-copy">暂无导入记录。</p>}
+          {association && <AssociationProgress state={association} stayOnPage={!tourActiveNow} />}
+          {uploadStatuses.length > 0 && (
             <ul className="kw-up-list">
               {uploadStatuses.map((s, i) => (
                 <li key={`up-${s.name}-${i}`} className={`kw-up-row is-${s.status}`}>
@@ -452,7 +642,7 @@ export default function DatasetGroupPage() {
                     {STATUS_LABEL[s.status]}
                   </span>
                   <span className="kw-up-actions">
-                    {s.status === 'model_pending' && <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/modeling/${groupId}?asset=publish`)}>检查与发布</button>}
+                    {s.status === 'model_pending' && <button className="da-btn da-btn-sm" onClick={() => void go(modelPath)}>查看建模进度</button>}
                     {s.status === 'uncertain' && <button className="da-btn da-btn-sm" onClick={() => void refresh()}>刷新确认结果</button>}
                     {s.status === 'failed' && <>
                       <button
@@ -461,13 +651,15 @@ export default function DatasetGroupPage() {
                         title={!s.file ? '请重新选择原文件后上传' : '重新导入此文件'}
                         onClick={async () => {
                           if (!s.file) return;
+                          const startedAt = currentLocation.current;
                           const retryId = crypto.randomUUID();
                           patchStatus(s.name, { status: 'uploading', error: undefined, uploadId: retryId });
                           try {
                             const datasetName = s.name.replace(/\.[^.]+$/, '');
-                            await uploadDataset(groupId, datasetName, s.file, false, s.selectedSheet, retryId);
-                            mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== s.name));
-                            await refresh();
+                            const imported = await uploadDataset(groupId, datasetName, s.file, false, s.selectedSheet, retryId);
+                            patchStatus(s.name, { status: 'ready', datasetId: imported.id, file: undefined, error: undefined });
+                            const otherImports = uploadStatuses.some(row => row.name !== s.name && row.status !== 'ready');
+                            await finishImport(!!startsFirstModel && !otherImports, startedAt);
                           } catch (e) {
                             const msg = e instanceof Error ? e.message : String(e);
                             patchStatus(s.name, { status: e instanceof DatasetUploadError && e.code === 'IMPORTED_MODEL_PENDING' ? 'model_pending' : e instanceof DatasetUploadError && e.code === 'UNCERTAIN' ? 'uncertain' : 'failed', error: msg, datasetId: e instanceof DatasetUploadError ? e.datasetId : undefined });
@@ -489,11 +681,10 @@ export default function DatasetGroupPage() {
                 </li>
               ))}
             </ul>
-          </details>;
-        })()}
-        {view === 'files' && <>
-          {fileCount > 0 && <div className="kw-toolbar dw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集名称或来源…" aria-label="搜索数据集" /></label><span className="kw-spacer" />{canManage && <div className="dw-data-actions"><button className="da-btn" disabled={busy || !detail} onClick={openAssociate}><Icon name="database" size="sm" />关联数据源</button><button className="da-btn dw-upload" disabled={busy || !detail} onClick={openUpload}><Icon name="upload" size="sm" />上传文件</button></div>}</div>}
-          {!detail && !error && <div className="kw-empty">加载知识库…</div>}
+          )}
+        </details>
+        {detail && <>
+          {fileCount > 0 && <div className="kw-toolbar dw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集名称或来源…" aria-label="搜索数据集" /></label></div>}
           {detail && fileCount === 0 && (canManage ? <div className="kd-empty-grid" data-tour="kb-source">
             <div className={`kd-empty-drop${dragOver ? ' dragging' : ''}`} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (!busy && e.dataTransfer.files.length) void uploadFiles(e.dataTransfer.files); }}>
               <span className="kd-tile"><Icon name="upload" /></span><h2>把 Excel 或 CSV 拖到这里</h2><p>先把业务数据放进来，再整理字段与业务口径。</p>
@@ -503,27 +694,35 @@ export default function DatasetGroupPage() {
             <div className="kd-empty-aside"><section><h3><Icon name="database" size="sm" />或者关联数据库表</h3><p>连接已有数据源，选择需要分析的表，原始数据保留在数据库中。</p><button className="da-btn" disabled={busy} onClick={openAssociate}>关联数据源<Icon name="chevron" size="sm" /></button><button className="dw-text" onClick={() => navigate('/configure/datasources')}>管理数据源</button></section>
             <section><h3><Icon name="file" size="sm" />没有文件？用示例数据</h3><p>使用内置演示文件，体验从建模到问数的完整过程。</p><button className="da-btn" disabled={busy || sampleBusy} onClick={openUpload}>查看示例数据<Icon name="chevron" size="sm" /></button></section></div>
           </div> : <div className="kw-empty"><EmptyIllustration variant="table" caption="这个知识库还没有数据" /></div>)}
-          {detail && fileCount > 0 && <div className="kw-tablebox dw-tablebox"><div className="kw-table-scroll"><table className="kw-table dw-table" aria-label="知识库数据集"><thead><tr><th scope="col">数据集</th><th scope="col">数据来源</th><th scope="col">规模</th><th scope="col" className="end">操作</th></tr></thead><tbody>
+          {detail && fileCount > 0 && <><div className="kw-tablebox dw-tablebox"><div className="kw-table-scroll"><table className="kw-table dw-table" aria-label="知识库数据集"><thead><tr><th scope="col">数据集</th><th scope="col">来源</th><th scope="col">字段</th><th scope="col">业务说明</th><th scope="col" className="end">操作</th></tr></thead><tbody>
             {visibleDatasets.map(d => <tr key={d.id}>
-              <td><button className="dw-name" title={d.name} onClick={() => navigate(`/configure/datasets/${groupId}/table/${d.id}`)}><span className="dw-table-icon" aria-hidden="true"><Icon name="table" size="sm" /></span><span className="dw-name-text">{d.name}</span>{(d.currentVersion ?? 1) > 1 && <span className="kw-badge">v{d.currentVersion}</span>}</button></td>
-              <td><div className="kd-source"><span className="kd-source-badge"><Icon name={d.origin === 'datasource' ? 'database' : 'file'} size="sm" />{d.origin === 'datasource' ? '数据库' : d.origin === 'derived' ? '派生' : '文件'}</span><span title={d.sourceFileName ?? ''}>{d.sourceFileName ?? '—'}</span></div></td><td className="kd-scale">{d.rowCount == null ? '总行数未统计' : <><strong>{d.rowCount.toLocaleString()}</strong> 行</>}<span> · </span>{d.columns.length} 字段</td>
-              <td className="end"><div className="dw-row-actions"><button className="dw-text" aria-label={`查看 ${d.name} 的数据`} onClick={() => navigate(`/configure/datasets/${groupId}/table/${d.id}`)}>查看</button><WorkspaceMenu label={`${d.name}的更多操作`} items={[{ label: '查看数据集', icon: 'table', onClick: () => navigate(`/configure/datasets/${groupId}/table/${d.id}`) }, ...(canManage ? [{ label: d.origin === 'datasource' ? '移除关联' : '删除数据集', icon: 'trash' as const, danger: true, disabled: busy, onClick: () => void handleDeleteDataset(d.id) }] : [])]} /></div></td>
+              <td><button className="dw-name" title={d.name} onClick={() => openDataset(d.id)}><span className="dw-table-icon" aria-hidden="true"><Icon name="table" size="sm" /></span><span className="dw-name-text">{d.name}</span>{(d.currentVersion ?? 1) > 1 && <span className="kw-badge">v{d.currentVersion}</span>}</button></td>
+              <td><span className="kd-source-badge"><Icon name={d.origin === 'datasource' ? 'database' : 'file'} size="sm" />{d.origin === 'datasource' ? '数据源' : d.origin === 'derived' ? '派生' : '文件'}</span></td>
+              <td>{d.columns.length}</td><td><span className="kbw-field-count" data-missing={describedColumns(d) < d.columns.length || undefined}>{describedColumns(d)}/{d.columns.length}</span></td>
+              <td className="end"><div className="dw-row-actions"><button className="dw-text" aria-label={`查看 ${d.name} 的数据`} onClick={() => openDataset(d.id)}>查看</button><WorkspaceMenu label={`${d.name}的更多操作`} items={[{ label: '查看数据集', icon: 'table', onClick: () => openDataset(d.id) }, ...(canManage ? [{ label: d.origin === 'datasource' ? '移除关联' : '删除数据集', icon: 'trash' as const, danger: true, disabled: busy, onClick: () => void handleDeleteDataset(d.id) }] : [])]} /></div></td>
             </tr>)}
-            {visibleDatasets.length === 0 && <tr><td colSpan={4} className="kw-empty">没有匹配的数据集</td></tr>}
-          </tbody></table></div><div className="kw-tablebottom"><span>{query.trim() ? `找到 ${visibleDatasets.length} 个，共 ${fileCount} 个数据集` : `共 ${fileCount} 个数据集`}</span><span className="dw-table-note"><Icon name="info" size="sm" />{hasUncountedExternalTables ? '外部数据表暂未统计总行数' : '点击名称查看数据与字段'}</span></div></div>}
+            {visibleDatasets.length === 0 && <tr><td colSpan={5} className="kw-empty">没有匹配的数据集</td></tr>}
+          </tbody></table></div><div className="kw-tablebottom"><span>{query.trim() ? `找到 ${visibleDatasets.length} 个，共 ${fileCount} 个数据集` : `共 ${fileCount} 个数据集`}</span><span className="dw-table-note"><Icon name="info" size="sm" />{hasUncountedExternalTables ? '外部数据表总行数未统计 · 按需采样，完整数据保留在源库' : '点击名称查看数据与字段'}</span></div></div>
+          {canManage && <div className="kbw-data-entry-actions">
+            <div className="kbw-data-entry-card">
+              <button type="button" disabled={busy || hasExternalDatasets} onClick={openUpload}><Icon name="upload" size="sm" /><span><strong>上传文件</strong><small>{hasExternalDatasets ? '此库通过数据源接入。上传文件需在未关联数据源的知识库中进行。' : '从 Excel 或 CSV 导入数据'}</small></span>{!hasExternalDatasets && <Icon name="chevron" size="sm" />}</button>
+              {hasExternalDatasets && <DatasetSourceHelp />}
+            </div>
+            <div className="kbw-data-entry-card">
+              <button type="button" disabled={busy || hasLocalDatasets} onClick={openAssociate}><Icon name="database" size="sm" /><span><strong>关联数据表</strong><small>{hasLocalDatasets ? '此库已有上传文件。关联数据表需在未上传文件的知识库中进行。' : '从已有数据源选择业务表'}</small></span>{!hasLocalDatasets && <Icon name="chevron" size="sm" />}</button>
+              {hasLocalDatasets && <DatasetSourceHelp />}
+            </div>
+          </div>}</>}
         </>}
-        {view === 'modeling' && <Navigate to={`/configure/modeling/${groupId}`} replace />}
-      </div></div>
-      {canManage && editingGroup && <div className="da-modal-overlay" onClick={() => { if (!busy) setEditingGroup(false); }}><div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">编辑知识库</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<label className="da-label">名称</label><input className="da-input" value={groupName} onChange={e => setGroupName(e.target.value)} maxLength={100} /><label className="da-label" style={{ marginTop: 16 }}>说明</label><textarea className="da-input" value={groupDescription} onChange={e => setGroupDescription(e.target.value)} maxLength={1000} rows={4} /></div><div className="da-modal-foot"><button className="da-btn" disabled={busy} onClick={() => setEditingGroup(false)}>取消</button><button className="da-btn da-btn-primary" disabled={busy} onClick={saveGroupInfo}>{busy ? '保存中…' : '保存'}</button></div></div></div>}
+      </div>}
       {canManage && uploadOpen && <div className="da-modal-overlay" onClick={() => setUploadOpen(false)}><div className="da-modal-shell" style={{ width: 'min(560px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">上传数据文件</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<div className="da-dropzone" role="button" tabIndex={0} style={dragOver ? { borderColor: 'var(--da-primary)' } : undefined} onClick={() => fileRef.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); }}><Icon name="upload" /><div style={{ marginTop: 12 }}>点击选择或拖入 Excel / CSV 文件</div><div className="da-small" style={{ marginTop: 8 }}>支持 .xlsx / .xls / .csv；单文件 {uploadPolicy ? uploadPolicy.maxFileBytes / 1024 ** 2 : 50} MB，最多 {uploadPolicy?.maxFiles ?? 10} 个，总计 {uploadPolicy ? uploadPolicy.maxSelectionBytes / 1024 ** 2 : 100} MB</div>{(busy || sheetPickerBusy) && <div className="da-small" style={{ marginTop: 12 }}>{sheetPickerBusy ? '检测工作表…' : '上传并解析中…'}</div>}</div>{!!onboarding?.samples.length && <div className="kw-samples"><strong>没有文件？用示例数据</strong><span className="da-small">系统内置，不用下载，点一下就会导入到这个知识库</span><ul>{onboarding.samples.map(name => <li key={name}><Icon name="file" size="sm" />{name}</li>)}</ul><button type="button" className="da-btn da-btn-primary" data-tour="sample-use" disabled={busy || sampleBusy} onClick={() => void uploadSamples()}>{sampleBusy ? '正在读取示例文件…' : '使用示例文件'}</button></div>}</div><div className="da-modal-foot"><button className="da-btn" onClick={() => setUploadOpen(false)}>关闭</button></div></div></div>}
-      {canManage && membersOpen && detail && <KnowledgeBaseMembersModal groupId={groupId} name={detail.group.name} onClose={() => setMembersOpen(false)} />}
       {canManage && associateOpen && (
         <AssociateTablesModal
           groupId={groupId}
           preferBuiltin={tourActiveNow}
           onClose={() => setAssociateOpen(false)}
-          onAssociated={() => { if (activeGroup.current === groupId) { void refresh(); navigate(`/configure/modeling/${groupId}?asset=modeling&start=1`); } }}
-          onError={(message) => { setError(message); setAssociatingTables(new Set()); }}
+          onAssociated={problem => void finishImport(!!startsFirstModel, location.key, problem)}
+          onError={message => void finishImport(false, location.key, message)}
           onProgress={state => { if (activeGroup.current === groupId) setAssociation(state); }}
           onAssociateStart={(tables) => {
             setAssociatingTables(new Set(tables));
@@ -602,6 +801,16 @@ export default function DatasetGroupPage() {
         </div>
       )}
 
-    </div>
+    </KnowledgeWorkspaceShell>
   );
+}
+
+function DatasetSourceHelp() {
+  return <details className="kbw-source-help">
+    <summary>了解区别</summary>
+    <div>
+      <p><strong>文件库</strong> 从 Excel 或 CSV 导入文件，更新时重新上传。</p>
+      <p><strong>数据源库</strong> 关联数据库中的业务表，原表留在数据源。</p>
+    </div>
+  </details>;
 }

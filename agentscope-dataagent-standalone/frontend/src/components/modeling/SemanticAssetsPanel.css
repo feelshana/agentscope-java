@@ -1,9 +1,38 @@
 .sa-pane.va-pane .va-grid[data-catalog-open="false"] { grid-template-columns: 44px minmax(0, 1fr); }
+.mw-in-knowledge .sa-pane.mo-optimization[data-view-comparison] .va-grid[data-catalog-open] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.va-pane[data-view-comparison] .mo-workbar { grid-template-columns: auto minmax(0, 1fr); min-height: 52px; }
+.va-pane[data-view-comparison] :is(.mo-worktabs, .mo-work-module-tools) { display: none; }
+.va-pane[data-view-comparison] .mo-work-object-tools { grid-column: 2; grid-row: 1; justify-content: flex-end; }
 .va-pane .mo-material-catalog .qc-queue-list li > button { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 .va-pane .mo-material-catalog .qc-queue-list li > button > small {
   display: block; font-family: var(--da-mono, monospace); overflow-wrap: anywhere;
 }
 .va-pane .va-empty { width: min(100%, 840px); margin: clamp(12px, 4vh, 36px) auto 0; }
+.va-pane .va-catalog-purpose, .va-pane .va-row-coverage, .va-pane .va-tech-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.va-pane .va-row-coverage { max-width: 50%; }
+.va-pane .va-view-row { min-height: 80px; height: 80px; }
+.va-pane .va-view-row > button { height: 100%; overflow: hidden; }
+.va-pane .va-view-row .va-card-title { flex-wrap: nowrap; }
+.va-pane .va-view-row .va-card-title strong { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.va-pane .va-view-row .mo-item-meta { flex-wrap: nowrap; overflow: hidden; }
+.va-pane .va-catalog-footer { flex: none; display: grid; gap: 5px; padding: 10px 12px; border-top: 1px solid var(--da-border); background: var(--da-surface); }
+.va-pane .mo-material-catalog-content { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.va-pane .mo-material-catalog-content[hidden] { display: none; }
+.va-pane .qc-queue-list { flex: 1; min-height: 0; overflow: auto; }
+.va-pane .va-card-title { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.va-pane .va-card-title strong { display: inline; margin-inline-start: 5px; }
+.va-item-secondary { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.va-item-secondary .va-tech-name { flex: 1; }
+.va-item-secondary .qc-status-pill { flex: none; }
+.va-library-draft { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--da-text-muted); font-size: 10px; }
+.va-review-entry svg { width: 12px; height: 12px; }
+.va-row-coverage[data-missing] { color: #89570d; background: #fff5e3; padding: 0 4px; border-radius: 4px; }
+.va-pane .va-new-entry { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 7px 10px; border: 1px dashed var(--da-primary-line); border-radius: 8px; background: var(--da-surface); color: var(--da-primary); text-align: start; cursor: pointer; }
+.va-new-entry:hover { background: var(--da-primary-soft); }
+.va-new-entry > span { display: grid; flex: 1; min-width: 0; }
+.va-new-entry small { color: var(--da-text-muted); font-size: 10px; }
 .va-tabs, .va-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .va-tabs { gap: clamp(6px, 1vw, 18px); border-bottom: 1px solid var(--da-border); }
 .va-tabs button { padding: 9px 4px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;

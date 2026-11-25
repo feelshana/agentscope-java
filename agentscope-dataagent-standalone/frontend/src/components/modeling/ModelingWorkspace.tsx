@@ -1,7 +1,9 @@
 import { useId, type ReactNode, type Ref } from 'react';
 import Icon, { type IconName } from '../Icon';
+import './ModelingSectionTheme.css';
 
-export function WorkspaceToolbar<T extends string>({ label, tabs, active, onSelect, objectActions, context, children }: {
+export function WorkspaceToolbar<T extends string>({ title, label, tabs, active, onSelect, objectActions, context, children }: {
+  title: string;
   label: string;
   tabs: readonly { id: T; label: string; icon: IconName; count?: number }[];
   active: T;
@@ -11,6 +13,7 @@ export function WorkspaceToolbar<T extends string>({ label, tabs, active, onSele
   children?: ReactNode;
 }) {
   return <header className="mo-workbar">
+    <h2 className="mo-work-title">{title}</h2>
     <div className="mo-worktabs" role="group" aria-label={label}>
       {tabs.map(tab => <button type="button" key={tab.id} aria-pressed={active === tab.id} onClick={() => onSelect(tab.id)}>
         <Icon name={tab.icon} size="sm" />{tab.label}{tab.count !== undefined && <span>{tab.count}</span>}
@@ -73,9 +76,9 @@ export function WorkspaceBatchTools({ count, label, disabled, onRemove, onClear,
   </>;
 }
 
-export function MaterialsCatalog({ title, label, count, open, onToggle, filters, children, listRef, actions }: {
+export function MaterialsCatalog({ title, label, count, open, onToggle, filters, children, listRef, actions, footer }: {
   title: string; count: string; open: boolean; onToggle: () => void; filters: ReactNode; children: ReactNode;
-  label?: string; listRef?: Ref<HTMLUListElement>; actions?: ReactNode;
+  label?: string; listRef?: Ref<HTMLUListElement>; actions?: ReactNode; footer?: ReactNode;
 }) {
   const id = useId();
   const toggleLabel = (open ? '收起' : '展开') + title;
@@ -88,6 +91,7 @@ export function MaterialsCatalog({ title, label, count, open, onToggle, filters,
     <div id={id} className="mo-material-catalog-content" hidden={!open}>
       <div className="mo-material-catalog-filters">{filters}{actions}</div>
       <ul className="qc-queue-list" ref={listRef}>{children}</ul>
+      {footer}
     </div>
   </aside>;
 }

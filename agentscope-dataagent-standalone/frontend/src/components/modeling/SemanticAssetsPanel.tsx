@@ -9,7 +9,7 @@ import type { ViewRow } from './assetCatalog';
 import IncompleteViewDialog from './IncompleteViewDialog';
 import ReadableCode from '../ReadableCode';
 import Icon from '../Icon';
-import { MaterialsCatalog, WorkspaceBatchInput, WorkspaceBatchToggle, WorkspaceBatchTools, WorkspaceEmpty, WorkspaceObjectTools, WorkspaceToolbar } from './ModelingWorkspace';
+import { MaterialsCatalog, WorkspaceBatchInput, WorkspaceBatchTools, WorkspaceEmpty, WorkspaceToolbar } from './ModelingWorkspace';
 import { WorkspaceMenu } from '../KnowledgeWorkspace';
 import { removeWorkspaceItems, updateWorkspaceSelection } from './workspaceRemoval';
 import EngineeringDialog from './EngineeringDialog';
@@ -33,14 +33,15 @@ const errorText = (error: unknown) => error instanceof Error ? error.message : S
 const fileName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 const canRemove = (row: ViewRow) => !!row.draft && !row.incomplete;
 
-export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, publishedVersion, onDraft, onAsk, onPublish }: {
+export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, publishedVersion, onDraft, onDiscuss, onAsk, onPublish }: {
   groupId: string;
   assistantIdle: boolean;
   paired: boolean;
   publishedVersion: number;
-  onAsk: (asset: SemanticAsset, version: Version, published?: SemanticAsset) => void;
+  onAsk: (asset: SemanticAsset, version: Version, published: SemanticAsset | undefined, trigger: HTMLButtonElement) => void;
   onPublish: () => void;
   onDraft: (text: string, label: string) => boolean;
+  onDiscuss: (trigger: HTMLButtonElement) => void;
 }) {
   const [params, setParams] = useSearchParams();
   const [catalog, setCatalog] = useState<AssetCatalog>();
@@ -174,6 +175,9 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
   const closeFiles = () => { setFilesOpen(false); setSourceEdit(undefined); setConfirmDiscard(false); setDetailAttempt(n => n + 1); };
   const requestCloseFiles = () => { if (edited) setConfirmDiscard(true); else closeFiles(); };
   const draftAction = <button type="button" className="da-btn da-btn-primary" onClick={() => setDraftOpen(true)}><Icon name="plus" size="sm" />起草公共视图</button>;
+  const newViewEntry = <button type="button" className="va-new-entry" onClick={() => setDraftOpen(true)}>
+    <Icon name="plus" size="sm" /><span><strong>新建公共视图</strong><small>描述业务用途或粘贴已有 SQL</small></span><Icon name="chevron" size="sm" />
+  </button>;
   const openRemoval = (targets: ViewRow[], batch = false, finished?: RemovalRequest['finished']) => {
     const request: RemovalRequest = { entries: targets.map(row => ({ row })), batch, finished };
     setRemoval(request);
@@ -225,6 +229,25 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
     updated();
   });
   const objectName = current && (assetDescription(selectedAsset?.description ?? current.published?.description).title || current.name);
+  const toggleBatch = () => { setBatchGroup(batchActive ? undefined : group); clearPicked(); setNotice(''); };
+  const openFiles = () => {
+    if (!value?.files.length) return;
+    setFile(value.files[0].path);
+    setFilesOpen(true);
+  };
+  const moduleMenu = <WorkspaceMenu label="公共视图更多操作" items={[
+    { label: '工程文件', icon: 'code', disabled: !value?.files.length || !!busy, onClick: openFiles },
+    { label: '使用指南', icon: 'info', onClick: () => setHelpOpen(true) },
+    { label: batchActive ? '结束批量处理' : '批量处理', icon: 'list', disabled: !batchActive && !matching.some(canRemove), onClick: toggleBatch },
+    ...(current && current.published && (current.draft || current.incomplete) && task !== 'PUBLISHED' ? [{
+      label: readOnly ? '查看当前草稿' : '查看线上版本', icon: 'file' as const, disabled: !!busy,
+      onClick: () => locate(group, current, readOnly ? 'draft' : 'published'),
+    }] : []),
+    ...(current && canRemove(current) ? [{
+      label: current.published ? '下架视图' : '移除草稿', icon: 'trash' as const, danger: true,
+      disabled: waiting || !!loadError, onClick: () => openRemoval([current]),
+    }] : []),
+  ]} />;
   const objectTools = current && <>
     {current.published && (current.draft || current.incomplete) && task !== 'PUBLISHED' &&
       <div className="mo-work-segment" role="group" aria-label="查看视图版本">
@@ -234,10 +257,8 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
           onClick={() => locate(group, current, 'draft')}>当前草稿</button>
       </div>}
     {asset && value && <>
-      {!paired && task !== 'REMOVAL_PENDING' && <button type="button" className="da-btn" disabled={!!busy}
-        onClick={() => onAsk(asset, version, current.published)}><Icon name="chat" size="sm" />边聊边核对</button>}
       {value.files.length > 0 && <button type="button" className="da-btn" disabled={!!busy}
-        onClick={() => { setFile(value.files[0].path); setFilesOpen(true); }}><Icon name="code" size="sm" />工程文件</button>}
+        onClick={openFiles}><Icon name="code" size="sm" />工程文件</button>}
       {canRemove(current) && <WorkspaceMenu label="视图更多操作" items={[
         { label: current.published ? '下架视图' : '移除草稿', icon: 'trash', danger: true, disabled: waiting || !!loadError,
           onClick: () => openRemoval([current]) },
@@ -245,18 +266,22 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
     </>}
   </>;
 
-  return <section className={'sm-pane sa-pane mo-optimization mo-workspace va-pane' + (paired ? ' mo-work-paired' : '')} aria-label="公共视图">
-    {paired ? <WorkspaceObjectTools compact context={objectName}>{objectTools}</WorkspaceObjectTools>
-      : <WorkspaceToolbar label="公共视图范围" active={group} onSelect={switchGroup} tabs={[
+  return <section className="sm-pane sa-pane mo-optimization mo-workspace va-pane" data-view-comparison={paired || undefined} aria-label="公共视图">
+    <WorkspaceToolbar title="公共视图" label="公共视图范围" active={group} onSelect={switchGroup} tabs={paired ? [] : [
       { id: 'pending', label: '待处理', icon: 'list', count: pending.length },
       { id: 'library', label: '视图库', icon: 'model', count: library.length },
-    ]} objectActions={batchActive ? <WorkspaceBatchTools count={pickedRows.length}
+    ]} objectActions={paired ? objectTools : batchActive ? <WorkspaceBatchTools count={pickedRows.length}
       label={pickedRows.every(row => row.published) ? '下架选中的视图' : '移除选中的视图'}
       disabled={waiting || !!loadError} onClear={clearPicked} onRemove={() => openRemoval(pickedRows, true)} />
-      : objectTools} context={!batchActive && !directoryOpen ? objectName : undefined}>
-      <button type="button" className="da-btn mo-work-quiet" onClick={() => setHelpOpen(true)}><Icon name="info" size="sm" />使用指南</button>
-      {rows.length > 0 && draftAction}
-    </WorkspaceToolbar>}
+      : undefined}>
+      <button type="button" className="da-btn va-review-entry" hidden={paired || batchActive}
+        disabled={!!busy || !catalog || (candidates.length > 0 && (!asset || task === 'REMOVAL_PENDING'))}
+        onClick={event => {
+          if (asset) onAsk(asset, version, current?.published, event.currentTarget);
+          else onDiscuss(event.currentTarget);
+        }}><Icon name="chat" size="sm" />边聊边核对</button>
+      {!paired && <>{moduleMenu}{draftAction}</>}
+    </WorkspaceToolbar>
     {helpOpen && <AssetActionDialog title="公共视图使用指南" onClose={() => setHelpOpen(false)}>
       <p>当多个业务问题需要复用固定的表关联、窗口计算或多步 SQL，可以起草公共视图。字段含义、简单分类或默认过滤可在建模对话中处理。</p>
       <ol className="va-guide">
@@ -278,7 +303,7 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
     </AssetActionDialog>}
     {!catalog ? <p className="mo-work-loading" role="status">{loadError || '正在读取视图…'}
       {loadError && <button type="button" className="da-btn" onClick={() => void reload()}>重试</button>}</p>
-      : !paired && !candidates.length ? <div className="va-empty"><WorkspaceEmpty icon={library.length ? 'check' : 'model'}
+      : !candidates.length && (!paired || !current) ? <div className="va-empty"><WorkspaceEmpty icon={library.length ? 'check' : 'model'}
         title={group === 'pending' ? '暂无待处理视图' : '暂无已发布视图'}
         description={group === 'pending' && library.length ? '线上问数可继续使用已发布视图。'
           : rows.length ? '通过用途核查和问题验证后，视图可随知识库草稿发布。'
@@ -286,11 +311,11 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
         {group === 'pending' && library.length > 0 ? <button type="button" className="da-btn da-btn-primary"
           onClick={() => switchGroup('library')}>查看 {library.length} 个已发布视图</button>
           : group === 'library' && pending.length > 0 ? <button type="button" className="da-btn da-btn-primary"
-            onClick={() => switchGroup('pending')}>查看待处理视图</button> : draftAction}
-      </WorkspaceEmpty></div> : <div className="sa-layout mo-work-grid va-grid" data-catalog-open={directoryOpen}>
+            onClick={() => switchGroup('pending')}>查看待处理视图</button> : undefined}
+      </WorkspaceEmpty>{!paired && newViewEntry}
+      </div> : <div className="sa-layout mo-work-grid va-grid" data-catalog-open={directoryOpen}>
       {!paired && <MaterialsCatalog title="视图目录" count={`${matching.length} 项`} open={directoryOpen}
-        actions={(batchActive || matching.some(canRemove)) && <WorkspaceBatchToggle active={batchActive}
-          onClick={() => { setBatchGroup(batchActive ? undefined : group); clearPicked(); setNotice(''); }} />}
+        footer={!batchActive && <div className="va-catalog-footer">{newViewEntry}</div>}
         onToggle={() => setDirectoryOpen(value => !value)} filters={<>
           <input type="search" className="da-input" aria-label="搜索视图" placeholder="搜索视图…" value={query}
             disabled={!!busy} onChange={e => { setQuery(e.target.value); clearPicked(); }} />
@@ -301,14 +326,21 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
         </>}>
         {matching.map(row => {
           const key = assetKey(row);
-          const label = assetDescription((group === 'library' ? row.published : row.draft ?? row.published)?.description).title;
+          const summaryVersion = group === 'library' ? row.published : row.draft ?? row.published;
+          const description = assetDescription(summaryVersion?.description);
+          const label = description.title;
+          const purpose = description.sections.find(section => section.heading === '业务用途')?.text;
           const status = assetTask(row);
-          return <li key={key} className={key === currentKey ? 'qc-queue-selected' : ''}>
-            <button type="button" aria-current={key === currentKey || undefined} disabled={!!busy} onClick={() => { setError(''); setNotice(''); locate(group, row); }}>
-              <strong>{label || row.name}</strong>{label && <small translate="no">{row.name}</small>}
-              <span className="mo-item-meta"><span className={'qc-status-pill qc-status-' + (group === 'library' ? 'done' : status === 'REMOVAL_PENDING' ? 'removal' : 'review')}>
+          const coverage = description.sections.find(section => section.heading === '适用范围' || section.heading === '时间范围')?.text;
+          return <li key={key} className={`va-view-row${key === currentKey ? ' qc-queue-selected' : ''}`}>
+            <button type="button" title={label || row.name} aria-current={key === currentKey || undefined} disabled={!!busy} onClick={() => { setError(''); setNotice(''); locate(group, row); }}>
+              <span className="va-card-title"><span className="va-kind" data-kind={row.kind}>{KIND_LABEL[row.kind]}</span><strong>{label || row.name}</strong></span>
+              <span className="va-item-secondary"><small className="va-tech-name" title={purpose || row.name} translate="no">{row.name}</small>
+                <span className={'qc-status-pill qc-status-' + (group === 'library' ? 'done' : status === 'REMOVAL_PENDING' ? 'removal' : 'review')}>
                 {group === 'library' ? '已发布' : STATUS[status]}</span>
-                {group === 'library' && status !== 'PUBLISHED' ? STATUS[status] : KIND_LABEL[row.kind]}</span>
+                {group === 'library' && status !== 'PUBLISHED' && <span className="va-library-draft" title={STATUS[status]}>{STATUS[status]}</span>}
+                <span className="va-row-coverage" data-missing={!coverage || undefined} title={coverage}>{coverage || '范围待说明'}</span>
+              </span>
             </button>
             {batchActive && canRemove(row) && <WorkspaceBatchInput label={label || row.name} checked={picked.has(key)}
               disabled={!!busy} onChange={checked => setPicked(previous => updateWorkspaceSelection(previous, key, checked))} />}
@@ -328,6 +360,11 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
         </WorkspaceEmpty> : !asset || !value ? <p role={detailError ? 'alert' : 'status'} className="mo-work-loading">{detailError || '正在读取视图详情…'}
           {detailError && <button type="button" className="da-btn" onClick={() => setDetailAttempt(n => n + 1)}>重试</button>}</p>
           : <>
+          <header className="mo-object-heading va-object-heading">
+            <span className="mo-object-icon"><Icon name="model" size="sm" /></span>
+            <div><h3>{objectName}</h3><p><span className="va-kind" data-kind={asset.kind}>{KIND_LABEL[asset.kind]}</span>
+              {objectName !== asset.name && <code translate="no">{asset.name}</code>}</p></div>
+          </header>
           {(task === 'REMOVAL_PENDING' || (readOnly ? task !== 'PUBLISHED' : asset.status !== 'PUBLISHED')) && <div className="va-next">
             <div><strong>{task === 'REMOVAL_PENDING' ? '待下架' : readOnly ? `有草稿 · ${STATUS[task ?? 'REVIEW_PENDING']}`
               : { REVIEW_PENDING: '核查视图用途与口径', VERIFY_PENDING: '用业务问题核对 SQL', VERIFIED: '验证通过，待发布', PUBLISHED: '' }[asset.status]}</strong>
@@ -364,7 +401,7 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
               <button key={key} type="button" disabled={!!busy || key === 'verify' && asset.status === 'REVIEW_PENDING'}
                 aria-current={currentStage === key ? 'page' : undefined} onClick={() => locate(group, current, version, key)}>{label}</button>)}
           </nav>
-          {currentStage === 'overview' && <ViewOverview detail={value} />}
+          {currentStage === 'overview' && <ViewOverview detail={value} version={readOnly ? `线上 v${publishedVersion}` : '当前草稿'} />}
           {currentStage === 'status' && <section className="va-content"><dl className="va-facts">
             <div><dt>当前版本</dt><dd>{readOnly ? `线上 v${publishedVersion}` : '当前草稿'}</dd></div>
             <div><dt>状态</dt><dd>{task === 'REMOVAL_PENDING' ? '待下架' : STATUS[asset.status]}</dd></div>
@@ -435,16 +472,21 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, paired, pu
   </section>;
 }
 
-function ViewOverview({ detail }: { detail: AssetDetail }) {
+function ViewOverview({ detail, version }: { detail: AssetDetail; version: string }) {
   const { asset } = detail;
   const { title, sections } = assetDescription(asset.description);
-  const summaryLabels = ['适用范围', '数据粒度', '指标', '时间列', '时间范围', '数据来源', '关联'];
+  const summaryLabels = ['适用范围', '数据粒度', '指标', '时间列', '时间范围', '关联'];
   const purpose = sections.find(section => section.heading === '业务用途');
+  const source = sections.find(section => section.heading === '数据来源');
   const limits = sections.filter(section => section.heading === '使用限制');
   const facts = sections.filter(section => summaryLabels.includes(section.heading));
-  const notes = sections.filter(section => section.heading !== '业务用途' && section.heading !== '使用限制' && !summaryLabels.includes(section.heading));
+  const notes = sections.filter(section => section !== purpose && section !== source && section.heading !== '使用限制' && !summaryLabels.includes(section.heading));
   return <section className="va-content" aria-label="用途与口径">
-    {purpose && purpose.text !== title && <section className="va-purpose"><h4>业务用途</h4><p>{purpose.text}</p></section>}
+    <section className="va-purpose"><h4>业务用途</h4><p>{purpose?.text || title || '待补充用途说明'}</p></section>
+    <section className="va-notes"><h4>数据来源</h4><p>{source?.text || '可展开视图 SQL 查看取数来源。'}</p></section>
+    <section className="va-notes"><h4>版本</h4><p>{version}</p></section>
+    {!!detail.asset.review?.timeColumns.length && !sections.some(section => section.heading === '时间列') &&
+      <p className="va-time-summary"><strong>已核查的输出时间列</strong> {detail.asset.review.timeColumns.join('、')}</p>}
     {!!facts.length && <dl className="va-facts">{facts.map((fact, index) => <div key={index}><dt>{fact.heading}</dt><dd>{fact.text}</dd></div>)}</dl>}
     {(limits.length > 0 || detail.fixedDates.length > 0 || detail.warnings.length > 0) && <section className="va-limits">
       <h4><Icon name="info" size="sm" />使用限制</h4>

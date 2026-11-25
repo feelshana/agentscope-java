@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-export default function EngineeringDirectory({ paths, current, onSelect, labels }: {
-  paths: readonly string[]; current?: string; onSelect: (path: string) => void; labels?: ReadonlyMap<string, string>;
+export default function EngineeringDirectory({ paths, current, onSelect, labels, statuses }: {
+  paths: readonly string[]; current?: string; onSelect: (path: string) => void; labels?: ReadonlyMap<string, string>; statuses?: ReadonlyMap<string, string>;
 }) {
   const [filter, setFilter] = useState('');
   const matches = paths.filter(path => (labels?.get(path) ?? path).toLowerCase().includes(filter.trim().toLowerCase()));
@@ -10,7 +10,7 @@ export default function EngineeringDirectory({ paths, current, onSelect, labels 
     <div className="am-file-list">{matches.length ? matches.map(path => {
       const slash = labels ? -1 : path.lastIndexOf('/');
       return <button key={path} type="button" aria-current={current === path} title={path} onClick={() => onSelect(path)}>
-        <span><strong>{labels?.get(path) ?? path.slice(slash + 1)}</strong>{slash >= 0 && <small>{path.slice(0, slash)}</small>}</span>
+        <span><strong>{labels?.get(path) ?? path.slice(slash + 1)}</strong>{slash >= 0 && <small>{path.slice(0, slash)}</small>}</span>{statuses?.get(path) && <b className="eng-status">{statuses.get(path)}</b>}
       </button>;
     }) : <p className="am-empty">没有匹配的内容。</p>}</div>
   </aside>;

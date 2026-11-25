@@ -3,18 +3,19 @@ import type { ReactNode } from 'react';
 import Icon from '../Icon';
 import './EngineeringDialog.css';
 
-export default function EngineeringDialog({ title, context, toolbar, footer, onClose, canClose, children }: {
+export default function EngineeringDialog({ title, context, toolbar, footer, onClose, canClose, initiallyExpanded = false, children }: {
   title: string;
   context?: string;
   toolbar?: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
   canClose?: () => boolean;
+  initiallyExpanded?: boolean;
   children: ReactNode;
 }) {
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   useLayoutEffect(() => {
     const element = dialog.current;
     const trigger = document.activeElement;
