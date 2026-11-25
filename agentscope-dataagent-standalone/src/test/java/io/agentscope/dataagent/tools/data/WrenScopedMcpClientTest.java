@@ -302,6 +302,40 @@ class WrenScopedMcpClientTest {
         when(gateway.call("a", "query_cube", ok))
                 .thenReturn(new WrenQueryGateway.WrenCallResult(true, "{\"rows\":[[1]]}"));
         assertThat(client.callTool("query_cube", ok).block().isError()).isFalse();
+
+        // spec149 P7: an empty measure means one result met several rows; it is refused and
+        // not cached, so a corrected retry still reaches Wren.
+        var open = new java.util.LinkedHashMap<String, Object>(ok);
+        open.put("limit", 10);
+        when(gateway.call("a", "query_cube", open))
+                .thenReturn(
+                        new WrenQueryGateway.WrenCallResult(
+                                true, "{\"columns\":[\"members\"],\"rows\":[{\"members\":null}]}"));
+        assertThatThrownBy(() -> client.callTool("query_cube", open).block())
+                .hasMessageContaining("1 个结果为空");
+        assertThatThrownBy(() -> client.callTool("query_cube", open).block())
+                .hasMessageContaining("1 个结果为空");
+        verify(gateway, org.mockito.Mockito.times(2)).call("a", "query_cube", open);
+
+        // 2026-11-25: rows of a caliber Cube are never totalled by the platform (the model
+        // quoted such a total as "篮球通和足球通合计").
+        var two = new java.util.LinkedHashMap<String, Object>(ok);
+        two.put("limit", 20);
+        when(gateway.call("a", "query_cube", two))
+                .thenReturn(
+                        new WrenQueryGateway.WrenCallResult(
+                                true,
+                                "{\"columns\":[\"caliber\",\"members\"],\"rows\":[[\"足球通\",10],[\"篮球通\",3]],"
+                                    + "\"row_count\":2,\"truncated\":false}"));
+        String text =
+                client.callTool("query_cube", two).block().content().stream()
+                        .map(c -> ((McpSchema.TextContent) c).text())
+                        .collect(java.util.stream.Collectors.joining());
+        assertThat(text).contains("足球通").doesNotContain("逐列合计");
+        // The user decided calibers are never added, even on request.
+        assertThat(text).contains("任何情况下都不能相加", "不要给出合计");
+        assertThat(io.agentscope.dataagent.dataset.CaliberQueryGate.noSumNote("{\"rows\":[[1]]}"))
+                .isEmpty();
     }
 
     @Test

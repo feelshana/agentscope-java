@@ -40,6 +40,8 @@ public final class CaliberQueryGate {
         if (dimension == null) dimension = "caliber";
         CaliberList list = list(published, listPath);
         if (list == null) return null;
+        String time = time(cube, list, args.get("time_dimension"));
+        if (time != null) return time;
 
         boolean grouped = CaliberList.texts(args.get("dimensions")).contains(dimension);
         List<String> named = new ArrayList<>();
@@ -159,6 +161,132 @@ public final class CaliberQueryGate {
                 + "用户没说的范围请用默认值，在 filters 中加入："
                 + String.join("、", missing)
                 + "。";
+    }
+
+    /**
+     * spec149 P7: each row is a finished statistic of one day or one month, so the time dimension
+     * is required and grouped at the table's own grain; a coarser grain would add the rows of a
+     * week or month (daily active users summed into a month counts a user once per day).
+     */
+    private static String time(String cube, CaliberList list, Object value) {
+        CaliberList.Time t = list.scenario().time();
+        if (t == null) return null;
+        String grain = t.grain();
+        String unit = "month".equals(grain) ? "月" : "日";
+        String example =
+                "month".equals(grain)
+                        ? "period:month:2026-10-01,2026-11-01"
+                        : "period:day:2026-10-01,2026-10-02";
+        String spec = value instanceof String s ? s.strip() : null;
+        if (spec == null || spec.isEmpty())
+            return "指标 "
+                    + cube
+                    + " 的每行是某一"
+                    + unit
+                    + "预先算好的统计结果，必须写 time_dimension 并按 "
+                    + grain
+                    + " 粒度分组，例如 "
+                    + example
+                    + "（结束日期不包含）；不写时间会把所有"
+                    + unit
+                    + "的值相加。";
+        String[] parts = spec.split(":", 3);
+        String granularity =
+                parts.length > 1 ? parts[1].strip().toLowerCase(java.util.Locale.ROOT) : "";
+        if (!parts[0].strip().equals("period") || !granularity.equals(grain))
+            return "指标 "
+                    + cube
+                    + " 的每行是某一"
+                    + unit
+                    + "预先算好的统计结果，time_dimension 只能写 period:"
+                    + grain
+                    + ":开始,结束（例如 "
+                    + example
+                    + "）；按更粗的粒度会把多"
+                    + unit
+                    + "的值相加，结果错误。问一段时间就按"
+                    + unit
+                    + "逐个列出；问月活等跨周期的数，读文档定义的那一"
+                    + unit
+                    + "（如月末）的值，文档没定义时先问用户，不要相加或平均。";
+        return null;
+    }
+
+    /**
+     * spec149 P7: whether a Cube was generated from a caliber list. Its rows are finished
+     * statistics of different calibers, periods or scopes, so they are never totalled.
+     */
+    public static boolean generatedCube(Path published, Object cubeArgument) {
+        String cube = CaliberList.text(cubeArgument);
+        if (published == null || cube == null || !cube.matches("[A-Za-z0-9_]{1,128}")) return false;
+        Map<String, Object> meta =
+                read(published.resolve("cubes").resolve(cube).resolve("metadata.yml"));
+        Map<String, Object> props = meta == null ? null : CaliberList.map(meta.get("properties"));
+        return props != null && CaliberList.text(props.get(CaliberCompiler.GENERATED_BY)) != null;
+    }
+
+    /**
+     * 2026-11-25 (user decision): results of different calibers are never added, not even when
+     * the user asks for a total (the model added 篮球通 and 足球通 by itself). A result with several
+     * rows carries this note; one row needs none.
+     */
+    public static String noSumNote(String payload) {
+        if (payload == null) return "";
+        try {
+            com.fasterxml.jackson.databind.JsonNode rows =
+                    new ObjectMapper().readTree(payload.strip()).path("rows");
+            if (!rows.isArray() || rows.size() < 2) return "";
+        } catch (IOException | RuntimeException e) {
+            return "";
+        }
+        return "\n\n**口径结果说明（平台）：** 以上各行是不同口径、不同时间或不同范围预先算好的统计结果，"
+                + "口径之间可能重叠或包含，任何情况下都不能相加。用户要求合计、加起来、一共时，分别列出各行数值，"
+                + "说明这些人数不能相加（同一用户可能同时属于多个口径），不要给出合计，也不要用 run_python 相加。";
+    }
+
+    /**
+     * spec149 P7: a generated measure is null when one result meets several rows (some dimension
+     * was left open) or the row has no value. Such a result is refused instead of shown, since the
+     * model would otherwise report it as missing data. Returns the refusal, or null.
+     */
+    public static String checkResult(Path published, Map<String, Object> args, String payload) {
+        String cube = CaliberList.text(args == null ? null : args.get("cube"));
+        if (cube == null || !cube.matches("[A-Za-z0-9_]{1,128}") || payload == null) return null;
+        Map<String, Object> meta =
+                read(published.resolve("cubes").resolve(cube).resolve("metadata.yml"));
+        Map<String, Object> props = meta == null ? null : CaliberList.map(meta.get("properties"));
+        if (props == null || CaliberList.text(props.get(CaliberCompiler.GENERATED_BY)) == null)
+            return null;
+        List<String> measures = new ArrayList<>();
+        for (String m : CaliberList.texts(args.get("measures")))
+            for (String part : m.split(",")) if (!part.isBlank()) measures.add(part.strip());
+        if (measures.isEmpty()) return null;
+        try {
+            com.fasterxml.jackson.databind.JsonNode root =
+                    new ObjectMapper().readTree(payload.strip());
+            com.fasterxml.jackson.databind.JsonNode rows = root.path("rows");
+            if (!rows.isArray()) return null;
+            List<String> columns = new ArrayList<>();
+            for (com.fasterxml.jackson.databind.JsonNode c : root.path("columns"))
+                columns.add(c.isTextual() ? c.asText() : c.path("name").asText());
+            int empty = 0;
+            for (com.fasterxml.jackson.databind.JsonNode row : rows)
+                for (String m : measures) {
+                    com.fasterxml.jackson.databind.JsonNode v =
+                            row.isArray() ? row.path(columns.indexOf(m)) : row.path(m);
+                    if (columns.contains(m) || row.isObject())
+                        if (v.isMissingNode() || v.isNull()) empty++;
+                }
+            if (empty == 0) return null;
+            return "指标 "
+                    + cube
+                    + " 有 "
+                    + empty
+                    + " 个结果为空：每个结果只能对应一行统计数据，为空说明对应了多行（有维度没定下来：口径、每个范围维度都要筛选单值或分组，时间按表的粒度分组），或该行本身没有值。请检查后重新查询，不要把空值当作"
+                    + " 0，也不要改用相加的方式。";
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
     }
 
     private static List<String> nearestValues(List<String> values, String value) {

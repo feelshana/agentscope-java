@@ -152,8 +152,14 @@ public final class CaliberCompiler {
             sql.append(", ").append(timeExpression(s.time())).append(" AS period_date");
         for (CaliberList.Scope d : s.scope())
             sql.append(", ").append(quote(d.column())).append(" AS ").append(quote(d.column()));
+        // A caliber whose document adds several values (combine: sum) is summed here, so the View
+        // still holds one row per caliber, period and scope and the Cube never adds rows itself.
+        boolean combined = c.where().values().stream().anyMatch(v -> v.size() > 1);
         for (CaliberList.Measure m : s.measures())
-            sql.append(", ").append(quote(m.column())).append(" AS ").append(quote(m.column()));
+            sql.append(", ")
+                    .append(combined ? "SUM(" + quote(m.column()) + ")" : quote(m.column()))
+                    .append(" AS ")
+                    .append(quote(m.column()));
         sql.append("\nFROM ").append(quote(list.model()));
         List<String> where = new ArrayList<>();
         Map<String, List<String>> merged = new LinkedHashMap<>();
@@ -173,6 +179,12 @@ public final class CaliberCompiler {
                                     + ")");
         }
         if (!where.isEmpty()) sql.append("\nWHERE ").append(String.join("\n  AND ", where));
+        if (combined) {
+            List<String> keys = new ArrayList<>();
+            if (s.time() != null) keys.add(timeExpression(s.time()));
+            for (CaliberList.Scope d : s.scope()) keys.add(quote(d.column()));
+            if (!keys.isEmpty()) sql.append("\nGROUP BY ").append(String.join(", ", keys));
+        }
         return sql.toString();
     }
 
@@ -233,7 +245,7 @@ public final class CaliberCompiler {
             measures.add(
                     member(
                             m.name(),
-                            "SUM(" + quote(m.column()) + ")",
+                            single(m.column()),
                             type.toUpperCase(Locale.ROOT).contains("INT") ? "BIGINT" : "DOUBLE",
                             label
                                     + (m.description() == null ? "" : "：" + m.description())
@@ -241,7 +253,8 @@ public final class CaliberCompiler {
                                             ? ""
                                             : "。常见说法：" + String.join("、", m.synonyms()))
                                     + (m.isDefault() ? "。默认指标：用户只说统计对象、没说具体指标时用它" : "")
-                                    + "。必须按 caliber 筛选单个口径或按 caliber 分组，不能跨口径相加。"));
+                                    + "。统计结果已预先算好，每个结果只取一行：必须按 caliber 筛选单个口径或按 caliber"
+                                    + " 分组，时间按表的粒度分组，不能把多个口径、多天或多月相加；对应多行时返回空。"));
         }
         List<Map<String, Object>> dimensions = new ArrayList<>();
         dimensions.add(
@@ -279,8 +292,8 @@ public final class CaliberCompiler {
                                     "period_date",
                                     "DATE",
                                     ("month".equals(s.time().grain())
-                                                    ? "账期月份（当月 1 日），按 month 粒度使用"
-                                                    : "统计日期，按 day 粒度使用")
+                                                    ? "账期月份（当月 1 日），只能按 month 粒度使用"
+                                                    : "统计日期，只能按 day 粒度使用（多天就按天列出，不能按周、月相加）")
                                             + "；来源列 "
                                             + s.time().column()
                                             + "。时间范围左闭右开，结束日期不包含"
@@ -297,6 +310,15 @@ public final class CaliberCompiler {
         props.put(GENERATED_BY, listPath);
         out.put("properties", props);
         return out;
+    }
+
+    /**
+     * 2026-11-25 (spec149 P7): rows of a caliber table are finished statistics, so a measure is
+     * the value of exactly one row; when a query leaves a dimension open and several rows meet, it
+     * is null instead of their sum, and {@link CaliberQueryGate#checkResult} explains it.
+     */
+    static String single(String column) {
+        return "CASE WHEN COUNT(*) = 1 THEN MAX(" + quote(column) + ") END";
     }
 
     private static Map<String, Object> scopeMember(CaliberList.Scope d) {
@@ -567,8 +589,11 @@ public final class CaliberCompiler {
                 .append("- 再定指标：用户只说统计对象、没说具体指标时用“默认指标”；默认指标为“无，先问”时先问。\n")
                 .append(
                         "- 再定口径：按口径名筛选（filters: caliber:in:口径名）或按 caliber"
-                            + " 分组，不同口径之间可能互相包含，不能相加；用户的说法可能对应多个口径或对不上任何口径名时，先向用户确认是哪个口径，不要自行选择。\n")
+                            + " 分组，不同口径之间可能互相包含，不能相加；用户的说法可能对应多个口径或对不上任何口径名时，先向用户确认是哪个口径，不要自行选择。用户要求把几个口径加起来（合计、一共）时，分别列出各口径的数值并说明不能相加，不给出合计。\n")
                 .append("- 范围：上表“范围”列出的每个维度都要写进 filters（用户没说时用所列默认值），或按它分组；汇总值与明细值同时存在，不能相加。\n")
+                .append(
+                        "- 时间：每行是预先算好的统计结果，time_dimension 的粒度必须等于上表“时间”列（日表用 day，月表用"
+                            + " month）。问一段时间（如最近一周）就按该粒度逐天或逐月列出，不能把多天、多月的值相加或平均；表里没有周、月去重数时如实说明，不把每天的值相加当作周活、月活。\n")
                 .append("- 以上指标覆盖的问题只用 query_cube 取数，不要自己拼取数条件，也不要对这些指标的原表或生成的口径视图（")
                 .append(String.join("、", models))
                 .append("）用 run_sql；其他问题照常用 run_sql。\n");

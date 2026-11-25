@@ -269,6 +269,17 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                         "",
                                         started,
                                         result.ok() ? "SUCCESS" : "ERROR");
+                                // spec149 P7: a caliber measure is one row's value; an empty one
+                                // means several rows met, so the result is refused, not cached.
+                                if ("query_cube".equals(tool) && result.ok() && projects != null) {
+                                    String refused =
+                                            io.agentscope.dataagent.dataset.CaliberQueryGate
+                                                    .checkResult(
+                                                            projects.publishedRoot(groupId),
+                                                            args,
+                                                            compactRows(result.payload()));
+                                    if (refused != null) throw new DatasetException(refused, 400);
+                                }
                                 String payload =
                                         query && result.ok()
                                                 ? compactRows(result.payload())
@@ -286,11 +297,25 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                 if (partial) payload += ANALYSIS_TRUNCATED_NOTE;
                                 else if (query && result.ok() && dataFiles != null)
                                     payload += dataFiles.note(context, result.payload());
-                                if (!partial && query && result.ok())
+                                // spec149 P7: rows of a caliber Cube are finished statistics of
+                                // different calibers or periods; a platform total would invite
+                                // adding them, so none is offered.
+                                boolean finished =
+                                        "query_cube".equals(tool)
+                                                && projects != null
+                                                && io.agentscope.dataagent.dataset.CaliberQueryGate
+                                                        .generatedCube(
+                                                                projects.publishedRoot(groupId),
+                                                                args.get("cube"));
+                                if (!partial && query && result.ok() && !finished)
                                     payload +=
                                             columnTotals(
                                                     compactRows(result.payload()),
                                                     String.valueOf(args.getOrDefault("sql", "")));
+                                if (finished && result.ok())
+                                    payload +=
+                                            io.agentscope.dataagent.dataset.CaliberQueryGate
+                                                    .noSumNote(compactRows(result.payload()));
                                 if (result.ok() && query) {
                                     Map<String, Object> receipt = new java.util.LinkedHashMap<>();
                                     receipt.put("groupId", groupId);

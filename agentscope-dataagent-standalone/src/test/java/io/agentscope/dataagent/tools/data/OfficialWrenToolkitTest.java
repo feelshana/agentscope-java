@@ -813,6 +813,55 @@ class OfficialWrenToolkitTest {
     }
 
     /**
+     * 2026-11-25: model columns are the table's fields. A column a document mentions but the
+     * table lacks (city_name) is refused on write and on edit; calculated columns are allowed.
+     */
+    @Test
+    void modelsCannotGainColumnsTheTableDoesNotHave() throws Exception {
+        var root = access.resolve(alice).root();
+        Files.createDirectories(root.resolve("models/active_d"));
+        String model =
+                "name: active_d\n"
+                        + "columns:\n"
+                        + "  - {name: province_name, type: VARCHAR}\n"
+                        + "  - {name: active_users, type: BIGINT}\n";
+        Files.writeString(root.resolve("models/active_d/metadata.yml"), model);
+
+        assertThat(
+                        files.write(
+                                        alice,
+                                        "models/active_d/metadata.yml",
+                                        model + "  - {name: city_name, type: VARCHAR}\n")
+                                .error())
+                .contains("city_name 不在模型中", "表里没有的字段不要加进模型");
+        assertThat(
+                        files.edit(
+                                        alice,
+                                        "models/active_d/metadata.yml",
+                                        "  - {name: active_users, type: BIGINT}\n",
+                                        "  - {name: active_users, type: BIGINT}\n"
+                                                + "  - {name: city_name, type: VARCHAR}\n",
+                                        false)
+                                .isSuccess())
+                .isFalse();
+        assertThat(Files.readString(root.resolve("models/active_d/metadata.yml"))).isEqualTo(model);
+        // Describing existing columns and adding a calculated one stay allowed.
+        assertThat(
+                        files.write(
+                                        alice,
+                                        "models/active_d/metadata.yml",
+                                        model.replace(
+                                                        "{name: province_name, type: VARCHAR}",
+                                                        "{name: province_name, type: VARCHAR,"
+                                                                + " properties: {description: 省份}}")
+                                                + "  - {name: is_national, type: BOOLEAN,"
+                                                + " is_calculated: true, expression:"
+                                                + " \"province_name = '全国'\"}\n")
+                                .isSuccess())
+                .isTrue();
+    }
+
+    /**
      * spec114: the coach writes question files only, and a question with an open card keeps an
      * empty SQL until the answer (2026-11-03: rule and SQL written on an invented confirmation).
      */

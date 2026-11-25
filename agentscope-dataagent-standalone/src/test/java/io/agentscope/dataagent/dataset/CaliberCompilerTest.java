@@ -77,9 +77,21 @@ class CaliberCompilerTest {
                 .contains("UNION ALL")
                 .contains("generated_by: calibers/vip_m.yml");
         assertThat(view.split("channel_type = '全部'", -1)).hasSize(2);
+        // The combined caliber is summed inside the View, so it is still one row per period.
+        String combined = view.substring(view.indexOf("'视频钻石会员' AS caliber_name"));
+        combined =
+                combined.substring(
+                        0,
+                        combined.indexOf("UNION ALL") < 0
+                                ? combined.length()
+                                : combined.indexOf("UNION ALL"));
+        assertThat(combined).contains("SUM(cnt_zd) AS cnt_zd", "GROUP BY CAST(CONCAT(SUBSTR(");
+        assertThat(view.split("GROUP BY", -1)).hasSize(2);
         assertThat(compiled.cube())
                 .contains("base_object: vip_scale_caliber")
-                .contains("SUM(cnt_zd)")
+                // spec149 P7: one row's value only, never a sum of rows.
+                .contains("CASE WHEN COUNT(*) = 1 THEN MAX(cnt_zd) END")
+                .doesNotContain("expression: SUM(")
                 .contains("non_additive_dimension: caliber")
                 .contains("足球通会员 指 足球通")
                 .contains("不适用：收入");

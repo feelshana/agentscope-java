@@ -138,7 +138,7 @@ class CaliberSelectionTest {
                 .contains("| 咪咕视频（视频） | 会员（会员数、订购用户） | vip_metrics | members（主动订购数） | 月 |")
                 .contains("pay_type1=全部（固定）；province:eq:全国；channel:eq:全部")
                 .contains("| 咪咕视频 | 活跃用户（日活） | active_metrics | dau_total（日活跃用户数） | 日 |")
-                .contains("例如只说“用户数”），先问是哪一个", "说明当前没有这类数据")
+                .contains("例如只说“用户数”），先问是哪一个", "说明当前没有这类数据", "分别列出各口径的数值并说明不能相加，不给出合计")
                 .contains("不要对这些指标的原表或生成的口径视图（active_d、active_caliber、vip_m、vip_caliber）用 run_sql")
                 .contains("- vip_metrics：咪咕视频会员规模；适用于会员数；不适用于活跃用户。");
         assertThat(CaliberCompiler.check(root)).isEmpty();
@@ -232,6 +232,66 @@ class CaliberSelectionTest {
         assertThat(CaliberQueryGate.checkSql(root, "SELECT 'vip_m' AS t FROM orders -- vip_m"))
                 .isNull();
         assertThat(CaliberQueryGate.checkSql(root, "SELECT * FROM orders /* vip_m */")).isNull();
+    }
+
+    /**
+     * spec149 P7: rows are finished statistics. A day table is grouped by day, never summed into
+     * weeks or months, and a result that met several rows (empty measure) is refused.
+     */
+    @Test
+    void finishedStatisticsAreReadOneRowPerResultAtTheTableGrain() throws Exception {
+        write("calibers/active.yml", ACTIVE);
+        CaliberCompiler.sync(root);
+        java.util.function.Function<Object, Map<String, Object>> query =
+                time -> {
+                    Map<String, Object> a = new java.util.LinkedHashMap<>();
+                    a.put("cube", "active_metrics");
+                    a.put("measures", List.of("dau_total"));
+                    a.put("filters", List.of("caliber:in:全部用户"));
+                    if (time != null) a.put("time_dimension", time);
+                    return a;
+                };
+        assertThat(CaliberQueryGate.check(root, query.apply(null)))
+                .contains("必须写 time_dimension", "period:day:2026-10-01,2026-10-02");
+        assertThat(CaliberQueryGate.check(root, query.apply("period:month:2026-10-01,2026-11-01")))
+                .contains("只能写 period:day", "多日的值相加", "文档没定义时先问用户");
+        assertThat(CaliberQueryGate.check(root, query.apply("period:week:2026-10-01,2026-10-08")))
+                .contains("只能写 period:day");
+        // A week asked for is listed day by day: seven results, each one row.
+        assertThat(CaliberQueryGate.check(root, query.apply("period:day:2026-10-01,2026-10-08")))
+                .isNull();
+
+        Map<String, Object> week = query.apply("period:day:2026-10-01,2026-10-08");
+        assertThat(
+                        CaliberQueryGate.checkResult(
+                                root,
+                                week,
+                                "{\"columns\":[\"period__day\",\"dau_total\"],\"rows\":[[\"2026-10-01\",120],[\"2026-10-02\",118]]}"))
+                .isNull();
+        assertThat(
+                        CaliberQueryGate.checkResult(
+                                root,
+                                week,
+                                "{\"columns\":[\"period__day\",\"dau_total\"],\"rows\":[[\"2026-10-01\",null],[\"2026-10-02\",118]]}"))
+                .contains("1 个结果为空", "对应了多行", "不要把空值当作 0");
+        // Object rows (uncompacted) and an empty result (no data) are handled alike.
+        assertThat(
+                        CaliberQueryGate.checkResult(
+                                root,
+                                week,
+                                "{\"rows\":[{\"period__day\":\"2026-10-01\",\"dau_total\":null}]}"))
+                .contains("1 个结果为空");
+        assertThat(CaliberQueryGate.checkResult(root, week, "{\"columns\":[],\"rows\":[]}"))
+                .isNull();
+        // Cubes not generated from a list are not checked.
+        Map<String, Object> other = new java.util.LinkedHashMap<>(week);
+        other.put("cube", "hand_written");
+        assertThat(
+                        CaliberQueryGate.checkResult(
+                                root, other, "{\"columns\":[\"dau_total\"],\"rows\":[[null]]}"))
+                .isNull();
+        assertThat(CaliberCompiler.rules(root))
+                .contains("time_dimension 的粒度必须等于上表“时间”列", "不把每天的值相加当作周活、月活");
     }
 
     @Test
@@ -331,7 +391,9 @@ class CaliberSelectionTest {
                 "filters",
                 filters,
                 "dimensions",
-                dimensions);
+                dimensions,
+                "time_dimension",
+                "period:month:2026-10-01,2026-11-01");
     }
 
     private void write(String relative, String content) throws Exception {
