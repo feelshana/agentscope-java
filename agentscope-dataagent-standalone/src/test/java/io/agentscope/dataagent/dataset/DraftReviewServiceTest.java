@@ -64,6 +64,44 @@ class DraftReviewServiceTest {
                 + "\n- name: status\n  properties:\n    description: 状态\n";
     }
 
+    @Test
+    void archivedDraftOnlyQuestionDoesNotRequirePublication() throws Exception {
+        int before = service.summary("alice", "g1").changes();
+        String path = "knowledge/questions/draft-only.yml";
+        write(root, path, "question: 从未发布\n");
+        assertEquals(before + 1, service.summary("alice", "g1").changes());
+        write(root, path, "question: 从未发布\narchived: true\n");
+        assertEquals(before, service.summary("alice", "g1").changes());
+        assertTrue(
+                service.review("alice", "g1").changes().stream()
+                        .noneMatch(change -> change.path().equals(path)));
+        service.discard("alice", "g1");
+        assertTrue(Files.isRegularFile(root.resolve(path)));
+    }
+
+    @Test
+    void archivedPublishedExampleIsRemovedByPublishAndCanBeDiscarded() throws Exception {
+        String question = "knowledge/questions/published-example.yml";
+        String example = "knowledge/sql/published-example.md";
+        write(published, question, "question: 已发布\n");
+        write(published, example, "---\nverified: true\n---\n");
+        write(root, question, "question: 已发布\narchived: true\n");
+        var changes = service.review("alice", "g1").changes();
+        assertTrue(
+                changes.stream()
+                        .anyMatch(
+                                change ->
+                                        change.path().equals(example)
+                                                && change.kind().equals("REMOVED")));
+        assertTrue(Files.exists(published.resolve(example)));
+
+        service.discard("alice", "g1");
+        assertEquals("question: 已发布\n", Files.readString(root.resolve(question)));
+        assertEquals(
+                Files.readString(published.resolve(example)),
+                Files.readString(root.resolve(example)));
+    }
+
     private static void write(Path base, String path, String content) throws IOException {
         Path file = base.resolve(path);
         Files.createDirectories(file.getParent());
@@ -124,6 +162,35 @@ class DraftReviewServiceTest {
         var review = service.discard("alice", "g1");
         assertTrue(review.changes().isEmpty());
         assertTrue(DraftChangeLog.read(root).isEmpty());
+    }
+
+    @Test
+    void revertingLastViewFileRemovesOnlyItsEmptyDirectory() throws Exception {
+        String view = "views/new_view";
+        write(root, view + "/metadata.yml", "name: new_view\n");
+        write(root, view + "/sql.yml", "statement: SELECT 1\n");
+        write(root, "views/other_view/metadata.yml", "name: other_view\n");
+
+        service.revert("alice", "g1", view + "/sql.yml");
+        assertTrue(Files.exists(root.resolve(view + "/metadata.yml")));
+
+        service.revert("alice", "g1", view + "/metadata.yml");
+        assertFalse(Files.exists(root.resolve(view)));
+        assertTrue(Files.isRegularFile(root.resolve("views/other_view/metadata.yml")));
+    }
+
+    @Test
+    void discardingDraftRemovesDraftOnlyViewAndRestoresPublishedView() throws Exception {
+        String publishedView = "views/known_view/metadata.yml";
+        write(published, publishedView, "name: known_view\n");
+        write(root, "views/new_view/metadata.yml", "name: new_view\n");
+        write(root, "views/new_view/sql.yml", "statement: SELECT 1\n");
+        write(root, "views/known_view/sql.yml", "statement: SELECT 2\n");
+
+        assertTrue(service.discard("alice", "g1").changes().isEmpty());
+        assertFalse(Files.exists(root.resolve("views/new_view")));
+        assertFalse(Files.exists(root.resolve("views/known_view/sql.yml")));
+        assertEquals("name: known_view\n", Files.readString(root.resolve(publishedView)));
     }
 
     @Test

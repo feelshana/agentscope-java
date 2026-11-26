@@ -75,6 +75,8 @@ public final class ModelingConfirmationTool {
                     && !io.agentscope.dataagent.dataset.ModelingTurnPurpose.CALIBER.equals(
                             declared))
                 return "error: 口径问数知识库只在起草口径清单的轮次提问，本轮不提问；口径、指标、范围的待定项由起草口径清单轮次处理，其余不确定之处在最终回复中说明。";
+            if (project.questionId() != null)
+                return "error: 本轮只处理选中的问题。请在回复中询问需要知道的单题口径；如果要补共享规则，请提议方案。";
             List<String> labels = withoutPageOptions(optionLabels, optionRules);
             boolean relationship =
                     "relationship".equalsIgnoreCase(topic == null ? "" : topic.trim());

@@ -1,29 +1,96 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { MdlPreview } from '../../api/semanticModeling';
-import Icon from '../Icon';
+import { diffLines } from '../../utils/diff';
 import ReadableCode from '../ReadableCode';
+import EngineeringDirectory from './EngineeringDirectory';
+import type { EngineeringVersion } from './EngineeringDialog';
+import Icon from '../Icon';
 
-const fileOrder = (path: string) => path.endsWith('/.gitkeep') ? 9 : path.startsWith('models/') ? 0 : path === 'relationships.yml' ? 1 : path.startsWith('views/') ? 2 : path.startsWith('cubes/') ? 3 : 4;
+const order = (path: string) => path.startsWith('models/') ? 0 : path === 'relationships.yml' ? 1 : path.startsWith('views/') ? 2 : path.startsWith('cubes/') ? 3 : 4;
+export const fileLanguage = (path: string) => path.endsWith('.sql') ? 'sql' : path.endsWith('.json') ? 'json' : /\.ya?ml$/.test(path) ? 'yaml' : 'text';
+const visible = (path: string) => !path.endsWith('/.gitkeep') && (/^(models|views|cubes|knowledge)\//.test(path) || path === 'relationships.yml');
+type EngineeringFile = { draft?: string; published?: string; status: 'added' | 'removed' | 'modified' | 'unchanged' };
+const labels = { added: '新增', removed: '删除', modified: '修改', unchanged: '无改动' };
 
-export default function ModelSnapshotPanel({ preview }: { preview: MdlPreview | null }) {
-  const [version, setVersion] = useState<'draft' | 'published'>('draft');
-  const [selected, setSelected] = useState('');
-  const files = ((version === 'draft' ? preview?.files : preview?.publishedFiles) ?? [])
-    .filter(f => /^(models|views|cubes|knowledge)\//.test(f.path) || f.path === 'relationships.yml')
-    .sort((a, b) => fileOrder(a.path) - fileOrder(b.path) || a.path.localeCompare(b.path, 'zh-CN'));
-  const file = files.find(f => f.path === selected)
-    ?? files.find(f => f.path.startsWith('models/') && f.path.endsWith('metadata.yml')) ?? files[0];
-  const previous = preview?.publishedFiles.find(f => f.path === file?.path);
-  return <section className="am-section">
-    <header className="am-section-head"><div><h3>工程定义与发布快照</h3><p>草稿用于建模验证，已发布版本用于问数。这里仅查看工程原文。</p></div>
-    <label className="am-version">工程版本<select className="da-input" aria-label="工程版本" value={version} onChange={e => setVersion(e.target.value as 'draft' | 'published')}>
-      <option value="draft">当前草稿</option><option value="published">已发布 v{preview?.mdlVersion ?? 0}</option>
-    </select></label></header>
-    {!files.length ? <p className="am-empty" role="status">{preview ? version === 'published' && !preview.mdlVersion ? '还没有已发布的工程快照。' : '暂无工程文件。' : '正在读取工程文件…'}</p> : <div className="am-browser"><nav className="am-file-list" aria-label="工程文件"><div className="am-list-caption">{files.length} 个文件</div>{files.map(f => <button type="button" key={f.path} aria-current={file?.path === f.path ? 'true' : undefined} title={f.path} onClick={() => setSelected(f.path)}><Icon name="file" size="sm" /><span><strong>{f.path.split('/').slice(-1)[0]}</strong><small>{f.path.split('/').slice(0, -1).join('/') || '工程根目录'}</small></span></button>)}</nav><div className="am-viewer">
-      {file && <><ReadableCode key={`${version}:${file.path}`} text={file.content} language={file.path.endsWith('.sql') ? 'sql' : file.path.endsWith('.json') ? 'json' : 'yaml'} title={file.path} />
-      {version === 'draft' && previous?.content !== file.content && <details className="am-compare"><summary><Icon name="code" size="sm" /><strong>查看已发布定义</strong><span>此文件有草稿差异</span><Icon name="chevron" size="sm" /></summary>
-        {previous ? <ReadableCode text={previous.content} title={previous.path} language={previous.path.endsWith('.sql') ? 'sql' : previous.path.endsWith('.json') ? 'json' : 'yaml'} /> : <p className="am-empty">此文件尚未发布。</p>}
-      </details>}</>}
-    </div></div>}
+export function engineeringFiles(preview: MdlPreview | null): Map<string, EngineeringFile> {
+  const draft = new Map(preview?.files.map(file => [file.path, file.content]));
+  const published = new Map(preview?.publishedFiles.map(file => [file.path, file.content]));
+  return new Map([...new Set([...draft.keys(), ...published.keys()])].filter(visible)
+    .sort((a, b) => order(a) - order(b) || a.localeCompare(b, 'zh-CN'))
+    .map(path => {
+      const next = draft.get(path);
+      const old = published.get(path);
+      return [path, { draft: next, published: old,
+        status: next === old ? 'unchanged' : old === undefined ? 'added' : next === undefined ? 'removed' : 'modified' }];
+    }));
+}
+
+function ComparisonCode({ text, title, changed, type }: { text?: string; title: string; changed: ReadonlySet<number>; type: 'add' | 'del' }) {
+  const lines = text?.split('\n') ?? [];
+  return <section className="eng-document" aria-label={title}>
+    <h3>{title}</h3>
+    {text === undefined ? <p className="am-empty">这个版本没有此文件。</p>
+      : <div className="rc-scroll" tabIndex={0} role="region" aria-label={title + '代码，可滚动'}>
+        <div className="rc-code"><pre className="rc-gutter" aria-hidden="true">{lines.map((_, i) => i + 1).join('\n')}</pre>
+          <pre className="rc-pre"><code>{lines.map((line, index) => <span key={index} data-diff={changed.has(index) ? type : undefined}>{line}</span>)}</code></pre></div>
+      </div>}
   </section>;
+}
+
+export default function ModelSnapshotPanel({ files, loading, version, compare, onlyChanged, initialPath, initialDirectory, publishedLabel, onSelect }: {
+  files: ReadonlyMap<string, EngineeringFile>; loading: boolean; version: EngineeringVersion; compare: boolean; onlyChanged: boolean;
+  initialPath?: string; initialDirectory?: string; publishedLabel: string; onSelect: (path: string) => void;
+}) {
+  const [copyState, setCopyState] = useState<{ path: string; message: string }>();
+  const paths = [...files].filter(([, file]) => (!onlyChanged || file.status !== 'unchanged')
+    && (compare || onlyChanged || file[version] !== undefined)).map(([path]) => path);
+  const path = (initialPath && paths.includes(initialPath) ? initialPath : undefined)
+    ?? paths.find(candidate => candidate.startsWith(initialDirectory ?? 'models/') && candidate.endsWith('/metadata.yml')) ?? paths[0];
+  const file = path ? files.get(path) : undefined;
+  const status = new Map(paths.flatMap(path => {
+    const type = compare || version === 'draft' || onlyChanged ? files.get(path)?.status : undefined;
+    return type && type !== 'unchanged' ? [[path, labels[type]] as const] : [];
+  }));
+  const changes = useMemo(() => {
+    const oldChanged = new Set<number>(), newChanged = new Set<number>();
+    if (!compare || !file || file.status === 'unchanged') return { oldChanged, newChanged };
+    const old = file.published ?? '', next = file.draft ?? '';
+    const left = old.split('\n'), right = next.split('\n');
+    if (left.length * right.length > 1_000_000) {
+      left.forEach((line, index) => { if (line !== right[index]) oldChanged.add(index); });
+      right.forEach((line, index) => { if (line !== left[index]) newChanged.add(index); });
+    } else {
+      let a = 0, b = 0;
+      for (const line of diffLines(old, next)) {
+        if (line.type === 'del') oldChanged.add(a++);
+        else if (line.type === 'add') newChanged.add(b++);
+        else { a++; b++; }
+      }
+    }
+    return { oldChanged, newChanged };
+  }, [compare, file]);
+  const versionText = compare ? publishedLabel + '与当前草稿' : version === 'draft' ? '当前草稿' : publishedLabel;
+  const badge = path && status.get(path) && <span className="eng-status">{status.get(path)}</span>;
+
+  return <div className="eng-browser">
+    <EngineeringDirectory paths={paths} current={path} onSelect={onSelect} statuses={status} />
+    <section className="eng-document" aria-label={versionText}>
+      {loading ? <p className="am-empty" role="status">正在读取工程文件…</p> : !path || !file
+        ? <p className="am-empty">{onlyChanged ? '没有改动的工程文件。' : '当前版本暂无工程文件。'}</p>
+        : compare ? <>
+          <div className="eng-filebar"><strong title={path}>{path}</strong>{badge}
+            <button className="da-btn da-btn-sm eng-copy" type="button" disabled={file.draft === undefined && file.published === undefined}
+              aria-label="复制工程文件" onClick={async () => {
+                try { await navigator.clipboard.writeText(file.draft ?? file.published ?? ''); setCopyState({ path, message: '已复制' }); }
+                catch { setCopyState({ path, message: '复制失败' }); }
+              }}><Icon name="copy" size="sm" /></button>{copyState?.path === path && <small role="status">{copyState.message}</small>}</div>
+          <div className="eng-compare">
+            <ComparisonCode text={file.published} title={publishedLabel} changed={changes.oldChanged} type="del" />
+            <ComparisonCode text={file.draft} title="当前草稿" changed={changes.newChanged} type="add" />
+          </div>
+        </> : file[version] !== undefined ? <ReadableCode key={version + ':' + path} fill language={fileLanguage(path)} text={file[version] ?? ''} title={path}
+          header={<><strong title={path}>{path}</strong>{badge}</>} />
+        : <div className="eng-filebar"><strong title={path}>{path}</strong>{badge}<span>这个版本没有此文件。</span></div>}
+    </section>
+  </div>;
 }

@@ -170,6 +170,26 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                 : COACH_WRITES_QUESTIONS_ONLY;
     }
 
+    private static String questionTextGuard(Project project, String original, String next) {
+        if (project.questionId() == null) return null;
+        try {
+            var yaml =
+                    new com.fasterxml.jackson.databind.ObjectMapper(
+                            new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+            var content = yaml.readTree(next);
+            if (content == null
+                    || !content.path("question").isTextual()
+                    || content.path("question").asText().isBlank()) return "问数优化题目须包含原问题文本";
+            if (original == null) return null;
+            var previous = yaml.readTree(original);
+            if (previous != null && previous.path("question").equals(content.path("question")))
+                return null;
+            return "请保留原问题文本，修改这道题的业务口径和 SQL";
+        } catch (java.io.IOException e) {
+            return "无法核对原问题文本，请检查问题 YAML";
+        }
+    }
+
     /**
      * spec114: the meaning comes before the SQL. The card withdraws a guessed SQL, but the
      * assistant wrote it back in the same turn (2026-11-03), so a linked question keeps an empty
@@ -351,6 +371,8 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                         if (refused == null)
                             refused =
                                     caliberGuard(context, p, relative, readQuietly(file), content);
+                        if (refused == null && p.questionId() != null)
+                            refused = questionTextGuard(p, readQuietly(file), content);
                         if (refused != null) return WriteResult.fail(refused);
                         WriteResult result;
                         if (Files.isRegularFile(file)) {
@@ -403,6 +425,7 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                             invalid = modelColumnGuard(p.root(), relative, original, edited);
                         if (invalid == null)
                             invalid = caliberGuard(context, p, relative, original, edited);
+                        if (invalid == null) invalid = questionTextGuard(p, original, edited);
                         if (invalid != null) {
                             // Restore the previous bytes so a broken edit never lands on disk.
                             try {
@@ -578,6 +601,7 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
     public WriteResult delete(RuntimeContext c, String path) {
         try {
             Project p = access.resolve(c);
+            if (p.questionId() != null) return WriteResult.fail("本轮用于修正问题，不能删除题目");
             return access.locked(
                     p,
                     () -> {

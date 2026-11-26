@@ -1009,6 +1009,40 @@ class OfficialWrenToolkitTest {
 
     /** spec114 §8: the coach reads existing query templates to judge reuse but never writes. */
     @Test
+    void scopedCoachCanReviseOnlySelectedQuestionWithoutRenamingOrDeletingIt() throws Exception {
+        var purpose =
+                io.agentscope.dataagent.dataset.ModelingTurnPurpose.request("coach", "q-coach-1");
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(purpose);
+        String path = "knowledge/questions/q-coach-1.yml";
+        String original = "question: 净销售额\ndefinition: 排除已取消\nsql: SELECT 1\n";
+        assertThat(files.write(alice, path, original).isSuccess()).isTrue();
+        assertThat(files.write(alice, "knowledge/questions/q-coach-2.yml", original).isSuccess())
+                .isFalse();
+        assertThat(files.write(alice, "knowledge/rules/general.md", "# shared\n").isSuccess())
+                .isFalse();
+        assertThat(files.write(alice, path, original.replace("净销售额", "总销售额")).error())
+                .contains("保留原问题");
+        assertThat(files.edit(alice, path, "净销售额", "总销售额", false).isSuccess()).isFalse();
+        assertThat(files.delete(alice, path).isSuccess()).isFalse();
+        assertThat(files.edit(alice, path, "SELECT 1", "SELECT 2", false).isSuccess()).isTrue();
+        assertThat(Files.readString(access.resolve(alice).root().resolve(path)))
+                .contains("净销售额", "SELECT 2");
+        assertThat(purpose.proposalQuestions(List.of("q-coach-2"))).containsExactly("q-coach-1");
+        assertThatThrownBy(
+                        () ->
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.request(
+                                        "question", "q-coach-1"))
+                .isInstanceOf(DatasetException.class);
+        assertThatThrownBy(
+                        () ->
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.request(
+                                        "coach", "q-coach-../other"))
+                .isInstanceOf(DatasetException.class);
+    }
+
+    /** spec114 §8: the coach reads existing query templates to judge reuse but never writes. */
+    @Test
     void coachTurnReadsViewsButCannotWriteThem() throws Exception {
         var root = access.resolve(alice).root();
         Files.createDirectories(root.resolve("views/sales"));

@@ -166,17 +166,18 @@ export function roleOf(model: SemanticModel, column: SemanticColumn, relations: 
 
 // ------------------------------------------------------------------ spec117 overview and focus
 
-export const NODE_W = 228;
-export const NODE_H = 64;
+export const NODE_W = 206;
+export const NODE_H = 116;
+export const OVERVIEW_PAD = PAD;
 const NODE_GAP_X = 132;
-const NODE_GAP_Y = 28;
+export const NODE_GAP_Y = 28;
 
 export interface OverviewNode { model: SemanticModel; x: number; y: number }
 export interface OverviewEdge { key: string; relation: SemanticRelation; path: string; mid: { x: number; y: number }; from: { x: number; y: number }; to: { x: number; y: number } }
 export interface Overview { nodes: OverviewNode[]; edges: OverviewEdge[]; width: number; height: number }
 
 /** 全图: models as compact nodes (fields stay folded), many side left of the one side. */
-export function layoutOverview(snapshot: SemanticSnapshot, moved: Positions): Overview {
+export function layoutOverview(snapshot: SemanticSnapshot, moved: Positions, looseColumns = 3): Overview {
   const related = new Set(snapshot.relations.flatMap(r => [r.left, r.right]));
   const level = levels(snapshot);
   const columns: SemanticModel[][] = [];
@@ -185,7 +186,14 @@ export function layoutOverview(snapshot: SemanticSnapshot, moved: Positions): Ov
   for (let i = 0; i < loose.length; i += 6) columns.push(loose.slice(i, i + 6));
   const tallest = Math.max(1, ...columns.map(c => (c ?? []).length));
   const nodes: OverviewNode[] = [];
-  columns.forEach((list, index) => {
+  if (related.size === 0) {
+    const perRow = Math.max(1, Math.min(looseColumns, Math.ceil(Math.sqrt(loose.length))));
+    loose.forEach((model, index) => nodes.push({
+      model,
+      x: PAD + (index % perRow) * (NODE_W + NODE_GAP_Y),
+      y: PAD + Math.floor(index / perRow) * (NODE_H + NODE_GAP_Y),
+    }));
+  } else columns.forEach((list, index) => {
     const items = list ?? [];
     // Shorter columns are centred against the tallest one.
     const offset = ((tallest - items.length) * (NODE_H + NODE_GAP_Y)) / 2;

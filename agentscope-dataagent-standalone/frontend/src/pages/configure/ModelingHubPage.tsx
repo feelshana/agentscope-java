@@ -75,13 +75,14 @@ export default function ModelingHubPage() {
   const rows = data?.items.filter(group => !group.deletionPending);
   const currentSummaries = summaries?.data === data ? summaries : null;
   const pages = Math.ceil((data?.total ?? 0) / PAGE_SIZE);
-  const open = (group: DatasetGroup) => navigate(`/configure/modeling/${group.id}`);
+  const open = (group: DatasetGroup, mode = group.canManage ? 'chat' : 'board') =>
+    navigate(`/configure/modeling/${encodeURIComponent(group.id)}?mode=${mode}`);
 
   return <div className="kw-page workspace-overview modeling-hub">
-    <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '语义建模' }]} />
+    <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '语义模型' }]} />
     <div className="kw-scroll"><div className="kw-content">
       <div className="kw-pagehead">
-        <div className="kw-heading"><h1>语义建模</h1><p>梳理字段含义、模型关系与业务口径。问数使用已发布的版本。</p></div>
+        <div className="kw-heading"><h1>语义模型</h1><p>梳理字段含义、模型关系与业务口径。问数使用已发布的版本。</p></div>
       </div>
       {(failure || currentSummaries?.failed) && <div className="kw-alert" role="alert">
         {failure ?? '建模摘要暂时无法读取。'} <button type="button" className="da-btn da-btn-sm" onClick={() => setRetry(n => n + 1)}>重试</button>
@@ -109,7 +110,7 @@ export default function ModelingHubPage() {
         </tr>) : rows.map(group => {
           const summary = currentSummaries?.items.get(group.id);
           const s = status(group, summary, !currentSummaries);
-          return <tr key={group.id} tabIndex={0} aria-label={`打开${group.name}的语义建模`} onClick={() => open(group)}
+          return <tr key={group.id} tabIndex={0} aria-label={`打开${group.name}的语义模型`} onClick={() => open(group)}
             onKeyDown={e => { if (e.key === 'Enter' && e.target === e.currentTarget) open(group); }}>
             <td><div className="mh-name"><span className="overview-icon mh-icon"><Icon name="model" size="sm" /></span>
               <span className="mh-name-copy"><strong title={group.name}>{group.name}</strong>
@@ -120,12 +121,11 @@ export default function ModelingHubPage() {
             <td className="numeric">{summary?.published?.relations ?? '—'}</td>
             <td>{summary?.published?.unrelated ? <span className="mh-attention">{summary.published.unrelated} 个模型未关联</span> : '—'}</td>
             <td>{group.createdAt ? <time dateTime={group.createdAt}>{new Date(group.createdAt).toLocaleDateString('zh-CN')}</time> : '—'}</td>
-            <td className="end">
-              <button type="button" className={`da-btn overview-action${group.canManage ? ' is-soft' : ''}`}
-                onClick={e => { e.stopPropagation(); open(group); }}>
-                {group.canManage ? '进入建模' : '查看模型'}<Icon name="chevron" size="sm" />
-              </button>
-            </td>
+            <td className="end"><div className="mh-row-actions">
+              <button type="button" className="da-btn overview-action" onClick={e => { e.stopPropagation(); open(group, 'board'); }}>查看模型</button>
+              {group.canManage && <button type="button" className="da-btn overview-action is-soft"
+                onClick={e => { e.stopPropagation(); open(group, 'chat'); }}>对话建模<Icon name="chevron" size="sm" /></button>}
+            </div></td>
           </tr>;
         })}</tbody></table></div>
       </>}

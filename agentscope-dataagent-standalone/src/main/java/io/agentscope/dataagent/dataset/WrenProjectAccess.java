@@ -84,7 +84,32 @@ public final class WrenProjectAccess {
             // edit an existing caliber list.
             boolean chatTurn,
             // spec149 P7-2 (ADR0156): a caliber knowledge base; only it uses caliber lists.
-            boolean caliberKb) {
+            boolean caliberKb,
+            // The one coach question a scoped turn may change (liyufan_dev).
+            String questionId) {
+        public Project(
+                String ownerId,
+                String groupId,
+                String name,
+                Path root,
+                boolean assetTurn,
+                boolean coachTurn,
+                boolean caliberTurn,
+                boolean chatTurn,
+                boolean caliberKb) {
+            this(
+                    ownerId,
+                    groupId,
+                    name,
+                    root,
+                    assetTurn,
+                    coachTurn,
+                    caliberTurn,
+                    chatTurn,
+                    caliberKb,
+                    null);
+        }
+
         public Project(
                 String ownerId,
                 String groupId,
@@ -106,6 +131,27 @@ public final class WrenProjectAccess {
                 boolean coachTurn,
                 boolean caliberTurn) {
             this(ownerId, groupId, name, root, assetTurn, coachTurn, caliberTurn, false);
+        }
+
+        public Project(
+                String ownerId,
+                String groupId,
+                String name,
+                Path root,
+                boolean assetTurn,
+                boolean coachTurn,
+                String questionId) {
+            this(
+                    ownerId,
+                    groupId,
+                    name,
+                    root,
+                    assetTurn,
+                    coachTurn,
+                    false,
+                    false,
+                    false,
+                    questionId);
         }
 
         public Project(String ownerId, String groupId, String name, Path root) {
@@ -163,7 +209,8 @@ public final class WrenProjectAccess {
                 !chat && purpose.coach(),
                 !chat && purpose.caliber(),
                 userWords,
-                project.caliberKb());
+                project.caliberKb(),
+                chat ? null : purpose.questionId());
     }
 
     public Project resolve(String owner, String group) {
@@ -268,6 +315,10 @@ public final class WrenProjectAccess {
                         "口径问数知识库不写业务规则、术语和表间关系：口径、指标、统计范围和使用场景都只写在 calibers/"
                                 + " 的口径清单里（只能在起草口径清单、用户对话或写入用户确定的轮次修改），平台据此生成选表规则；列含义写在模型列描述。",
                         403);
+            }
+            if (project.questionId() != null
+                    && !relative.equals("knowledge/questions/" + project.questionId() + ".yml")) {
+                throw new DatasetException("本轮只可修改选中的问数优化题目，需要更新共享口径时请先提议方案", 403);
             }
             // spec090: Q&A pairs are written by MdlQuestionStore#decide after user confirmation
             // only.

@@ -7,7 +7,7 @@ export type AssociationState = { tables: AssociationStep[]; phase: 'sampling' | 
  * Progress of associating external tables: each table is read and sampled in its own request,
  * then the base model is generated once, so the bar reflects real work rather than a timer.
  */
-export default function AssociationProgress({ state }: { state: AssociationState }) {
+export default function AssociationProgress({ state, stayOnPage = false }: { state: AssociationState; stayOnPage?: boolean }) {
   const [now, setNow] = useState(Date.now());
   const [startedAt] = useState(Date.now());
   useEffect(() => {
@@ -22,7 +22,7 @@ export default function AssociationProgress({ state }: { state: AssociationState
   const current = state.tables.find(t => t.status === 'sampling');
   const failed = state.tables.filter(t => t.status === 'failed').length;
   const title = state.phase === 'publishing' ? '正在生成基础语义模型…'
-    : state.phase === 'done' ? (failed ? `关联完成，${failed} 张表失败` : '关联完成，即将进入语义建模')
+    : state.phase === 'done' ? (failed ? `关联完成，${failed} 张表失败` : stayOnPage ? '关联完成' : '关联完成，即将进入语义模型')
     : current ? `正在读取并采样 ${current.name}（${state.tables.indexOf(current) + 1}/${state.tables.length}）` : '准备中…';
   const seconds = Math.round((now - startedAt) / 1000);
 

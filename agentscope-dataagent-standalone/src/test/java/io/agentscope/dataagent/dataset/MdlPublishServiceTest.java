@@ -639,6 +639,32 @@ class MdlPublishServiceTest {
     // ------------------------------------------------------------------ failure handling
 
     @Test
+    void emptyViewDoesNotBlockPublishingButSqlWithoutMetadataDoes() throws IOException {
+        registerGroup("g1");
+        registerDataset("o1", "g1", "orders", new String[][] {{"id", "bigint", "订单ID"}});
+        Files.createDirectories(ws.resolve("views/empty_view"));
+        assertTrue(service.validate("g1").ok());
+        assertTrue(service.publish("g1").ok());
+        assertFalse(Files.exists(groupRoot.resolve("published/views/empty_view")));
+
+        write("views/incomplete_view/sql.yml", "statement: SELECT id FROM orders\n");
+        var validation = service.validate("g1");
+        assertFalse(validation.ok());
+        assertTrue(
+                validation.issues().stream()
+                        .anyMatch(issue -> "incomplete_view".equals(issue.incompleteView())));
+        var failed = service.publish("g1");
+        assertFalse(failed.ok());
+        assertTrue(
+                failed.issues().stream()
+                        .anyMatch(issue -> "incomplete_view".equals(issue.incompleteView())));
+        assertEquals(1, failed.mdlVersion());
+
+        Files.delete(ws.resolve("views/incomplete_view/sql.yml"));
+        assertTrue(service.publish("g1").ok());
+    }
+
+    @Test
     void cubeDryRunFailureFailsFirstPublish() throws IOException {
         registerGroup("g1");
         registerDataset(

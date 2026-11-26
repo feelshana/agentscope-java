@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
 import './global.css';
 import './workspace-overview.css';
@@ -27,8 +27,7 @@ import ToolsPage from './pages/configure/ToolsPage';
 import DatasetsPage from './pages/configure/DatasetsPage';
 import DataSourcesPage from './pages/configure/DataSourcesPage';
 import DatasetGroupPage from './pages/configure/DatasetGroupPage';
-import DatasetDetailPage from './pages/configure/DatasetDetailPage';
-import SemanticModelingPage from './pages/configure/SemanticModelingPage';
+import { modelingPath } from './pages/configure/knowledgeWorkspaceRoutes';
 import ModelingHubPage from './pages/configure/ModelingHubPage';
 import SemanticConfigPage from './pages/configure/SemanticConfigPage';
 import ScheduledTasksPage from './pages/configure/ScheduledTasksPage';
@@ -63,6 +62,12 @@ const dashboardPage = <React.Suspense fallback={<div role="status" style={{ padd
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   return <SessionGate>{children}</SessionGate>;
+}
+
+function LegacyModelingRoute() {
+  const { groupId = '' } = useParams();
+  const { search, hash, state } = useLocation();
+  return <Navigate replace to={{ pathname: modelingPath(groupId), search, hash }} state={state} />;
 }
 
 function AdminRoute({ children }: { children: React.ReactElement }) {
@@ -101,16 +106,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           {/* Datasets are per-user data, not agent config — no EDIT-tier gate. */}
           <Route path="/configure/datasets"  element={<DatasetsPage />} />
           <Route path="/configure/datasources" element={<DataSourcesPage />} />
-          <Route path="/configure/datasets/:groupId" element={<DatasetGroupPage />} />
+          <Route path="/configure/datasets/:groupId" element={<DatasetGroupPage />}>
+            <Route path="table/:datasetId" element={null} />
+            <Route path="modeling" element={null} />
+          </Route>
           {/* Modeling hub and per-knowledge-base workbench. */}
           <Route path="/configure/modeling" element={<ModelingHubPage />} />
-          <Route path="/configure/modeling/:groupId" element={<SemanticModelingPage />} />
+          <Route path="/configure/modeling/:groupId" element={<LegacyModelingRoute />} />
           <Route path="/configure/semantic"  element={<SemanticConfigPage />} />
           <Route path="/configure/scheduled-tasks"  element={<ScheduledTasksPage />} />
-          <Route
-            path="/configure/datasets/:groupId/table/:datasetId"
-            element={<DatasetDetailPage />}
-          />
           <Route path="/configure/settings"  element={<EditTierGate><SettingsPage /></EditTierGate>} />
 
           {/* User utility pages */}

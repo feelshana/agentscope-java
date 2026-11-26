@@ -20,7 +20,9 @@ function tokens(value: string | Prism.Token | (string | Prism.Token)[]): ReactNo
   return <span style={{ color }}>{tokens(value.content)}</span>;
 }
 
-export default function ReadableCode({ text, language = 'yaml', title = '完整内容' }: { text: string; language?: 'yaml' | 'sql' | 'json'; title?: string }) {
+export default function ReadableCode({ text, language = 'yaml', title = '完整内容', fill = false, fitHeight = false, header, actions }: {
+  text: string; language?: 'yaml' | 'sql' | 'json' | 'text'; title?: string; fill?: boolean; fitHeight?: boolean; header?: ReactNode; actions?: ReactNode;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const id = useId();
   const [raw, setRaw] = useState(false);
@@ -32,11 +34,23 @@ export default function ReadableCode({ text, language = 'yaml', title = '完整�
     return () => { active = false; };
   }, [text, language]);
   const display = !raw && language === 'sql' && formatted.source === text ? formatted.content : text;
-  const rendered = useMemo(() => tokens(Prism.tokenize(display, Prism.languages[language])), [display, language]);
+  const rendered = useMemo(() => language === 'text' ? display : tokens(Prism.tokenize(display, Prism.languages[language])), [display, language]);
   const lines = useMemo(() => display.split('\n').map((_, index) => index + 1).join('\n'), [display]);
   const code = <div className="rc-scroll" tabIndex={0} role="region" aria-label={`${title}代码，可滚动`}><div className="rc-code"><pre className="rc-gutter" aria-hidden="true">{lines}</pre><pre className="rc-pre"><code>{rendered}</code></pre></div></div>;
   const modes = language === 'sql' && <><button type="button" aria-pressed={!raw} onClick={() => setRaw(false)}>排版</button><button type="button" aria-pressed={raw} onClick={() => setRaw(true)}>原文</button></>;
-  return <section className="rc" aria-label={title}><div className="rc-head"><strong>{title}</strong><span className="rc-copy-status" aria-live="polite">{copyStatus}</span><div className="rc-actions">{modes}<button type="button" title={language === 'sql' ? '复制原始内容，保留原始 SQL' : '复制原始内容，保留原文格式'} onClick={() => { void navigator.clipboard.writeText(text).then(() => setCopyStatus('已复制')).catch(() => setCopyStatus('复制失败，请选中文本复制')); }} aria-label="复制原始内容"><Icon name="copy" size="sm" /></button><button type="button" onClick={() => dialog.current?.showModal()}><Icon name="fit" size="sm" />放大阅读</button></div></div>{code}
-    <dialog ref={dialog} className="rc-dialog" aria-labelledby={`${id}-title`}><div className="rc-head"><strong id={`${id}-title`}>{title}</strong><div className="rc-actions">{modes}<button type="button" onClick={() => dialog.current?.close()}><Icon name="close" size="sm" />关闭</button></div></div>{code}</dialog>
+  return <section className={fill ? 'rc rc-fill' : fitHeight ? 'rc rc-fit-height' : 'rc'} aria-label={title}>
+    <div className="rc-head">
+      {header ?? <strong title={title}>{title}</strong>}
+      <span className="rc-copy-status" aria-live="polite">{copyStatus}</span>
+      <div className="rc-actions">
+        {actions}{modes}
+        <button type="button" title={language === 'sql' ? '复制原始内容，保留原始 SQL' : '复制原始内容，保留原文格式'}
+          onClick={() => { void navigator.clipboard.writeText(text).then(() => setCopyStatus('已复制')).catch(() => setCopyStatus('复制失败，请选中文本复制')); }}
+          aria-label="复制原始内容"><Icon name="copy" size="sm" /></button>
+        {!fill && <button type="button" onClick={() => dialog.current?.showModal()}><Icon name="fit" size="sm" />放大阅读</button>}
+      </div>
+    </div>
+    {code}
+    {!fill && <dialog ref={dialog} className="rc-dialog" aria-labelledby={`${id}-title`}><div className="rc-head"><strong id={`${id}-title`}>{title}</strong><div className="rc-actions">{modes}<button type="button" onClick={() => dialog.current?.close()}><Icon name="close" size="sm" />关闭</button></div></div>{code}</dialog>}
   </section>;
 }

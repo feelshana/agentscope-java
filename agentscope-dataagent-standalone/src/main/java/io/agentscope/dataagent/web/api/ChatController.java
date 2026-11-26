@@ -187,7 +187,29 @@ public class ChatController {
             String purpose,
             String analysis,
             Map<String, Object> analysisParams,
-            Boolean webSearch) {
+            Boolean webSearch,
+            String modelingQuestionId) {
+        public ChatRequest(
+                String message,
+                String sessionKey,
+                List<String> groupIds,
+                Boolean allGroups,
+                String purpose,
+                String analysis,
+                Map<String, Object> analysisParams,
+                Boolean webSearch) {
+            this(
+                    message,
+                    sessionKey,
+                    groupIds,
+                    allGroups,
+                    purpose,
+                    analysis,
+                    analysisParams,
+                    webSearch,
+                    null);
+        }
+
         public ChatRequest(
                 String message,
                 String sessionKey,
@@ -364,7 +386,8 @@ public class ChatController {
                         req.purpose(),
                         req.analysis(),
                         req.analysisParams(),
-                        req.webSearch());
+                        req.webSearch(),
+                        req.modelingQuestionId());
         Flux<ServerSentEvent<String>> execution =
                 ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)
                         ? Flux.defer(() -> streamAdmitted(agentId, normalized, auth))
@@ -388,7 +411,6 @@ public class ChatController {
         return Flux.defer(
                         () -> {
                             guard.require((String) auth.getPrincipal(), agentId, Tier.RUN);
-                            // Read by buildInbound for this turn and any confirmation resume.
                             if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
                                 String purpose =
                                         io.agentscope.dataagent.dataset.ModelingTurnPurpose
@@ -399,8 +421,6 @@ public class ChatController {
                                         && fieldScreening != null
                                         && req.groupIds() != null)
                                     req.groupIds().forEach(fieldScreening::requireConfirmed);
-                                conversationScopes.putModelingPurpose(
-                                        (String) auth.getPrincipal(), purposeConversation, purpose);
                                 return trackModeling(req.groupIds(), execution);
                             }
                             // spec102: every query request replaces the analysis choice, so it
@@ -429,6 +449,11 @@ public class ChatController {
     private Flux<ServerSentEvent<String>> streamAdmitted(
             String agentId, ChatRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
+        var modelingTurn =
+                ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)
+                        ? io.agentscope.dataagent.dataset.ModelingTurnPurpose.request(
+                                req.purpose(), req.modelingQuestionId())
+                        : null;
         AgentDefinition def = guard.require(userId, agentId, Tier.RUN);
         if (modelProvider.getIfAvailable() == null) {
             return Flux.just(sse("error", Map.of("type", "error", "error", NO_MODEL_MESSAGE)));
@@ -501,9 +526,14 @@ public class ChatController {
                                 })
                         .contextWrite(
                                 ctx ->
-                                        ctx.put(
-                                                WebSearchTool.ALLOWED_CONTEXT_KEY,
-                                                allowsWebSearch(agentId, req)))
+                                        modelingTurn == null
+                                                ? ctx.put(
+                                                        WebSearchTool.ALLOWED_CONTEXT_KEY,
+                                                        allowsWebSearch(agentId, req))
+                                                : ctx.put(
+                                                        io.agentscope.dataagent.dataset
+                                                                .ModelingTurnPurpose.class,
+                                                        modelingTurn))
                         .doFinally(signal -> scopeFrame.tryEmitEmpty())
                         .doOnNext(
                                 event -> {
@@ -790,6 +820,10 @@ public class ChatController {
     @PostMapping("/send")
     public Mono<ChatResponse> send(
             @PathVariable String agentId, @RequestBody ChatRequest req, Authentication auth) {
+        if (req.modelingQuestionId() != null)
+            return Mono.error(
+                    new ResponseStatusException(
+                            org.springframework.http.HttpStatus.BAD_REQUEST, "请在建模对话中处理问数优化题目"));
         String conversation = normalizedConversationId(req.sessionKey());
         if (conversation == null) conversation = UUID.randomUUID().toString();
         ChatRequest normalized =
@@ -1169,74 +1203,9 @@ public class ChatController {
         return List.of(Msg.builder().role(MsgRole.USER).textContent(message).build());
     }
 
-    /**
-     * Builds the {@link InboundMessage} shared by both the synchronous and streaming dispatch
-     * paths. Always routes through {@link ChatUiChannel} so that the {@link
-     * io.agentscope.harness.agent.gateway.channel.ChannelRouter} runs uniformly — including for
-     * the path-mapped Web UI calls. The URL-supplied {@code agentId} is passed as
-     * {@link InboundMessage#preferredAgentId()} so it short-circuits the binding-tier evaluation
-     * (the user explicitly picked this agent) while still letting the router derive sessionScope
-     * and outbound addressing from any matching binding.
-     *
-     * <p>When {@code agentId} is blank (defensive — controller always supplies one), falls back to
-     * pure binding-driven routing: the chatui channel's default agent or matching binding wins.
-     */
-    private InboundMessage buildInbound(
-            String userId,
-            String agentId,
-            String message,
-            String conversationId,
-            java.util.List<String> groupIds,
-            boolean allGroups,
-            String requestId) {
-        return buildInbound(
-                userId,
-                agentId,
-                shapeInboundMessages(message),
-                conversationId,
-                groupIds,
-                allGroups,
-                requestId);
-    }
-
-    private InboundMessage buildInbound(
-            String userId,
-            String agentId,
-            List<Msg> msgs,
-            String conversationId,
-            java.util.List<String> groupIds,
-            boolean allGroups,
-            String requestId) {
-        return buildInbound(
-                userId,
-                agentId,
-                msgs,
-                conversationId,
-                groupIds,
-                allGroups,
-                requestId,
-                ignored -> {});
-    }
-
     private boolean isAllSelection(String userId, String conversationId) {
         var selection = conversationScopes.getSelection(userId, conversationId);
         return selection != null && selection.allGroups();
-    }
-
-    private InboundMessage buildInbound(
-            String userId,
-            String agentId,
-            List<Msg> msgs,
-            String conversationId,
-            List<String> groupIds,
-            boolean allGroups,
-            String requestId,
-            java.util.function.Consumer<
-                            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry
-                                    .Selection>
-                    onAccepted) {
-        return turnPreparation.buildInbound(
-                userId, agentId, msgs, conversationId, groupIds, allGroups, requestId, onAccepted);
     }
 
     /** Resolve UI selection only; the existing per-group context, Wren routing and ACL remain. */
@@ -1266,15 +1235,18 @@ public class ChatController {
 
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return watchKnowledgeBases(
-                        () ->
-                                buildInbound(
+                        context ->
+                                turnPreparation.buildInbound(
                                         userId,
                                         agentId,
-                                        message,
+                                        shapeInboundMessages(message),
                                         conversationId,
                                         groupIds,
                                         allGroups,
-                                        requestId),
+                                        requestId,
+                                        ignored -> {},
+                                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                                null)),
                         inbound -> chatUiChannel.dispatch(inbound).flux())
                 .singleOrEmpty()
                 .doOnSuccess(
@@ -1367,8 +1339,8 @@ public class ChatController {
 
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return watchKnowledgeBases(
-                        () ->
-                                buildInbound(
+                        context ->
+                                turnPreparation.buildInbound(
                                         userId,
                                         agentId,
                                         messages,
@@ -1376,7 +1348,11 @@ public class ChatController {
                                         groupIds,
                                         allGroups,
                                         requestId,
-                                        onAccepted),
+                                        onAccepted,
+                                        context.getOrDefault(
+                                                io.agentscope.dataagent.dataset.ModelingTurnPurpose
+                                                        .class,
+                                                null)),
                         chatUiChannel::dispatchStream)
                 .doOnComplete(
                         () ->
@@ -1392,11 +1368,11 @@ public class ChatController {
     }
 
     private <T> Flux<T> watchKnowledgeBases(
-            java.util.function.Supplier<InboundMessage> input,
+            java.util.function.Function<reactor.util.context.ContextView, InboundMessage> input,
             java.util.function.Function<InboundMessage, Flux<T>> action) {
         return Flux.deferContextual(
                         reactorContext -> {
-                            InboundMessage inbound = input.get();
+                            InboundMessage inbound = input.apply(reactorContext);
                             if (Boolean.TRUE.equals(
                                     reactorContext.getOrDefault(
                                             WebSearchTool.ALLOWED_CONTEXT_KEY, false))) {

@@ -1,12 +1,15 @@
 package io.agentscope.dataagent.web.api;
 
+import io.agentscope.dataagent.dataset.CoachConversationIntentService;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.dataset.MdlQuestionService;
 import io.agentscope.dataagent.dataset.MdlQuestionStore;
+import io.agentscope.dataagent.dataset.RecommendedQuestionService;
 import io.agentscope.dataagent.web.share.AgentAccessGuard;
 import io.agentscope.dataagent.web.share.AgentAclService.Tier;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
@@ -26,28 +30,58 @@ import reactor.core.scheduler.Schedulers;
 public class ModelingQuestionController {
     private final MdlQuestionService service;
     private final AgentAccessGuard guard;
-    private final io.agentscope.dataagent.dataset.RecommendedQuestionService recommended;
+    private final RecommendedQuestionService recommended;
+    private final CoachConversationIntentService coachIntent;
 
-    public ModelingQuestionController(MdlQuestionService service, AgentAccessGuard guard) {
-        this(service, guard, null);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
     public ModelingQuestionController(
             MdlQuestionService service,
             AgentAccessGuard guard,
-            io.agentscope.dataagent.dataset.RecommendedQuestionService recommended) {
+            RecommendedQuestionService recommended,
+            CoachConversationIntentService coachIntent) {
         this.service = service;
         this.guard = guard;
         this.recommended = recommended;
+        this.coachIntent = coachIntent;
     }
 
     /** {@code validationId} is accepted for old clients and ignored (spec091). */
-    public record Decision(String validationId, Boolean accepted) {}
+    public record Decision(String validationId, Boolean accepted, String revision) {}
 
     public record Correction(String revision, String sql) {}
 
-    public record Archive(String revision) {}
+    public record Archive(String revision, Boolean published) {}
+
+    public record CoachMessage(
+            String revision,
+            CoachConversationIntentService.Phase phase,
+            String message,
+            List<CoachConversationIntentService.Turn> recentTurns) {}
+
+    @PostMapping("/{questionId}/conversation-intent")
+    public Mono<Map<String, CoachConversationIntentService.Action>> conversationIntent(
+            @PathVariable String groupId,
+            @PathVariable String questionId,
+            @RequestBody CoachMessage message,
+            Authentication auth) {
+        String owner = (String) auth.getPrincipal();
+        return blocking(
+                        () -> {
+                            guard.require(owner, "modeling-agent", Tier.RUN);
+                            return service.reviewTitle(
+                                    new DatasetScope(owner, List.of(groupId)),
+                                    groupId,
+                                    questionId,
+                                    message.revision());
+                        })
+                .flatMap(
+                        title ->
+                                coachIntent.interpret(
+                                        title,
+                                        message.phase(),
+                                        message.recentTurns(),
+                                        message.message()))
+                .map(action -> Map.of("action", action));
+    }
 
     @GetMapping("/{questionId}/revision")
     public Mono<java.util.Map<String, String>> revision(
@@ -98,7 +132,8 @@ public class ModelingQuestionController {
                             new DatasetScope(owner, List.of(groupId)),
                             groupId,
                             questionId,
-                            archive.revision());
+                            archive.revision(),
+                            archive.published());
                     return java.util.Map.of("archived", true);
                 });
     }
@@ -170,12 +205,17 @@ public class ModelingQuestionController {
 
     @GetMapping
     public Mono<List<MdlQuestionStore.Review>> list(
-            @PathVariable String groupId, Authentication auth) {
+            @PathVariable String groupId,
+            @RequestParam(defaultValue = "false") boolean includePendingRemoval,
+            Authentication auth) {
         String owner = (String) auth.getPrincipal();
         return blocking(
                 () -> {
                     guard.require(owner, "modeling-agent", Tier.RUN);
-                    return service.list(new DatasetScope(owner, List.of(groupId)), groupId);
+                    var scope = new DatasetScope(owner, List.of(groupId));
+                    return includePendingRemoval
+                            ? service.listWithPendingRemovals(scope, groupId)
+                            : service.list(scope, groupId);
                 });
     }
 
@@ -221,7 +261,8 @@ public class ModelingQuestionController {
                             new DatasetScope(owner, List.of(groupId)),
                             groupId,
                             questionId,
-                            decision.accepted());
+                            decision.accepted(),
+                            decision.revision());
                 });
     }
 

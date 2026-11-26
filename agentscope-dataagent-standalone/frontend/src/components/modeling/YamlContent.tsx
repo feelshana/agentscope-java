@@ -50,7 +50,7 @@ const preStyle: CSSProperties = {
   wordBreak: 'break-all',
 };
 
-/** Read-only YAML rendering with light syntax coloring; used by AssetYamlBrowser. */
+/** Read-only YAML rendering for knowledge base previews. */
 export default function YamlContent({ text }: { text: string }) {
   if (!text.trim()) {
     return <div style={{ ...preStyle, color: 'var(--da-text-3)' }}>（空文件）</div>;

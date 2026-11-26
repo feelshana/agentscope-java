@@ -56,8 +56,18 @@ export async function getScreeningStatus(groupId: string): Promise<ScreeningStat
 }
 
 /** The first visit of an unscreened table asks the model for field roles (may take a few seconds). */
-export async function getScreeningTable(groupId: string, datasetId: string): Promise<ScreeningTable> {
-  return read(await apiFetch(`${base(groupId)}/${encodeURIComponent(datasetId)}`, { headers: headers() }), '读取字段失败');
+const screeningReads = new Map<string, Promise<ScreeningTable>>();
+
+export function getScreeningTable(groupId: string, datasetId: string): Promise<ScreeningTable> {
+  const key = JSON.stringify([getToken(), groupId, datasetId]);
+  const pending = screeningReads.get(key);
+  if (pending) return pending;
+  // The setup summary and editor can both open before the first classification finishes.
+  const request = apiFetch(`${base(groupId)}/${encodeURIComponent(datasetId)}`, { headers: headers() })
+    .then(response => read<ScreeningTable>(response, '读取字段失败'))
+    .finally(() => screeningReads.delete(key));
+  screeningReads.set(key, request);
+  return request;
 }
 
 /** {@code force} acknowledges the references listed by a previous save. */

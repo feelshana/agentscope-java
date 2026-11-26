@@ -196,14 +196,38 @@ class MdlQuestionStoreTest {
         store.decide("g1", "sales", true, "alice");
         Path published = root.getParent().resolve("published/knowledge/sql/sales.md");
         Files.createDirectories(published.getParent());
-        Files.writeString(published, "published example");
-        store.archive("g1", "sales", store.revision("g1", "sales"));
+        Files.copy(root.resolve("knowledge/sql/sales.md"), published);
+        String original = Files.readString(published);
+        String revision = store.revision("g1", "sales");
+        assertThrows(DatasetException.class, () -> store.archive("g1", "sales", revision, false));
+        store.archive("g1", "sales", revision, true);
         assertTrue(store.list("g1").isEmpty());
         assertTrue(store.publishIssues("g1").isEmpty());
         assertTrue(Files.exists(root.resolve("knowledge/questions/sales.yml")));
         assertTrue(Files.exists(root.resolve(".platform/questions/sales.json")));
         assertFalse(Files.exists(root.resolve("knowledge/sql/sales.md")));
-        assertEquals("published example", Files.readString(published));
+        assertEquals(original, Files.readString(published));
+        var removal = store.list("g1", true).get(0);
+        assertEquals("sales", removal.question().id());
+        assertEquals("REMOVAL_PENDING", removal.status());
+        assertTrue(removal.published().available());
+        assertFalse(removal.published().current());
+        Files.delete(published);
+        assertTrue(store.list("g1", true).isEmpty());
+    }
+
+    @Test
+    void archivedHistoryDoesNotUseTheActiveQuestionLimit() throws Exception {
+        for (int i = 0; i < 49; i++) question("active-" + i, "");
+        for (int i = 0; i < 3; i++) {
+            Files.writeString(
+                    root.resolve("knowledge/questions/archived-" + i + ".yml"),
+                    "question: 已归档\narchived: true\n");
+        }
+        assertEquals(50, store.readQuestions(root).size());
+        assertEquals(50, store.list("g1", true).size());
+        question("extra", "");
+        assertThrows(DatasetException.class, () -> store.readQuestions(root));
     }
 
     @Test
@@ -673,5 +697,35 @@ class MdlQuestionStoreTest {
         assertThrows(
                 DatasetException.class,
                 () -> store.saveVerifiedQuestion("g1", "删除", "", "DELETE FROM order"));
+    }
+
+    @Test
+    void replacingAVerifiedQuestionRequiresTheExpectedQuestionRevision() {
+        String revision = store.revision("g1", "sales");
+        String sql = "SELECT SUM(amount) FROM valid_order";
+        var before = store.requireQuestion("g1", "sales");
+        assertThrows(
+                DatasetException.class,
+                () -> store.saveVerifiedQuestion("g1", "总销售额是多少", "来源：资产验证", sql, null, true));
+        assertThrows(
+                DatasetException.class,
+                () ->
+                        store.saveVerifiedQuestion(
+                                "g1",
+                                "总销售额是多少",
+                                "来源：资产验证",
+                                sql,
+                                new MdlQuestionStore.Replacement("sales", "old"),
+                                true));
+        assertEquals(before, store.requireQuestion("g1", "sales"));
+        assertEquals(
+                "sales",
+                store.saveVerifiedQuestion(
+                        "g1",
+                        "总销售额是多少",
+                        "来源：资产验证",
+                        sql,
+                        new MdlQuestionStore.Replacement("sales", revision),
+                        true));
     }
 }

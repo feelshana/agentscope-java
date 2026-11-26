@@ -13,6 +13,7 @@ public class MdlQuestionService {
     private final WrenQueryGateway gateway;
     private final FactQueryWindowPolicy windowPolicy;
     private final QuestionSuggestionService suggestions;
+    private final ModelingActivity activity;
 
     public MdlQuestionService(
             DatasetGroupService groups,
@@ -31,7 +32,6 @@ public class MdlQuestionService {
         this(groups, store, publisher, gateway, windowPolicy, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public MdlQuestionService(
             DatasetGroupService groups,
             MdlQuestionStore store,
@@ -39,12 +39,25 @@ public class MdlQuestionService {
             WrenQueryGateway gateway,
             FactQueryWindowPolicy windowPolicy,
             QuestionSuggestionService suggestions) {
+        this(groups, store, publisher, gateway, windowPolicy, suggestions, new ModelingActivity());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MdlQuestionService(
+            DatasetGroupService groups,
+            MdlQuestionStore store,
+            MdlPublishService publisher,
+            WrenQueryGateway gateway,
+            FactQueryWindowPolicy windowPolicy,
+            QuestionSuggestionService suggestions,
+            ModelingActivity activity) {
         this.groups = groups;
         this.store = store;
         this.publisher = publisher;
         this.gateway = gateway;
         this.windowPolicy = windowPolicy;
         this.suggestions = suggestions;
+        this.activity = activity;
     }
 
     private void requireScope(DatasetScope scope, String groupId) {
@@ -61,6 +74,12 @@ public class MdlQuestionService {
         return store.list(groupId);
     }
 
+    public List<MdlQuestionStore.Review> listWithPendingRemovals(
+            DatasetScope scope, String groupId) {
+        requireScope(scope, groupId);
+        return store.list(groupId, true);
+    }
+
     public MdlQuestionStore.Review validate(DatasetScope scope, String groupId, String questionId) {
         requireScope(scope, groupId);
         requireWindow(scope, groupId, questionId, "question validate");
@@ -72,6 +91,12 @@ public class MdlQuestionService {
             DatasetScope scope, String groupId, String questionId, String operation) {
         if (windowPolicy == null) return;
         String sql = store.requireQuestion(groupId, questionId).sql();
+        requireSqlWindow(scope, groupId, sql, operation);
+    }
+
+    private void requireSqlWindow(
+            DatasetScope scope, String groupId, String sql, String operation) {
+        if (windowPolicy == null) return;
         if (sql != null && !sql.isBlank())
             windowPolicy.requireAllowed(
                     io.agentscope.core.agent.RuntimeContext.builder()
@@ -130,6 +155,13 @@ public class MdlQuestionService {
         return store.revision(groupId, questionId);
     }
 
+    public String reviewTitle(
+            DatasetScope scope, String groupId, String questionId, String revision) {
+        requireScope(scope, groupId);
+        return store.locked(
+                groupId, () -> store.requireUnchanged(groupId, questionId, revision).question());
+    }
+
     public MdlQuestionStore.Review correctSql(
             DatasetScope scope, String groupId, String questionId, String revision, String sql) {
         requireScope(scope, groupId);
@@ -144,11 +176,24 @@ public class MdlQuestionService {
     }
 
     public void archive(DatasetScope scope, String groupId, String questionId, String revision) {
+        archive(scope, groupId, questionId, revision, null);
+    }
+
+    public void archive(
+            DatasetScope scope,
+            String groupId,
+            String questionId,
+            String revision,
+            Boolean expectedPublished) {
         requireScope(scope, groupId);
         store.locked(
                 groupId,
                 () -> {
-                    store.archive(groupId, questionId, revision);
+                    if (activity.running(groupId)) {
+                        throw new DatasetException("助手正在修改草稿，请等当前轮次完成后再移出题目", 409);
+                    }
+                    if (expectedPublished == null) store.archive(groupId, questionId, revision);
+                    else store.archive(groupId, questionId, revision, expectedPublished);
                     groups.markMdlDirty(scope.ownerId(), groupId);
                     return null;
                 });
@@ -156,7 +201,16 @@ public class MdlQuestionService {
 
     public MdlQuestionStore.Review decide(
             DatasetScope scope, String groupId, String questionId, boolean accepted) {
-        return decide(scope, groupId, questionId, accepted, null);
+        return decide(scope, groupId, questionId, accepted, null, null);
+    }
+
+    public MdlQuestionStore.Review decide(
+            DatasetScope scope,
+            String groupId,
+            String questionId,
+            boolean accepted,
+            String revision) {
+        return decide(scope, groupId, questionId, accepted, null, revision);
     }
 
     /** spec114: the question's SQL expanded by the official dry-plan on the draft; not executed. */
@@ -176,7 +230,35 @@ public class MdlQuestionService {
             DatasetScope scope, String groupId, String question, String definition, String sql) {
         requireScope(scope, groupId);
         String id = store.saveVerifiedQuestion(groupId, question, definition, sql);
-        return decide(scope, groupId, id, true, MdlQuestionStore.ORIGIN_ASSET_VERIFY);
+        return decide(scope, groupId, id, true, MdlQuestionStore.ORIGIN_ASSET_VERIFY, null);
+    }
+
+    /** Called under the asset decision's publication and workspace locks. */
+    MdlQuestionStore.Review confirmVerified(
+            DatasetScope scope,
+            String groupId,
+            String question,
+            String definition,
+            String sql,
+            MdlQuestionStore.Replacement replacement) {
+        requireScope(scope, groupId);
+        requireSqlWindow(scope, groupId, sql, "question confirm");
+        requirePlans(groupId, sql, "SQL 检查未通过，不能保存为问答：");
+        String id =
+                store.saveVerifiedQuestion(groupId, question, definition, sql, replacement, true);
+        return recordDecision(scope, groupId, id, true, MdlQuestionStore.ORIGIN_ASSET_VERIFY);
+    }
+
+    private MdlQuestionStore.Review recordDecision(
+            DatasetScope scope,
+            String groupId,
+            String questionId,
+            boolean accepted,
+            String origin) {
+        MdlQuestionStore.Review result =
+                store.decide(groupId, questionId, accepted, scope.ownerId(), origin);
+        groups.markMdlDirty(scope.ownerId(), groupId);
+        return result;
     }
 
     private MdlQuestionStore.Review decide(
@@ -184,7 +266,8 @@ public class MdlQuestionService {
             String groupId,
             String questionId,
             boolean accepted,
-            String origin) {
+            String origin,
+            String revision) {
         requireScope(scope, groupId);
         // A publish waits for this whole decision, so a confirmed question is never left out of
         // the version being published (2026-10-31: it forced a second publish straight after).
@@ -193,22 +276,19 @@ public class MdlQuestionService {
                     if (accepted) {
                         requireWindow(scope, groupId, questionId, "question confirm");
                         MdlQuestionStore.Question question =
-                                store.requireQuestion(groupId, questionId);
+                                revision == null
+                                        ? store.requireQuestion(groupId, questionId)
+                                        : store.requireUnchanged(groupId, questionId, revision);
                         if (question != null)
                             requirePlans(groupId, question.sql(), "SQL 检查未通过，不能确认：");
                     }
                     return store.locked(
                             groupId,
                             () -> {
-                                MdlQuestionStore.Review result =
-                                        store.decide(
-                                                groupId,
-                                                questionId,
-                                                accepted,
-                                                scope.ownerId(),
-                                                origin);
-                                groups.markMdlDirty(scope.ownerId(), groupId);
-                                return result;
+                                // The dry-plan can take time; check again under the write lock.
+                                if (revision != null)
+                                    store.requireUnchanged(groupId, questionId, revision);
+                                return recordDecision(scope, groupId, questionId, accepted, origin);
                             });
                 };
         return publisher == null ? decision.get() : publisher.beforeNextPublish(groupId, decision);

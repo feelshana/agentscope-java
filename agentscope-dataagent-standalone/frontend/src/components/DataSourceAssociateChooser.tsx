@@ -7,6 +7,7 @@ import AssociateTablesModal from './AssociateTablesModal';
 import Icon from './Icon';
 import ErrorNotice from './ErrorNotice';
 import { toast } from './Toast';
+import { knowledgePath, modelingPreparationPath } from '../pages/configure/knowledgeWorkspaceRoutes';
 
 export default function DataSourceAssociateChooser({ source, onClose, onAssociated }: { source: ExternalDataSource; onClose: () => void; onAssociated: () => void }) {
   const navigate = useNavigate(); const [query, setQuery] = useState(''); const [page, setPage] = useState(0);
@@ -19,7 +20,16 @@ export default function DataSourceAssociateChooser({ source, onClose, onAssociat
       .finally(() => { if (!abort.signal.aborted) setLoading(false); }); }, 250);
     return () => { window.clearTimeout(timer); abort.abort(); };
   }, [query, page, revision]);
-  if (selected) return <AssociateTablesModal groupId={selected} initialSourceId={source.id} onClose={onClose} onAssociated={() => { toast('库表已关联', 'success'); onAssociated(); navigate(`/configure/datasets/${selected}`); }} />;
+  if (selected) {
+    const startsFirstModel = data?.items.some(group => group.id === selected && !group.datasetCount && !group.publishedVersion);
+    return <AssociateTablesModal groupId={selected} initialSourceId={source.id} onClose={onClose}
+      onAssociated={problem => {
+        toast(problem ? `部分库表关联失败：${problem}` : '库表已关联', problem ? 'error' : 'success');
+        onAssociated();
+        navigate(!problem && startsFirstModel ? modelingPreparationPath(selected) : knowledgePath(selected) + '?section=datasets');
+      }}
+      onError={message => toast(message, 'error')} />;
+  }
   return <DataSourceDialog title="关联到知识库" description={`选择你可管理的知识库，再从「${source.name}」选择库表。`} onClose={onClose}>
     <div className="ds-dialog-body"><label className="kw-search ds-chooser-search"><Icon name="search" size="sm" /><input aria-label="搜索目标知识库" placeholder="搜索知识库" value={query} onChange={e => { setQuery(e.target.value); setPage(0); }} /></label>
       {error && <ErrorNotice error={error}><button className="da-btn" onClick={() => setRevision(v => v + 1)}>重试</button></ErrorNotice>}

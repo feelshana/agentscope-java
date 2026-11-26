@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { deleteDocument, listDocuments, uploadDocument } from '../../api/draftReview';
 import type { BusinessDocument } from '../../api/draftReview';
 import Icon from '../Icon';
+import { WorkspaceMenu } from '../KnowledgeWorkspace';
 import BusinessDocumentReader from './BusinessDocumentReader';
+import { MaterialsCatalog, WorkspaceEmpty, WorkspaceObjectTools } from './ModelingWorkspace';
 import './ModelingOptimization.css';
 
 const STATUS: Record<BusinessDocument['status'], { label: string; color?: string }> = {
@@ -11,22 +14,41 @@ const STATUS: Record<BusinessDocument['status'], { label: string; color?: string
   UNCHANGED: { label: '已发布', color: 'var(--da-success)' },
   DELETED: { label: '已删除 · 未发布', color: 'var(--da-warn)' },
 };
+const PENDING_HINT = {
+  ADDED: '这份文档已加入草稿，可在建模对话中引用。',
+  MODIFIED: '当前阅读的是替换后的草稿版本。',
+  DELETED: '发布后，这份文档将从知识库快照移除。',
+};
 
 /**
  * spec092: several business documents per knowledge base. Adding, replacing and deleting are
  * draft changes; {@code onChanged} lets the page hand the change to the assistant.
  */
-export default function BusinessDocumentsPanel({ groupId, onChanged, variant = 'default', onReadyChange }: {
+export default function BusinessDocumentsPanel({ groupId, onChanged, variant = 'default', onReadyChange, onCountChange, workspace }: {
   groupId: string;
-  onChanged: (summary: string) => void;
+  onChanged: (summary: string, removedName?: string) => void;
   variant?: 'default' | 'setup';
   onReadyChange?: (ready: boolean) => void;
+  onCountChange?: (count: number) => void;
+  workspace?: {
+    selected?: string; onSelect: (name: string) => void; paired: boolean; idle: boolean;
+    toolbar: (objectActions: ReactNode, actions: ReactNode, context: string | undefined, count: number) => ReactNode;
+    onReference: (name: string, quote?: string) => void; onPublish: () => void;
+    catalogOpen: boolean; toggleCatalog: () => void;
+  };
 }) {
   const [documents, setDocuments] = useState<BusinessDocument[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [reading, setReading] = useState<BusinessDocument | null>(null);
+  const [removal, setRemoval] = useState<BusinessDocument>();
+  const [readerToolbar, setReaderToolbar] = useState<HTMLDivElement | null>(null);
+  const [readerSearch, setReaderSearch] = useState<HTMLDivElement | null>(null);
+  const removalDialog = useRef<HTMLDialogElement>(null);
+  const removalTitle = useId();
+  const [term, setTerm] = useState('');
+  const [status, setStatus] = useState<BusinessDocument['status'] | ''>('');
   const picker = useRef<HTMLInputElement>(null);
   const target = useRef<string | null>(null);
   const active = useRef(groupId); active.current = groupId;
@@ -38,7 +60,19 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
     } catch (e) { if (active.current === groupId) { setLoaded(false); setError(e instanceof Error ? e.message : '读取失败'); } }
   }, [groupId]);
   useEffect(() => { setDocuments([]); setLoaded(false); setError(null); setReading(null); void refresh(); }, [refresh]);
+  const inWorkspace = !!workspace;
+  useEffect(() => {
+    if (!inWorkspace) return;
+    const updated = (event: Event) => {
+      if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void refresh();
+    };
+    window.addEventListener('modeling:updated', updated);
+    return () => window.removeEventListener('modeling:updated', updated);
+  }, [inWorkspace, groupId, refresh]);
   useEffect(() => { onReadyChange?.(loaded && busy === null && !error); }, [loaded, busy, error, onReadyChange]);
+  useEffect(() => {
+    if (removal && !removalDialog.current?.open) removalDialog.current?.showModal();
+  }, [removal]);
 
   const pick = (replacing: string | null) => { target.current = replacing; picker.current?.click(); };
   const upload = async (file: File) => {
@@ -52,6 +86,9 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
       const saved = await uploadDocument(groupId, named);
       if (active.current !== groupId) return;
       await refresh();
+      if (workspace) {
+        setTerm(''); setStatus(''); workspace.onSelect(saved.name);
+      }
       onChanged(replacing || saved.status === 'MODIFIED' ? `替换了业务文档 ${saved.name}` : `新增了业务文档 ${saved.name}`);
     } catch (e) { if (active.current === groupId) setError(e instanceof Error ? e.message : '上传失败'); }
     finally { if (active.current === groupId) setBusy(null); }
@@ -62,16 +99,87 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
       await deleteDocument(groupId, name);
       if (active.current !== groupId) return;
       await refresh();
-      onChanged(`删除了业务文档 ${name}`);
+      onChanged(`删除了业务文档 ${name}`, name);
+      removalDialog.current?.close();
     } catch (e) { if (active.current === groupId) setError(e instanceof Error ? e.message : '删除失败'); }
     finally { if (active.current === groupId) setBusy(null); }
   };
 
   const setup = variant === 'setup';
   const currentDocuments = documents.filter(doc => doc.status !== 'DELETED');
+  useEffect(() => { if (loaded) onCountChange?.(currentDocuments.length); }, [loaded, currentDocuments.length, onCountChange]);
+  const filePicker = <input ref={picker} type="file" hidden accept=".md,.txt,.docx"
+    onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void upload(file); }} />;
+  if (workspace) {
+    const matching = documents.filter(doc => (!status || doc.status === status) && doc.name.toLowerCase().includes(term.trim().toLowerCase()));
+    const catalog = workspace.paired ? documents : matching;
+    const current = catalog.find(doc => doc.name === workspace.selected) ?? catalog[0];
+    const mutationBlocked = busy !== null || !workspace.idle;
+    const add = <button type="button" className="da-btn da-btn-primary" disabled={busy !== null || !workspace.idle} onClick={() => pick(null)}>
+      <Icon name="upload" size="sm" />{busy === 'new' ? '上传中…' : '新增文档'}</button>;
+    const readerControls = current && <div className="mo-reader-tools-slot" ref={setReaderToolbar} />;
+    return <>
+      {filePicker}
+      {workspace.paired ? <WorkspaceObjectTools compact context={current?.name}>{readerControls}</WorkspaceObjectTools>
+        : workspace.toolbar(undefined, add, undefined, currentDocuments.length)}
+      {error && !removal && <div className="mo-notice mo-error" role="alert">{error}<button type="button" className="da-btn" onClick={() => void refresh()}>重试</button></div>}
+      <dialog ref={removalDialog} className="mo-form-dialog" aria-labelledby={removalTitle} onClose={() => setRemoval(undefined)}
+        onCancel={event => { if (busy) event.preventDefault(); }}>
+        <header className="mo-dialog-head"><strong id={removalTitle}>移除业务文档</strong></header>
+        {removal && <div className="mo-dialog-body"><strong className="mo-removal-name">{removal.name}</strong>
+          <p>{removal.status === 'ADDED' ? '这份文档将从当前草稿移除。' : '这份文档将从草稿移除。下一次发布后，知识库快照才会更新。'}</p>
+          {error && <p className="mo-error" role="alert">{error}</p>}
+        </div>}
+        <footer className="mo-dialog-footer"><button type="button" className="da-btn" autoFocus disabled={!!busy}
+          onClick={() => removalDialog.current?.close()}>取消</button>
+          <button type="button" className="da-btn da-btn-danger" disabled={mutationBlocked || !removal}
+            onClick={() => { if (removal) void remove(removal.name); }}>{busy ? '移除中…' : '确认移除'}</button></footer>
+      </dialog>
+      {!loaded ? !error && <p className="mo-work-loading" role="status">正在读取业务文档…</p>
+        : !documents.length ? <WorkspaceEmpty icon="file" title="还没有业务文档" description="上传口径手册或业务说明，可在建模对话中引用原文。支持 .md、.txt 和 .docx。">{add}</WorkspaceEmpty>
+        : <div className="mo-work-grid mo-material-grid" data-catalog-open={workspace.catalogOpen}>
+          {!workspace.paired && <MaterialsCatalog title="文档目录" count={`${matching.length} 份`} open={workspace.catalogOpen} onToggle={workspace.toggleCatalog} filters={<>
+              <input type="search" className="da-input" placeholder="搜索文档" aria-label="搜索文档" value={term} onChange={e => setTerm(e.target.value)} />
+              <select className="da-input" aria-label="筛选文档状态" value={status} onChange={e => setStatus(e.target.value as BusinessDocument['status'] | '')}><option value="">全部状态</option>
+                {Object.entries(STATUS).map(([value, view]) => <option key={value} value={value}>{view.label}</option>)}</select>
+              {workspace.catalogOpen && current && <div className="mo-reader-search-slot" ref={setReaderSearch} />}
+            </>}>
+            {matching.map(doc => <li key={doc.name} className={current?.name === doc.name ? 'qc-queue-selected' : ''}>
+              <button type="button" aria-current={current?.name === doc.name || undefined} onClick={() => workspace.onSelect(doc.name)}>
+                <Icon name="file" size="sm" /><span className="mo-catalog-name"><strong>{doc.name}</strong>
+                  <span className="mo-item-meta">
+                    <span className={`qc-status-pill qc-status-${doc.status === 'UNCHANGED' ? 'done' : doc.status === 'DELETED' ? 'removal' : 'sql'}`}>
+                      {STATUS[doc.status].label}</span>
+                    {doc.updatedAt && <time dateTime={doc.updatedAt}>{new Date(doc.updatedAt).toLocaleDateString('zh-CN')}</time>}
+                  </span></span>
+              </button></li>)}
+          </MaterialsCatalog>}
+          <div className="mo-work-detail mo-material-detail mo-document-detail" key={current?.name}>
+            {!current ? <WorkspaceEmpty icon="search" title="没有匹配的文档"><button type="button" className="da-btn" onClick={() => { setStatus(''); setTerm(''); }}>清除筛选</button></WorkspaceEmpty>
+              : <>
+                {!workspace.paired && <header className="mo-object-heading">
+                  <span className="mo-object-icon"><Icon name="file" size="sm" /></span>
+                  <div><h3 translate="no">{current.name}</h3><p>{STATUS[current.status].label}</p></div>
+                  {readerControls}
+                </header>}
+                <BusinessDocumentReader key={`${current.name}:${current.status}:${current.updatedAt}`} groupId={groupId} document={current}
+                toolbarTarget={readerToolbar} searchTarget={readerSearch}
+                onQuote={quote => { workspace.onSelect(current.name); workspace.onReference(current.name, quote); }}
+                actions={<>
+                  {current.status !== 'UNCHANGED' && <button type="button" className="da-btn da-btn-sm"
+                    title={PENDING_HINT[current.status]} onClick={workspace.onPublish}>检查草稿</button>}
+                  {current.status !== 'DELETED' && <WorkspaceMenu label="文档更多操作" triggerLabel="更多" triggerIcon="moreHorizontal" items={[
+                    { label: '替换文档', icon: 'upload', disabled: mutationBlocked, onClick: () => pick(current.name) },
+                    { label: '从草稿移除', icon: 'trash', danger: true, disabled: mutationBlocked, onClick: () => { setError(null); setRemoval(current); } },
+                  ]} />}
+                </>} />
+              </>}
+          </div>
+        </div>}
+    </>;
+  }
   return <div className={setup ? 'mp-documents' : 'da-card mo-documents'}>
-    <input ref={picker} type="file" hidden accept=".md,.txt,.docx"
-      onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void upload(file); }} />
+    {filePicker}
     {setup ? <div className="mp-row">
       <span className="mp-row-icon"><Icon name="file" size="sm" /></span>
       <div className="mp-row-text"><strong>业务文档 <span className="mp-optional">可选</span></strong>
@@ -89,15 +197,16 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
     {!setup && loaded && !documents.length && <div className="mo-documents-empty"><Icon name="file" /><strong>还没有业务文档</strong><p>可补充字段含义、指标口径和过滤规则，也可以稍后添加。</p></div>}
     <div className={setup ? undefined : 'mo-document-list'}>{documents.map(doc => <div key={doc.name} className={setup ? 'mp-document' : `mo-document-row ${doc.status === 'DELETED' ? 'is-deleted' : ''}`}>
       {!setup && <span className="mo-document-icon"><Icon name="file" size="sm" /></span>}
-      <div className={setup ? undefined : 'mo-grow'}>
-        {setup || doc.status === 'DELETED' ? <span style={{ textDecoration: doc.status === 'DELETED' ? 'line-through' : undefined }}>{doc.name}</span>
-          : <button type="button" className="mo-document-title" onClick={() => setReading(doc)} title="阅读文档内容">{doc.name}</button>}
+      <div className="mo-grow">
+        {doc.status === 'DELETED' ? <del>{doc.name}</del>
+          : <button type="button" className="mo-document-title" disabled={busy !== null} onClick={() => setReading(doc)} title="阅读文档内容">{doc.name}</button>}
         <div className={setup ? undefined : 'mo-document-meta'}><span className={`da-badge${setup ? '' : ` mo-document-status mo-document-status-${doc.status.toLowerCase()}`}`} style={{ color: STATUS[doc.status].color }}>{STATUS[doc.status].label}</span>
         {!setup && <span className="mo-document-size">{doc.chars.toLocaleString('zh-CN')} 字符</span>}
         {doc.previousVersions > 0 && <span className="da-small">历史版本 {doc.previousVersions}</span>}</div>
       </div>
       {doc.status !== 'DELETED' && <span className={setup ? 'mo-setup-document-actions' : 'mo-document-actions'}>
-        {!setup && <button type="button" className="da-btn mo-document-read" onClick={() => setReading(doc)}><Icon name="book" size="sm" />阅读</button>}
+        <button type="button" className={setup ? 'da-btn da-btn-sm mo-setup-document-read' : 'da-btn mo-document-read'}
+          disabled={busy !== null} aria-label={`阅读业务文档 ${doc.name}`} onClick={() => setReading(doc)}><Icon name="book" size="sm" />阅读</button>
         <button type="button" className={setup ? 'da-btn da-btn-sm' : 'mo-document-tool'} disabled={busy !== null} aria-label={setup ? undefined : `替换文档：${doc.name}`} title={setup ? undefined : busy === doc.name ? '处理中…' : '替换文档'} onClick={() => pick(doc.name)}>{setup ? busy === doc.name ? '处理中…' : '替换' : <Icon name="refresh" size="sm" />}</button>
         <button type="button" className={setup ? 'da-btn da-btn-sm' : 'mo-document-tool mo-document-delete'} disabled={busy !== null} aria-label={setup ? undefined : `删除文档：${doc.name}`} title={setup ? undefined : '删除文档'} onClick={() => void remove(doc.name)}>{setup ? '删除' : <Icon name="trash" size="sm" />}</button>
       </span>}

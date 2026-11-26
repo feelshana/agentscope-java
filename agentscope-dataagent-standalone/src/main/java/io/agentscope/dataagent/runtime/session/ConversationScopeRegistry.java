@@ -47,16 +47,33 @@ public class ConversationScopeRegistry {
      * Purpose of the latest modeling request per conversation (in memory, not persisted). A
      * confirmation resume keeps the purpose of the request that raised the card.
      */
-    private final ConcurrentHashMap<String, String> modelingPurposes = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, io.agentscope.dataagent.dataset.ModelingTurnPurpose>
+            modelingPurposes = new ConcurrentHashMap<>();
 
     public void putModelingPurpose(String userId, String sessionKey, String purpose) {
+        putModelingTurn(
+                userId,
+                sessionKey,
+                new io.agentscope.dataagent.dataset.ModelingTurnPurpose(purpose));
+    }
+
+    public void putModelingTurn(
+            String userId,
+            String sessionKey,
+            io.agentscope.dataagent.dataset.ModelingTurnPurpose turn) {
         if (userId == null || sessionKey == null || sessionKey.isBlank()) return;
         String key = ConversationDatasetScopeEntity.key(userId, sessionKey);
-        if (purpose == null) modelingPurposes.remove(key);
-        else modelingPurposes.put(key, purpose);
+        if (turn.value() == null) modelingPurposes.remove(key);
+        else modelingPurposes.put(key, turn);
     }
 
     public String modelingPurpose(String userId, String sessionKey) {
+        var turn = modelingTurn(userId, sessionKey);
+        return turn == null ? null : turn.value();
+    }
+
+    public io.agentscope.dataagent.dataset.ModelingTurnPurpose modelingTurn(
+            String userId, String sessionKey) {
         if (userId == null || sessionKey == null || sessionKey.isBlank()) return null;
         return modelingPurposes.get(ConversationDatasetScopeEntity.key(userId, sessionKey));
     }

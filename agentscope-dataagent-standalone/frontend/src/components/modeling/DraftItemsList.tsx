@@ -53,7 +53,7 @@ function changePill(item: DraftItem): { text: string; style: CSSProperties } {
  * spec092 §7 "AI 建模结果": one compact row per table, relationship, rule or note. A row opens to
  * its detail (models as field | description), can be edited, and — except models — deleted.
  */
-export default function DraftItemsList({ groupId, items, disabled, onChanged, limit, grouped = false }: {
+export default function DraftItemsList({ groupId, items, disabled, onChanged, limit, grouped = false, isUnseen, onSeen, onLocate }: {
   groupId: string;
   items: DraftItem[];
   /** The assistant is running: edits would race its writes. */
@@ -63,6 +63,9 @@ export default function DraftItemsList({ groupId, items, disabled, onChanged, li
   limit?: number;
   /** Show category headings (draft drawer) instead of one flat list (under a reply). */
   grouped?: boolean;
+  isUnseen?: (item: DraftItem) => boolean;
+  onSeen?: (item: DraftItem) => void;
+  onLocate?: (item: DraftItem) => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -120,18 +123,22 @@ export default function DraftItemsList({ groupId, items, disabled, onChanged, li
         {heading && <div style={{ fontSize: 12, color: 'var(--da-text-muted)', padding: '8px 10px 2px' }}>
           {heading}（{items.filter(i => i.category === item.category).length}）</div>}
         <div style={{ borderTop: index && !heading ? '1px solid var(--da-border)' : undefined }}>
-          <div style={{ ...S.row, cursor: 'pointer' }} onClick={() => setOpen(expanded ? null : item.id)}>
+          <button type="button" className="modeling-draft-item-toggle" style={S.row} aria-expanded={expanded}
+            onClick={() => setOpen(expanded ? null : item.id)}>
             <span style={S.icon} aria-hidden="true">{ICON[item.category]}</span>
             <span style={{ ...(item.category === 'MODEL' ? S.title : { flex: summary ? undefined : 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
               textDecoration: item.kind === 'REMOVED' ? 'line-through' : undefined }}>{title}</span>
             {summary ? <span style={S.sub}>{summary}</span> : null}
             <span style={{ ...S.pill, ...pill.style }}>{pill.text}</span>
+            {isUnseen?.(item) && <span className="modeling-change-unseen">未查看</span>}
             {item.basis.length > 0 && <span style={S.basis}>{item.basis.map(s => SOURCE_LABEL[s] ?? s).join('·')}</span>}
             <span style={{ ...S.icon, flex: '0 0 12px' }} aria-hidden="true">{expanded ? '▾' : '▸'}</span>
-          </div>
+          </button>
           {expanded && editing !== item.id && <div style={S.detail}>
             <Detail item={item} />
             <div style={{ marginTop: 4 }}>
+              {onLocate && item.kind !== 'REMOVED' && <button style={S.link} onClick={() => onLocate(item)}>定位</button>}
+              {isUnseen?.(item) && <button style={S.link} onClick={() => onSeen?.(item)}>标为已看</button>}
               {item.editable && <button style={S.link} disabled={disabled || busy} onClick={() => startEdit(item)}>编辑</button>}
               {item.deletable && <button style={{ ...S.link, color: 'var(--da-danger)' }} disabled={disabled || busy} onClick={() => void remove(item)}>删除</button>}
               {disabled && <span style={S.basis}>助手运行中，完成后可编辑</span>}

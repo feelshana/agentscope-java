@@ -1,4 +1,5 @@
 import { apiFetch, getToken } from './auth';
+import type { QuestionReview } from './modelingQuestions';
 
 export type AssetKind = 'view' | 'ref_sql';
 export type AssetStatus = 'PUBLISHED' | 'REVIEW_PENDING' | 'VERIFY_PENDING' | 'VERIFIED';
@@ -14,6 +15,7 @@ export interface AssetReview {
   verifiedBy: string | null;
   verifiedAt: string | null;
   passed: boolean;
+  evidence?: VerificationEvidence[];
 }
 
 export interface SemanticAsset {
@@ -35,6 +37,12 @@ export interface AssetDetail {
   outputColumns: { name: string; type: string }[];
   /** spec114: risks the reviewer must see before passing the asset. */
   warnings: string[];
+}
+
+export interface AssetCatalog {
+  draft: SemanticAsset[];
+  published: SemanticAsset[];
+  incompleteViews: string[];
 }
 
 export interface VerifyCase {
@@ -60,6 +68,8 @@ export interface AssetCheck {
   expanded: string | null;
 }
 
+export type VerificationEvidence = Pick<AssetCheck, 'key' | 'sql' | 'expanded' | 'error'> & { question: string };
+
 async function request<T>(groupId: string, suffix: string, method = 'GET', body?: unknown): Promise<T> {
   const token = getToken();
   const response = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/assets${suffix}`, {
@@ -76,23 +86,24 @@ async function request<T>(groupId: string, suffix: string, method = 'GET', body?
 
 const path = (asset: Pick<SemanticAsset, 'kind' | 'name'>) => `/${asset.kind}/${encodeURIComponent(asset.name)}`;
 
-export const listAssets = (groupId: string) => request<SemanticAsset[]>(groupId, '');
+export const getAssetCatalog = (groupId: string) => request<AssetCatalog>(groupId, '/catalog');
 /** Example requests written from this knowledge base's draft model; kind is the button label. */
 export interface AssetExample { kind: string; text: string }
 export const assetExamples = (groupId: string) => request<AssetExample[]>(groupId, '/examples');
-export const getAsset = (groupId: string, asset: Pick<SemanticAsset, 'kind' | 'name'>) =>
-  request<AssetDetail>(groupId, path(asset));
+export const getAsset = (groupId: string, asset: Pick<SemanticAsset, 'kind' | 'name'>, published = false) =>
+  request<AssetDetail>(groupId, path(asset) + (published ? '?published=true' : ''));
 export const saveAsset = (groupId: string, asset: SemanticAsset, file: string, content: string) =>
   request<AssetDetail>(groupId, path(asset), 'PUT', { file, content, expectedHash: asset.hash });
 export const reviewAsset = (groupId: string, asset: SemanticAsset, timeColumns: string[]) =>
-  request<AssetDetail>(groupId, `${path(asset)}/review`, 'POST', { timeColumns });
+  request<AssetDetail>(groupId, `${path(asset)}/review`, 'POST', { timeColumns, expectedHash: asset.hash });
 export const generateAssetSql = (groupId: string, asset: SemanticAsset, question: string) =>
   request<{ sql: string }>(groupId, `${path(asset)}/generate`, 'POST', { question });
 export const verifyAsset = (groupId: string, asset: SemanticAsset, cases: VerifyCase[]) =>
-  request<AssetCheck[]>(groupId, `${path(asset)}/verify`, 'POST', { cases });
-/** {@code save}: cases judged as expected to keep as confirmed questions (spec112). */
-export const judgeAsset = (groupId: string, asset: SemanticAsset, verdicts: Record<string, Verdict>, save: VerifyCase[] = []) =>
-  request<AssetDetail>(groupId, `${path(asset)}/verdict`, 'POST', { verdicts, save });
+  request<AssetCheck[]>(groupId, `${path(asset)}/verify`, 'POST', { cases, expectedHash: asset.hash });
+export const judgeAsset = (groupId: string, asset: SemanticAsset, verdicts: Record<string, Verdict>) =>
+  request<AssetDetail>(groupId, `${path(asset)}/verdict`, 'POST', { verdicts, expectedHash: asset.hash });
+export const saveVerifiedAssetQuestion = (groupId: string, asset: SemanticAsset, caseKey: string, replacement?: { id: string; revision: string }) =>
+  request<QuestionReview>(groupId, `${path(asset)}/verified-questions`, 'POST', { caseKey, replacement, expectedHash: asset.hash });
 
 /** spec113: a query template the assistant proposed in the modeling conversation. */
 export interface AssetProposal {
@@ -106,8 +117,17 @@ export const decideAssetProposal = (groupId: string, id: string, status: 'DRAFTE
   request<AssetProposal>(groupId, `/proposals/${encodeURIComponent(id)}`, 'POST', { status });
 
 /** What deleting an asset touches: rule entries naming it and questions using it. */
-export interface AssetImpact { rules: string[]; questions: string[] }
+export interface AssetImpact { rules: string[]; questions: string[]; revision?: string }
+export interface IncompleteView {
+  files: { path: string; content: string }[];
+  impact: AssetImpact;
+  revision: string;
+}
+export const inspectIncompleteView = (groupId: string, name: string) =>
+  request<IncompleteView>(groupId, `/incomplete-views/${encodeURIComponent(name)}`);
+export const removeIncompleteView = (groupId: string, name: string, revision: string) =>
+  request<{ deleted: boolean }>(groupId, `/incomplete-views/${encodeURIComponent(name)}`, 'DELETE', { revision });
 export const assetImpact = (groupId: string, asset: Pick<SemanticAsset, 'kind' | 'name'>) =>
   request<AssetImpact>(groupId, `${path(asset)}/impact`);
-export const deleteAsset = (groupId: string, asset: Pick<SemanticAsset, 'kind' | 'name'>) =>
-  request<{ deleted: boolean }>(groupId, path(asset), 'DELETE');
+export const deleteAsset = (groupId: string, asset: Pick<SemanticAsset, 'kind' | 'name'>, revision: string) =>
+  request<{ deleted: boolean }>(groupId, `${path(asset)}?revision=${encodeURIComponent(revision)}`, 'DELETE');

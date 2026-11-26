@@ -22,6 +22,8 @@ export interface CanonicalFields { scope: string; target: string }
 
 export interface RuleItem {
   path: string;
+  /** The bullet's line number in its current file, when parsed from a snapshot. */
+  line?: number;
   /** null for bullets written before any `## ` heading. */
   heading: string | null;
   /** The bullet text exactly as the backend matches it (continuation lines joined by \n). */
@@ -42,6 +44,47 @@ export const SECTIONS: RuleSection[] = [
 ];
 const BY_HEADING = new Map(SECTIONS.map(s => [s.heading, s]));
 export const sectionOf = (heading: string | null): RuleSection | null => heading ? BY_HEADING.get(heading.trim()) ?? null : null;
+export const ruleKey = (rule: RuleItem) => JSON.stringify([rule.path, rule.heading, rule.text]);
+export const ruleTitle = (rule: RuleItem) => rule.filter?.scope ?? rule.term?.term ?? rule.canonical?.scope;
+export const rulePath = (section: RuleSection | null) => section?.kind === 'term' ? 'knowledge/rules/naming.md' : 'knowledge/rules/general.md';
+
+/** A display-only index. The suffix of a raw rule is kept separate from its opening words. */
+export const RULE_WORKSPACE_ANCHOR_LIMIT = 28;
+export function ruleIndex(rule: RuleItem, limit = 20): { anchor: string; summary: string } {
+  const title = ruleTitle(rule);
+  if (title) return { anchor: title, summary: rule.filter?.condition ?? rule.term?.meaning ?? rule.canonical?.target ?? '' };
+  const text = rule.text.trim();
+  const namedTerm = rule.kind === 'term' ? /^【[^】]+】/.exec(text)?.[0] : undefined;
+  const opening = (namedTerm ?? text.split(/[、，,。；;：:！？!?\n]/, 1)[0]).trim();
+  const anchor = Array.from(opening).slice(0, limit).join('');
+  return { anchor: anchor || (rule.line ? `第 ${rule.line} 行` : '规则原文'), summary: text.slice(anchor.length).trimStart() };
+}
+
+export function ruleWorkspaceTitle(rule: RuleItem) {
+  const { anchor, summary } = ruleIndex(rule, RULE_WORKSPACE_ANCHOR_LIMIT);
+  const head = Array.from(anchor);
+  if (head.length >= 8) return head.slice(0, RULE_WORKSPACE_ANCHOR_LIMIT).join('');
+  const clauses = summary.split(/[，,。；;：:！？!?\n]+/).map(part => part.trim()).filter(Boolean);
+  let title = anchor;
+  for (const clause of clauses) {
+    title += ' · ' + clause;
+    if (Array.from(title.replace(/[\s·]/g, '')).length >= 8) break;
+  }
+  if (Array.from(title.replace(/[\s·]/g, '')).length < 8) {
+    title += ' · ' + (rule.path.split('/').pop() ?? rule.path) + (rule.line ? ` 第 ${rule.line} 行` : '');
+  }
+  return Array.from(title).slice(0, RULE_WORKSPACE_ANCHOR_LIMIT).join('');
+}
+
+/** Only replace the delimiters of a legacy term when the normalized sentence round-trips exactly. */
+export function normalizeLegacyTerm(path: string, heading: string | null, value: string): RuleItem | undefined {
+  if (sectionOf(heading)?.kind !== 'term') return;
+  const match = /^【([^】"\r\n]+)】\s*[=＝]\s*(.+)$/u.exec(value.trim());
+  if (!match || !match[1].trim() || !match[2].trim()) return;
+  const candidate = `"${match[1]}" = ${match[2]}`;
+  const rule = readRule(path, heading, candidate);
+  return rule.term && termText(rule.term) === candidate ? rule : undefined;
+}
 
 const isBullet = (line: string) => line.startsWith('- ') || line.startsWith('* ');
 const isContinuation = (line: string) => line.startsWith('  ') && line.trim() !== '';
@@ -57,9 +100,10 @@ export function parseRuleFile(path: string, content: string): RuleItem[] {
     if (h) { heading = h[1]; continue; }
     if (/^#\s/.test(line)) continue;
     if (!isBullet(line)) continue;
+    const lineNumber = i + 1;
     const parts = [line.slice(2).trim()];
     while (i + 1 < lines.length && isContinuation(lines[i + 1])) parts.push(lines[++i].trim());
-    out.push(readRule(path, heading, parts.join('\n')));
+    out.push({ ...readRule(path, heading, parts.join('\n')), line: lineNumber });
   }
   return out;
 }
@@ -114,6 +158,27 @@ export function ruleSummary(rule: RuleItem) {
   return rule.text.split('\n')[0];
 }
 
+/** Matches a previous version only by unchanged text or a unique structured title in that section. */
+export function publishedRuleVersion(rule: RuleItem, current: RuleItem[], published: RuleItem[]): RuleItem | undefined {
+  const file = published.filter(item => item.path === rule.path);
+  const unchanged = file.find(item => item.heading === rule.heading && item.text === rule.text);
+  if (unchanged) return unchanged;
+  const moved = file.filter(item => item.text === rule.text);
+  if (moved.length === 1 && current.filter(item => item.path === rule.path && item.text === rule.text).length === 1) return moved[0];
+  const title = ruleTitle(rule);
+  if (!title) return undefined;
+  const matches = (item: RuleItem) => item.path === rule.path && item.heading === rule.heading && ruleTitle(item) === title;
+  const earlier = file.filter(matches);
+  return earlier.length === 1 && current.filter(matches).length === 1 ? earlier[0] : undefined;
+}
+
+export function mentionsRuleIdentifier(text: string, identifier: string): boolean {
+  if (!text.includes(identifier)) return false;
+  const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const word = /^[\x00-\x7F]+$/.test(identifier) ? 'a-zA-Z0-9_' : '\\p{L}\\p{N}_';
+  return new RegExp(`(^|[^${word}.])${escaped}($|[^${word}])`, 'u').test(text);
+}
+
 /**
  * Fields a rule mentions: every `模型.字段` that exists, plus bare column names that belong to
  * exactly one model (so `region` alone still counts, `id` shared by many does not).
@@ -124,13 +189,13 @@ export function ruleRefs(text: string, models: { name: string; columns: { name: 
   for (const m of models) for (const c of m.columns) owners.set(c.name, [...(owners.get(c.name) ?? []), m.name]);
   for (const m of models) {
     for (const c of m.columns) {
-      if (text.includes(`${m.name}.${c.name}`)) refs.add(`${m.name}.${c.name}`);
+      const qualified = `${m.name}.${c.name}`;
+      if (mentionsRuleIdentifier(text, qualified)) refs.add(qualified);
     }
   }
   for (const [column, list] of owners) {
     if (list.length !== 1 || column.length < 3) continue;
-    const word = new RegExp(`(^|[^\\p{L}\\p{N}_.])${column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}\\p{N}_])`, 'u');
-    if (word.test(text)) refs.add(`${list[0]}.${column}`);
+    if (mentionsRuleIdentifier(text, column)) refs.add(`${list[0]}.${column}`);
   }
   return [...refs];
 }

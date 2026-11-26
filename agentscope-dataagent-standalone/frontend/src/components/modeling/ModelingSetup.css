@@ -1,5 +1,5 @@
 /* Spec139: compact preparation surfaces, scoped away from the published workbench. */
-.mw-setup, .fs-redesign {
+.mw-setup, .mw-preparation, .fs-redesign {
   --ms-canvas: #f2f2f7; --ms-surface: var(--da-surface); --ms-sunken: var(--da-surface-sunken);
   --ms-ink: #16171d; --ms-secondary: #4a4e5c; --ms-muted: #7a7f8e;
   --ms-hair: color-mix(in srgb, var(--da-text) 11%, transparent); --ms-tint: #5f4bc8;
@@ -7,7 +7,7 @@
   font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   color: var(--ms-ink);
 }
-[data-theme="dark"] .mw-setup, [data-theme="dark"] .fs-redesign {
+[data-theme="dark"] .mw-setup, [data-theme="dark"] .mw-preparation, [data-theme="dark"] .fs-redesign {
   --ms-canvas: #0c0c10; --ms-tint: #a99dff; --ms-soft: #7866eb29;
   --ms-surface: #1c1c22; --ms-sunken: #25252d; --ms-hair: #ffffff1c;
   --ms-ink: #f2f2f7; --ms-secondary: #d1d1db; --ms-muted: #a8adbb;

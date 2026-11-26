@@ -1,25 +1,121 @@
-import type { ScreeningStatus } from '../../api/fieldScreening';
+import { useEffect, useState, type ReactNode } from 'react';
+import { getScreeningTable, type ScreeningStatus, type ScreeningTable } from '../../api/fieldScreening';
 import Icon from '../Icon';
 import BusinessDocumentsPanel from './BusinessDocumentsPanel';
+import { MaterialsCatalog, WorkspaceEmpty, WorkspaceObjectTools, WorkspaceToolbar } from './ModelingWorkspace';
 import './ModelingOptimization.css';
+import './ModelingMaterials.css';
 
-export default function ModelingMaterials({ groupId, tables, idle, showDocuments, onManageData, onAdjust, onDocumentsChanged, onCoach }: {
-  groupId: string; tables: ScreeningStatus[] | null; idle: boolean; showDocuments: boolean;
-  onManageData: () => void; onAdjust: (id: string) => void; onDocumentsChanged: (summary: string) => void; onCoach: () => void;
+type MaterialTab = 'documents' | 'tables';
+
+export default function ModelingMaterials({ groupId, tables, idle, paired, onManageData, onAdjust, onDocumentsChanged, onReference, onTable, onPublish }: {
+  groupId: string; tables: ScreeningStatus[] | null; idle: boolean; paired: boolean;
+  onManageData: () => void; onAdjust: (id: string) => void; onDocumentsChanged: (summary: string, removedName?: string) => void;
+  onReference: (name: string, quote?: string) => void; onTable: (table: ScreeningStatus) => void; onPublish: () => void;
 }) {
-  return <section className="mo-materials mo-optimization" aria-label="资料">
-    <header className="mo-page-head"><div><h2>资料</h2><p>管理模型使用的数据表与业务文档，让字段范围和业务口径有据可查。</p></div></header>
-    <div className={`mo-material-layout${showDocuments ? '' : ' mo-material-layout-data-only'}`}>
-      <section className="da-card mo-data-section" aria-label="数据表资料"><header className="mo-section-head"><span className="mo-section-icon"><Icon name="table" /></span><div className="mo-section-heading"><h3>数据表 <span className="mo-resource-count">{tables ? `${tables.length} 张` : '读取中…'}</span></h3><p>管理纳入模型的字段范围</p></div><button type="button" className="da-btn da-btn-primary" onClick={onManageData}><Icon name="plus" size="sm" />上传数据 / 关联表</button></header>
-        {tables === null ? <p className="mo-section-description" role="status">字段范围尚未就绪，请稍后刷新。</p> : !tables.length ? <div className="mo-empty"><p>还没有可用于建模的数据表。</p><button className="da-btn" onClick={onManageData}>上传数据 / 关联表</button></div> : <>
-          <div className="mo-table-scroll"><table className="mo-data-table"><thead><tr><th scope="col">数据表</th><th scope="col">纳入字段</th><th scope="col">操作</th></tr></thead><tbody>{tables.map(table => <tr key={table.datasetId}>
-            <td><span className="mo-table-name"><span className="mo-table-icon"><Icon name="table" size="sm" /></span><span title={table.name}>{table.name}</span></span></td>
-            <td><span className="mo-field-count"><strong>{table.included}</strong><span> / {table.total}</span></span><span className={`mo-field-note${table.total > table.included ? ' mo-field-note-partial' : ''}`}>{table.total > table.included ? `${table.total - table.included} 个未纳入` : table.total ? '全部纳入' : '暂无字段'}</span></td>
-            <td><button type="button" className="da-btn mo-field-action" disabled={!idle} aria-label={`调整${table.name}的字段`} title={idle ? '调整纳入模型的字段' : '助手运行中，完成后可调整'} onClick={() => onAdjust(table.datasetId)}>字段<Icon name="chevron" size="sm" /></button></td>
-          </tr>)}</tbody></table></div><footer className="mo-table-footer"><Icon name="info" size="sm" /><span>调整字段后进入草稿，仅重新建模这张表</span></footer>
-        </>}
-      </section>
-      {showDocuments && <BusinessDocumentsPanel key={groupId} groupId={groupId} onChanged={onDocumentsChanged} />}
-    </div><aside className="mo-material-guidance"><Icon name="shield" size="sm" /><div><strong>资料修改先进入草稿</strong><p>核对并发布后，新的业务口径才用于问数。</p></div><button type="button" className="da-btn" onClick={onCoach}>检查业务口径<Icon name="chevron" size="sm" /></button></aside>
+  const [mode, setMode] = useState<MaterialTab>('documents');
+  const [doc, setDoc] = useState<string>();
+  const [selected, setSelected] = useState('');
+  const [term, setTerm] = useState('');
+  const [catalogOpen, setCatalogOpen] = useState(true);
+  const [docCount, setDocCount] = useState<number>();
+  const matching = (tables ?? []).filter(table => table.name.toLowerCase().includes(term.trim().toLowerCase()));
+  const catalog = paired ? tables ?? [] : matching;
+  const current = catalog.find(table => table.datasetId === selected) ?? catalog[0];
+  const id = mode === 'tables' ? current?.datasetId : undefined;
+  const [detail, setDetail] = useState<ScreeningTable>();
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    setError('');
+    void getScreeningTable(groupId, id).then(table => { if (active) setDetail(table); })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : '读取字段失败'); });
+    return () => { active = false; };
+  }, [groupId, id, tables, retry]);
+  const toolbar = (objectActions: ReactNode, actions: ReactNode, context?: string, count = docCount) => !paired && <WorkspaceToolbar title="资料" label="资料类型" active={mode} onSelect={value => setMode(value)} tabs={[
+    { id: 'documents', label: '业务文档', icon: 'file', count },
+    { id: 'tables', label: '数据表', icon: 'table', count: tables?.length },
+  ]} objectActions={objectActions} context={context}>{actions}</WorkspaceToolbar>;
+  const toggleCatalog = () => setCatalogOpen(open => !open);
+  const manage = <button type="button" className="da-btn da-btn-primary" onClick={onManageData}><Icon name="plus" size="sm" />上传数据／关联表</button>;
+  const fields = detail?.datasetId === id ? detail : undefined;
+  const tableActions = current && <>
+    {!paired && <button type="button" className="da-btn" onClick={() => { setSelected(current.datasetId); onTable(current); }}><Icon name="chat" size="sm" />边聊边核对</button>}
+    <button type="button" className="da-btn" disabled={!idle} onClick={() => onAdjust(current.datasetId)}>
+      <Icon name="edit" size="sm" />{(fields?.confirmed ?? current.confirmed) ? '调整字段范围' : '确认字段范围'}
+    </button>
+  </>;
+  return <section className={'sm-pane mo-optimization mo-workspace mo-materials' + (paired ? ' mo-work-paired' : '')} aria-label="资料">
+    <div hidden={mode !== 'documents'} className="mo-document-workspace">
+      <BusinessDocumentsPanel key={groupId} groupId={groupId} onChanged={onDocumentsChanged}
+        onCountChange={setDocCount} workspace={{ selected: doc, onSelect: setDoc, paired, idle, toolbar, onReference, onPublish, catalogOpen, toggleCatalog }} />
+    </div>
+    {mode === 'tables' && <>{paired
+      ? <WorkspaceObjectTools compact context={current?.name}>{tableActions}</WorkspaceObjectTools>
+      : toolbar(tableActions, manage, catalogOpen ? undefined : current?.name)}
+      {tables === null ? <p className="mo-work-loading" role="status">正在读取数据表…</p>
+        : !tables.length ? <WorkspaceEmpty icon="table" title="还没有数据表" description="上传数据或关联业务表，再选择要纳入模型的字段。">{manage}</WorkspaceEmpty>
+          : <div className="mo-work-grid mo-material-grid" data-catalog-open={catalogOpen}>
+            {!paired && <MaterialsCatalog title="数据表目录" count={`${matching.length} 张`} open={catalogOpen} onToggle={toggleCatalog}
+              filters={<input type="search" className="da-input" placeholder="搜索数据表" aria-label="搜索数据表" value={term} onChange={e => setTerm(e.target.value)} />}>
+              {matching.map(table => <li key={table.datasetId} className={current?.datasetId === table.datasetId ? 'qc-queue-selected' : ''}>
+                <button type="button" aria-current={current?.datasetId === table.datasetId || undefined} onClick={() => setSelected(table.datasetId)}>
+                  <Icon name="table" size="sm" /><span className="mo-catalog-name"><strong>{table.name}</strong><small>{table.confirmed ? `已纳入 ${table.included} / ${table.total}` : '待确认字段范围'}</small></span>
+                </button></li>)}
+            </MaterialsCatalog>}
+            <div className="mo-work-detail mo-material-detail mo-table-detail" key={current?.datasetId}>
+              {!current ? <WorkspaceEmpty icon="search" title="没有匹配的数据表"><button type="button" className="da-btn" onClick={() => setTerm('')}>清除搜索</button></WorkspaceEmpty>
+                : <>
+                  {!paired && <header className="mo-object-heading">
+                    <span className="mo-object-icon"><Icon name="table" size="sm" /></span>
+                    <div><h3>{current.name}</h3><p>{current.confirmed ? '字段范围已确认' : '待确认字段范围'}</p></div>
+                  </header>}
+                  {error ? <p className="mo-error" role="alert">{error} <button type="button" className="da-btn" onClick={() => setRetry(n => n + 1)}>重试</button></p>
+                    : !fields ? <p className="da-small" role="status">正在读取字段清单…</p>
+                      : <MaterialFields fields={fields.fields} />}
+                </>}
+            </div>
+          </div>}
+    </>}
+  </section>;
+}
+
+function MaterialFields({ fields }: Pick<ScreeningTable, 'fields'>) {
+  const [query, setQuery] = useState('');
+  const [scope, setScope] = useState('all');
+  const term = query.trim().toLowerCase();
+  const included = fields.filter(field => field.included).length;
+  const filtered = fields.filter(field => (scope === 'all' || field.included === (scope === 'included'))
+    && (!term || [field.name, field.originalName, field.description].some(value => value?.toLowerCase().includes(term))));
+  const filtering = !!term || scope !== 'all';
+  return <section className="mo-fields-frame" aria-label="建模字段">
+    <div className="mo-fields-toolbar">
+      <div className="mo-fields-heading"><h4>字段清单</h4><span className="da-small">已纳入 <strong>{included}</strong> / {fields.length}</span></div>
+      <div className="mo-fields-filters">
+        <label className="mo-reader-search"><Icon name="search" size="sm" /><input type="search" placeholder="搜索字段名或业务说明"
+          aria-label="搜索字段名或业务说明" value={query} onChange={event => setQuery(event.target.value)} /></label>
+        <select className="da-input" aria-label="筛选建模范围" value={scope} onChange={event => setScope(event.target.value)}>
+          <option value="all">全部字段</option><option value="included">已纳入</option><option value="excluded">未纳入</option>
+        </select>
+      </div>
+    </div>
+    {filtered.length ? <div className="mo-fields-scroll" tabIndex={0} role="region" aria-label="字段清单，可滚动">
+      <table className="mo-field-table">
+        <thead><tr><th scope="col">物理字段</th><th scope="col" className="mo-field-type-column">数据类型</th><th scope="col">业务说明</th><th scope="col">建模范围</th></tr></thead>
+        <tbody>{filtered.map(field => <tr key={field.name}>
+          <th scope="row"><code>{field.name}</code>
+            {field.originalName && field.originalName !== field.name && <small>原始表头 {field.originalName}</small>}
+            {field.sqlType && <small className="mo-field-type-inline">{field.sqlType}</small>}</th>
+          <td className="mo-field-type-column"><code>{field.sqlType || '—'}</code></td>
+          <td>{field.description || '—'}</td>
+          <td><span className={`mo-field-state${field.included ? ' mo-field-included' : ''}`}>{field.included ? '已纳入' : '未纳入'}</span>
+            {field.locked && <small title="事实表时间字段必须纳入"><Icon name="shield" size="sm" />已锁定</small>}</td>
+        </tr>)}</tbody>
+      </table>
+    </div> : <WorkspaceEmpty icon={filtering ? 'search' : 'table'} title={filtering ? '没有匹配的字段' : '暂无字段'}>
+      {filtering && <button type="button" className="da-btn" onClick={() => { setQuery(''); setScope('all'); }}>清除筛选</button>}
+    </WorkspaceEmpty>}
   </section>;
 }

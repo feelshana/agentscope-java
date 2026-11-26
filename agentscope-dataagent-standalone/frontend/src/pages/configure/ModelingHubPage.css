@@ -15,7 +15,8 @@
 .mh-table th:nth-child(3), .mh-table th:nth-child(4) { width: 6%; }
 .mh-table th:nth-child(5) { width: 14%; }
 .mh-table th:nth-child(6) { width: 12%; }
-.mh-table th:nth-child(7) { width: 13%; }
+.mh-table th:nth-child(7) { width: 19%; }
+.mh-row-actions { display: flex; justify-content: flex-end; align-items: center; gap: 7px; white-space: nowrap; }
 .modeling-hub .mh-table th {
   padding: 11px 15px; border: 0;
   background: rgba(255, 255, 255, .56); color: var(--overview-muted); font-weight: 600;

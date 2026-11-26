@@ -8,15 +8,18 @@ type Draft = { mode: 'LIMITED' | 'UNLIMITED'; days: number; timeColumn: string }
 const message = (error: unknown) => error instanceof Error ? error.message : '时间范围配置失败';
 const DAYS = [7, 14, 31, 90];
 
-export function FactQueryWindowSettings({ groupId, automatic = false, onReady, hideButton = false, openSignal = 0, initiallyReady = false }: {
+export function FactQueryWindowSettings({ groupId, automatic = false, onReady, onSaved, hideButton = false, openSignal = 0, initiallyReady = false, datasetId, inspectTables }: {
   groupId: string;
   automatic?: boolean;
   onReady?: (ready: boolean) => void;
+  onSaved?: () => void;
   /** The page shows its own trigger (e.g. in its header) and bumps {@code openSignal}. */
   hideButton?: boolean;
   openSignal?: number;
   /** Preparation has already persisted and checked policies before mounting the workbench. */
   initiallyReady?: boolean;
+  datasetId?: string;
+  inspectTables?: readonly { id: string; name: string; reason: string }[];
 }) {
   const [tables, setTables] = useState<FactQueryWindowCandidate[]>([]);
   const [unknown, setUnknown] = useState<FactQueryWindowCandidate[]>([]);
@@ -41,13 +44,13 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
     setBusy(true); setError('');
     try {
       const all = await getFactQueryWindowCandidates(groupId);
-      const setup = factWindowSetup(all, pendingOnly);
+      const setup = factWindowSetup(datasetId ? all.filter(table => table.datasetId === datasetId) : all, pendingOnly);
       const candidates = setup.facts;
       if (current !== generation.current) return;
       setTables(candidates);
       setUnknown(setup.unknown);
       setDraft(Object.fromEntries(candidates.map(table => [table.datasetId, factWindowDraft(table)])));
-      setOpen(candidates.length > 0);
+      setOpen(candidates.length > 0 || !!inspectTables || !!datasetId && setup.unknown.length > 0);
       if (pendingOnly) onReady?.(setup.ready);
     } catch (e) { if (current === generation.current) setError(message(e)); }
     finally { if (current === generation.current) setBusy(false); }
@@ -67,6 +70,7 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
       }
       if (current === generation.current) {
         setOpen(false);
+        onSaved?.();
         if (automatic) await load(true);
       }
     } catch (e) { if (current === generation.current) setError(message(e)); }
@@ -78,7 +82,7 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
     setBusy(true); setError('');
     try {
       await confirmTableRole(groupId, datasetId, role);
-      if (current === generation.current) await load(automatic);
+      if (current === generation.current) { onSaved?.(); await load(automatic); }
     } catch (e) { if (current === generation.current) setError(message(e)); }
     finally { if (current === generation.current) setBusy(false); }
   }
@@ -90,19 +94,20 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
     color: active ? 'var(--da-primary)' : 'var(--da-text)', fontWeight: active ? 600 : 400,
   });
   const label: CSSProperties = { fontSize: 12, color: 'var(--da-text-muted)', marginBottom: 6 };
+  const roleChoices = unknown.length > 0 && <div className="da-card" style={{ marginTop: 8 }}>
+    <div style={{ fontWeight: 600, marginBottom: 4 }}>请先确认表的角色</div>
+    <div className="da-small" style={{ marginBottom: 8 }}>事实表（如访问明细、订单）需要配置查询时间范围；维度表（如用户、项目）不需要。</div>
+    {unknown.map(table => <div key={table.datasetId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--da-border)' }}>
+      <code style={{ flex: 1 }}>{table.tableName}</code>
+      <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void setRole(table.datasetId, 'FACT')}>事实表</button>
+      <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void setRole(table.datasetId, 'DIMENSION')}>维度表</button>
+    </div>)}
+  </div>;
 
   return <div>
     {!hideButton && <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void load()}>事实表时间范围</button>}
     {error && !open && <div role="alert" className="da-small" style={{ color: 'var(--da-danger)' }}>{error}</div>}
-    {unknown.length > 0 && <div className="da-card" style={{ marginTop: 8 }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>请先确认表的角色</div>
-      <div className="da-small" style={{ marginBottom: 8 }}>事实表（如访问明细、订单）需要配置查询时间范围；维度表（如用户、项目）不需要。</div>
-      {unknown.map(table => <div key={table.datasetId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--da-border)' }}>
-        <code style={{ flex: 1 }}>{table.tableName}</code>
-        <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void setRole(table.datasetId, 'FACT')}>事实表</button>
-        <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void setRole(table.datasetId, 'DIMENSION')}>维度表</button>
-      </div>)}
-    </div>}
+    {!datasetId && !inspectTables && roleChoices}
     {open && <div className="da-modal-overlay" onClick={() => { if (!busy) setOpen(false); }}>
       <div role="dialog" aria-modal="true" aria-label="事实表查询时间范围" className="da-modal-shell" data-tour="window-modal"
         style={{ width: 'min(640px, 94vw)', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}
@@ -114,6 +119,10 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
           </div>
         </div>
         <div className="da-modal-body" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {(datasetId || inspectTables) && roleChoices}
+          {inspectTables?.filter(table => !tables.some(candidate => candidate.datasetId === table.id)
+            && !unknown.some(candidate => candidate.datasetId === table.id)).map(table =>
+            <div className="da-card kbw-fact-unavailable" key={table.id}><code>{table.name}</code><span>{table.reason}</span></div>)}
           {tables.map(table => {
             const value = draft[table.datasetId];
             const update = (change: Partial<Draft>) => setDraft(previous => ({

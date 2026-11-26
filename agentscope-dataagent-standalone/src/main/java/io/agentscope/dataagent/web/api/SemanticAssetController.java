@@ -4,6 +4,7 @@ import io.agentscope.dataagent.dataset.AssetExampleService;
 import io.agentscope.dataagent.dataset.AssetProposalStore;
 import io.agentscope.dataagent.dataset.AssetReviewStore;
 import io.agentscope.dataagent.dataset.DatasetException;
+import io.agentscope.dataagent.dataset.MdlQuestionStore;
 import io.agentscope.dataagent.dataset.SemanticAssetService;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
@@ -39,23 +41,37 @@ public class SemanticAssetController {
 
     public record SaveRequest(String file, String content, String expectedHash) {}
 
-    public record ReviewRequest(List<String> timeColumns) {}
+    public record RemoveIncompleteViewRequest(String revision) {}
+
+    public record ReviewRequest(List<String> timeColumns, String expectedHash) {}
 
     public record GenerateRequest(String question) {}
 
     public record GenerateResponse(String sql) {}
 
-    public record VerifyRequest(List<SemanticAssetService.VerifyCase> cases) {}
+    public record VerifyRequest(List<SemanticAssetService.VerifyCase> cases, String expectedHash) {}
 
     /** {@code save}: cases judged as expected to keep as confirmed questions (spec112). */
     public record VerdictRequest(
-            Map<String, String> verdicts, List<SemanticAssetService.VerifyCase> save) {}
+            Map<String, String> verdicts,
+            List<SemanticAssetService.VerifyCase> save,
+            String expectedHash) {}
+
+    public record SaveVerifiedQuestion(
+            String expectedHash, String caseKey, MdlQuestionStore.Replacement replacement) {}
 
     @GetMapping
     public Mono<List<AssetReviewStore.Asset>> list(
             @PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return blocking(() -> assets.list(userId, groupId));
+    }
+
+    @GetMapping("/catalog")
+    public Mono<AssetReviewStore.Catalog> catalog(
+            @PathVariable String groupId, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return blocking(() -> assets.catalog(userId, groupId));
     }
 
     public record ProposalDecision(String status) {}
@@ -96,11 +112,33 @@ public class SemanticAssetController {
             @PathVariable String groupId,
             @PathVariable String kind,
             @PathVariable String name,
+            @RequestParam(required = false) String revision,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return blocking(
                 () -> {
-                    assets.delete(userId, groupId, kind, name);
+                    assets.delete(userId, groupId, kind, name, revision);
+                    return Map.of("deleted", true);
+                });
+    }
+
+    @GetMapping("/incomplete-views/{name}")
+    public Mono<SemanticAssetService.IncompleteView> inspectIncompleteView(
+            @PathVariable String groupId, @PathVariable String name, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return blocking(() -> assets.inspectIncompleteView(userId, groupId, name));
+    }
+
+    @DeleteMapping("/incomplete-views/{name}")
+    public Mono<Map<String, Boolean>> removeIncompleteView(
+            @PathVariable String groupId,
+            @PathVariable String name,
+            @RequestBody RemoveIncompleteViewRequest req,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return blocking(
+                () -> {
+                    assets.removeIncompleteView(userId, groupId, name, req.revision());
                     return Map.of("deleted", true);
                 });
     }
@@ -118,9 +156,10 @@ public class SemanticAssetController {
             @PathVariable String groupId,
             @PathVariable String kind,
             @PathVariable String name,
+            @RequestParam(defaultValue = "false") boolean published,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return blocking(() -> assets.get(userId, groupId, kind, name));
+        return blocking(() -> assets.get(userId, groupId, kind, name, published));
     }
 
     @PutMapping("/{kind}/{name}")
@@ -151,7 +190,15 @@ public class SemanticAssetController {
             @RequestBody ReviewRequest req,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return blocking(() -> assets.review(userId, groupId, kind, name, req.timeColumns()));
+        return blocking(
+                () ->
+                        assets.review(
+                                userId,
+                                groupId,
+                                kind,
+                                name,
+                                req.timeColumns(),
+                                req.expectedHash()));
     }
 
     @PostMapping("/{kind}/{name}/generate")
@@ -176,7 +223,8 @@ public class SemanticAssetController {
             @RequestBody VerifyRequest req,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return blocking(() -> assets.verify(userId, groupId, kind, name, req.cases()));
+        return blocking(
+                () -> assets.verify(userId, groupId, kind, name, req.cases(), req.expectedHash()));
     }
 
     @PostMapping("/{kind}/{name}/verdict")
@@ -188,7 +236,35 @@ public class SemanticAssetController {
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return blocking(
-                () -> assets.verdict(userId, groupId, kind, name, req.verdicts(), req.save()));
+                () ->
+                        assets.verdict(
+                                userId,
+                                groupId,
+                                kind,
+                                name,
+                                req.verdicts(),
+                                req.save(),
+                                req.expectedHash()));
+    }
+
+    @PostMapping("/{kind}/{name}/verified-questions")
+    public Mono<MdlQuestionStore.Review> saveVerifiedQuestion(
+            @PathVariable String groupId,
+            @PathVariable String kind,
+            @PathVariable String name,
+            @RequestBody SaveVerifiedQuestion req,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return blocking(
+                () ->
+                        assets.saveVerifiedQuestion(
+                                userId,
+                                groupId,
+                                kind,
+                                name,
+                                req.expectedHash(),
+                                req.caseKey(),
+                                req.replacement()));
     }
 
     private static <T> Mono<T> blocking(Callable<T> call) {

@@ -7,22 +7,33 @@ export const isNumericColumn = (c: DatasetColumn | undefined) => /^(tinyint|smal
 export interface DatasetPreviewRow { values: readonly (string | null)[]; index: number }
 
 /** Shared presentation only; loading, permissions and optional editing stay with the caller. */
-export function DatasetPreviewTable({ columns, rows, onFieldInfo, activeFieldName }: {
+export function DatasetPreviewTable({ columns, rows, onFieldInfo, activeFieldName, showDescriptions = false }: {
   columns: DatasetColumn[]; rows: DatasetPreviewRow[];
   activeFieldName?: string;
+  showDescriptions?: boolean;
   onFieldInfo?: (column: DatasetColumn, anchor: HTMLButtonElement) => void;
 }) {
   return <table className="kw-table kw-preview"><thead><tr><th className="rownum">#</th>{columns.map(c =>
-    <th key={c.name} className={isNumericColumn(c) ? 'numeric' : ''}><div className="kd-field-head"><div><strong>{datasetColumnLabel(c)}</strong><small>{c.name}</small></div>{onFieldInfo &&
+    <th key={c.name} className={isNumericColumn(c) ? 'numeric' : ''}><div className="kd-field-head"><div><strong>{datasetColumnLabel(c)}</strong><small>{c.name}</small>
+      {showDescriptions && <span className="kd-header-description">{c.description?.trim() || '暂无说明'}</span>}</div>{onFieldInfo &&
       <button type="button" className="kd-info" aria-label={`查看 ${datasetColumnLabel(c)} 的字段说明`} aria-expanded={activeFieldName === c.name} aria-controls={activeFieldName === c.name ? 'kd-field-help' : undefined} onClick={e => onFieldInfo(c, e.currentTarget)}><Icon name="info" size="sm" /></button>}</div></th>)}</tr></thead>
     <tbody>{rows.map(row => <tr key={row.index}><td className="rownum">{row.index + 1}</td>{row.values.map((v, j) =>
       <td key={j} className={isNumericColumn(columns[j]) ? 'numeric' : ''} title={v == null ? 'NULL' : String(v)}>{v == null ? <span className="kd-muted">NULL</span> : String(v)}</td>)}</tr>)}</tbody></table>;
 }
 
-export function DatasetFieldsTable({ columns, actions, afterRow, compact = false }: {
+export function DatasetFieldsTable({ columns, actions, afterRow, compact = false, onField, onEditSelected, selected }: {
   compact?: boolean;
   columns: DatasetColumn[]; actions?: (column: DatasetColumn) => ReactNode; afterRow?: (column: DatasetColumn) => ReactNode;
+  onField?: (column: DatasetColumn) => void;
+  onEditSelected?: () => void;
+  selected?: string;
 }) {
   return <table className={`kw-table kd-fields${compact ? ' is-compact' : ''}`}><thead><tr><th>{compact ? '字段' : '字段名称'}</th>{!compact && <th>原字段名称</th>}<th>数据类型</th><th>业务说明</th></tr></thead><tbody>{columns.map(c =>
-    <Fragment key={c.name}><tr><td>{compact && <strong>{datasetColumnLabel(c)}</strong>}<code>{c.name}</code></td>{!compact && <td>{c.originalName || <span className="kd-muted">—</span>}</td>}<td><span className="kw-type">{c.sqlType}</span></td><td><div className="kd-field-description"><span>{c.description || <span className="kd-muted">待补充说明</span>}</span>{actions?.(c)}</div></td></tr>{afterRow?.(c)}</Fragment>)}</tbody></table>;
+    <Fragment key={c.name}><tr data-selected={selected === c.name || undefined} data-selectable={!!onField || undefined}
+      onClick={onField ? () => onField(c) : undefined}><td>{compact && <strong>{datasetColumnLabel(c)}</strong>}
+      {onField ? <button type="button" className="kbw-field-link" aria-pressed={selected === c.name}
+        onClick={event => { event.stopPropagation(); onField(c); }}><code>{c.name}</code></button> : <code>{c.name}</code>}
+      {onEditSelected && selected === c.name && <button type="button" className="kd-selected-pencil" aria-label="编辑选中字段"
+        onClick={event => { event.stopPropagation(); onEditSelected(); }}><Icon name="edit" size="sm" /></button>}
+    </td>{!compact && <td>{c.originalName || <span className="kd-muted">—</span>}</td>}<td><span className="kw-type">{c.sqlType}</span></td><td><div className="kd-field-description"><span>{c.description || <span className="kd-muted">待补充说明</span>}</span>{actions?.(c)}</div></td></tr>{afterRow?.(c)}</Fragment>)}</tbody></table>;
 }

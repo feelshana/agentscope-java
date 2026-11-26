@@ -12,7 +12,7 @@ const draftOf = factWindowDraft;
 const message = (e: unknown) => e instanceof Error ? e.message : '准备信息保存失败';
 
 /** The preparation checklist reuses existing policies and persists defaults before starting. */
-export default function ModelingPreparation({ groupId, tables, onEditFields, onReady, onStart, onDocumentsChanged, confirmWindow = false }: {
+export default function ModelingPreparation({ groupId, tables, onEditFields, onReady, onStart, onDocumentsChanged, confirmWindow = false, startSignal = 0 }: {
   groupId: string;
   tables: ScreeningStatus[];
   onEditFields: () => void;
@@ -20,12 +20,14 @@ export default function ModelingPreparation({ groupId, tables, onEditFields, onR
   onStart: () => void;
   onDocumentsChanged: (summary: string) => void;
   confirmWindow?: boolean;
+  startSignal?: number;
 }) {
   const [candidates, setCandidates] = useState<FactQueryWindowCandidate[]>([]);
   const [drafts, setDrafts] = useState<Record<string, WindowDraft>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [startHint, setStartHint] = useState(false);
   const [documentsReady, setDocumentsReady] = useState(false);
   const active = useRef(true);
   const generation = useRef(0);
@@ -92,9 +94,23 @@ export default function ModelingPreparation({ groupId, tables, onEditFields, onR
     finally { operation.current = false; if (active.current) setBusy(false); }
   }
 
+  const startDisabled = loading || busy || !tables.length || !documentsReady || setup.unknown.length > 0 || (error !== '' && candidates.length === 0);
+  const start = () => {
+    if (startDisabled) { setStartHint(true); return; }
+    setStartHint(false);
+    void proceed(true);
+  };
+  const startRef = useRef(start); startRef.current = start;
+  const handledSignal = useRef(startSignal);
+  useEffect(() => {
+    if (handledSignal.current === startSignal) return;
+    handledSignal.current = startSignal;
+    startRef.current();
+  }, [startSignal]);
+
   return <div className="mp-wrap"><section className="mp-card" aria-label="建模准备清单">
     <header className="mp-heading"><span className="mp-complete"><Icon name="check" size="sm" /></span><div>
-      <h2>{!tables.length ? '请先准备数据' : `字段整理完成${loading ? '' : setup.facts.length || setup.unknown.length ? '，还有两项要确认' : '，可以开始了'}`}</h2>
+      <h2>{!tables.length ? '请先准备数据' : `字段整理完成${loading ? '' : setup.facts.length || setup.unknown.length ? '，请核对查询范围' : '，可以开始了'}`}</h2>
       <p>{!tables.length ? '返回知识库上传文件或关联数据表，再来整理字段。' : <>{tables.length} 张表 · {included} 个字段已确认。{loading ? '正在读取准备信息…' : setup.facts.length || setup.unknown.length ? '查询范围已按默认填好，业务文档可选。' : '没有需要配置的查询范围，业务文档可选。'}</>}</p>
     </div></header>
     <div className="mp-row"><span className="mp-row-icon mp-row-icon-ok"><Icon name="table" size="sm" /></span>
@@ -126,8 +142,9 @@ export default function ModelingPreparation({ groupId, tables, onEditFields, onR
     </div>}
     <BusinessDocumentsPanel groupId={groupId} variant="setup" onChanged={onDocumentsChanged} onReadyChange={setDocumentsReady} />
     {error && <div className="mp-error" role="alert">{error} <button type="button" className="mp-text-button" disabled={busy} onClick={() => void load()}>重新读取</button></div>}
+    {startHint && startDisabled && !busy && <div className="mp-error" role="status">请先完成准备清单中的事项，再开始建模。</div>}
     <footer className="mp-footer"><p><strong>不传文档也能开始</strong>。助手会读取资料、建模、写草稿并校验。</p>
-      <button type="button" className="mp-button mp-primary" data-tour="model-start" disabled={loading || busy || !tables.length || !documentsReady || setup.unknown.length > 0 || (error !== '' && candidates.length === 0)} onClick={() => void proceed(true)}>{busy ? '正在保存准备信息…' : '开始自动建模'}</button>
+      <button type="button" className="mp-button mp-primary" data-tour="model-start" disabled={startDisabled} onClick={start}>{busy ? '正在保存准备信息…' : '开始自动建模'}</button>
     </footer>
   </section></div>;
 }

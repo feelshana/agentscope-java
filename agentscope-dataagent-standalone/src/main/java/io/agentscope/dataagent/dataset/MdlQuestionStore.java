@@ -49,6 +49,8 @@ public class MdlQuestionStore {
 
     public record Publication(boolean available, boolean current) {}
 
+    private record StoredQuestion(Question question, boolean removalPending) {}
+
     public record Receipt(
             String validationId,
             String questionHash,
@@ -202,7 +204,7 @@ public class MdlQuestionStore {
                         plan.put("reason", "用户修正本题查询；复用已有语义模型，不反向修改资产");
                         plan.putArray("assets");
                         if (current.sql().equals(sql.trim()))
-                            return listLocked(groupId).stream()
+                            return listLocked(groupId, false).stream()
                                     .filter(r -> r.question().id().equals(id))
                                     .findFirst()
                                     .orElseThrow();
@@ -211,7 +213,7 @@ public class MdlQuestionStore {
                                 workspace
                                         .workspaceRoot(groupId)
                                         .resolve("knowledge/sql/" + id + ".md"));
-                        return listLocked(groupId).stream()
+                        return listLocked(groupId, false).stream()
                                 .filter(r -> r.question().id().equals(id))
                                 .findFirst()
                                 .orElseThrow();
@@ -222,25 +224,33 @@ public class MdlQuestionStore {
     }
 
     public void archive(String groupId, String id, String expectedRevision) {
+        archive(groupId, id, expectedRevision, null);
+    }
+
+    void archive(String groupId, String id, String expectedRevision, Boolean expectedPublished) {
         workspace.withWorkspaceLock(
                 groupId,
                 () -> {
                     requireUnchanged(groupId, id, expectedRevision);
-                    Path source =
-                            workspace
-                                    .workspaceRoot(groupId)
-                                    .resolve("knowledge/questions/" + id + ".yml");
+                    Path root = workspace.workspaceRoot(groupId);
+                    if (expectedPublished != null
+                            && expectedPublished != hasPublishedExample(root, id)) {
+                        throw new DatasetException("题目的发布状态已变化，请刷新后再操作", 409);
+                    }
+                    Path source = root.resolve("knowledge/questions/" + id + ".yml");
                     try {
+                        String original = Files.readString(source);
                         var node =
                                 (com.fasterxml.jackson.databind.node.ObjectNode)
-                                        YAML.readTree(
-                                                Files.readString(source, StandardCharsets.UTF_8));
+                                        YAML.readTree(original);
                         node.put("archived", true);
                         write(source, YAML.writeValueAsString(node));
-                        Files.deleteIfExists(
-                                workspace
-                                        .workspaceRoot(groupId)
-                                        .resolve("knowledge/sql/" + id + ".md"));
+                        try {
+                            Files.deleteIfExists(root.resolve("knowledge/sql/" + id + ".md"));
+                        } catch (IOException failed) {
+                            write(source, original);
+                            throw failed;
+                        }
                     } catch (IOException e) {
                         throw new DatasetException("移出验收失败：" + e.getMessage(), e);
                     }
@@ -248,7 +258,7 @@ public class MdlQuestionStore {
                 });
     }
 
-    private Question requireUnchanged(String groupId, String id, String revision) {
+    Question requireUnchanged(String groupId, String id, String revision) {
         Question question = requireQuestion(groupId, id);
         if (revision == null || !questionHash(question).equals(revision))
             throw new DatasetException("问题已变化，请刷新后再操作", 409);
@@ -256,16 +266,32 @@ public class MdlQuestionStore {
     }
 
     public List<Review> list(String groupId) {
-        return workspace.withWorkspaceLock(groupId, () -> listLocked(groupId));
+        return list(groupId, false);
     }
 
-    private List<Review> listLocked(String groupId) {
+    List<Review> list(String groupId, boolean includePendingRemoval) {
+        return workspace.withWorkspaceLock(
+                groupId, () -> listLocked(groupId, includePendingRemoval));
+    }
+
+    private List<Review> listLocked(String groupId, boolean includePendingRemoval) {
         Path root = workspace.workspaceRoot(groupId);
         List<Review> out = new ArrayList<>();
         QuestionDependencies.Project draft = null;
         QuestionDependencies.Project published = null;
-        for (Question question : readQuestions(root)) {
+        for (StoredQuestion stored : readQuestionFiles(root, includePendingRemoval)) {
+            Question question = stored.question();
             Receipt receipt = readReceipt(groupId, question.id());
+            if (stored.removalPending()) {
+                out.add(
+                        new Review(
+                                question,
+                                "REMOVAL_PENDING",
+                                receipt,
+                                null,
+                                new Publication(true, false)));
+                continue;
+            }
             String status = receipt == null ? "DRAFT" : receipt.status();
             List<String> reasons = List.of();
             if (receipt != null && !matchesQuestionHash(question, receipt.questionHash())) {
@@ -338,7 +364,24 @@ public class MdlQuestionStore {
                 .orElseThrow(() -> new DatasetException("常用问题不存在", 404));
     }
 
+    static boolean isArchived(Path root, String id) {
+        if (id == null || !id.matches("[A-Za-z0-9_-]{1,64}")) return false;
+        Path file = root.resolve("knowledge/questions/" + id + ".yml");
+        try {
+            if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || Files.size(file) > 65536)
+                return false;
+            JsonNode node = YAML.readTree(Files.readString(file));
+            return node != null && node.path("archived").asBoolean(false);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     public List<Question> readQuestions(Path root) {
+        return readQuestionFiles(root, false).stream().map(StoredQuestion::question).toList();
+    }
+
+    private List<StoredQuestion> readQuestionFiles(Path root, boolean includePendingRemoval) {
         Path directory = root.resolve("knowledge/questions");
         if (!Files.isDirectory(directory)) return List.of();
         try (var files = Files.list(directory)) {
@@ -346,8 +389,8 @@ public class MdlQuestionStore {
                     files.filter(p -> p.getFileName().toString().endsWith(".yml"))
                             .sorted()
                             .toList();
-            if (paths.size() > 50) throw new DatasetException("每个知识库最多设置 50 个常用问题", 400);
-            List<Question> out = new ArrayList<>();
+            int activeCount = 0;
+            List<StoredQuestion> out = new ArrayList<>();
             for (Path path : paths) {
                 if (Files.isSymbolicLink(path) || Files.size(path) > 65536) {
                     throw new DatasetException("常用问题文件不可为链接或超过 64KB", 400);
@@ -357,7 +400,12 @@ public class MdlQuestionStore {
                 JsonNode node = YAML.readTree(Files.readString(path, StandardCharsets.UTF_8));
                 if (node == null || !node.isObject())
                     throw new DatasetException("常用问题 YAML 必须是对象", 400);
-                if (node.path("archived").asBoolean(false)) continue;
+                boolean archived = node.path("archived").asBoolean(false);
+                if (archived && (!includePendingRemoval || !hasPublishedExample(root, id)))
+                    continue;
+                if (!archived && ++activeCount > 50) {
+                    throw new DatasetException("每个知识库最多设置 50 个常用问题", 400);
+                }
                 String question = node.path("question").asText("").trim();
                 String definition = node.path("definition").asText("").trim();
                 String sql = node.path("sql").asText("").trim();
@@ -370,12 +418,14 @@ public class MdlQuestionStore {
                 // SQL policy is enforced on confirm, trial run and correction, so one invalid
                 // agent draft cannot hide the rest of the list.
                 out.add(
-                        new Question(
-                                id,
-                                question,
-                                definition,
-                                sql,
-                                readPlan(node.path("modeling"), id)));
+                        new StoredQuestion(
+                                new Question(
+                                        id,
+                                        question,
+                                        definition,
+                                        sql,
+                                        readPlan(node.path("modeling"), id)),
+                                archived));
             }
             return out;
         } catch (IOException e) {
@@ -510,17 +560,9 @@ public class MdlQuestionStore {
     }
 
     Review review(String groupId, Question question, String status, Receipt receipt) {
-        Path published = workspace.workspaceRoot(groupId).getParent().resolve("published");
-        Path pair = published.resolve("knowledge/sql/" + question.id() + ".md");
-        boolean available = false;
-        try {
-            available =
-                    Files.isRegularFile(pair, LinkOption.NOFOLLOW_LINKS)
-                            && Files.readString(pair, StandardCharsets.UTF_8)
-                                    .contains("\nverified: true\n");
-        } catch (IOException e) {
-            throw new DatasetException("读取已发布问题失败", e);
-        }
+        Path root = workspace.workspaceRoot(groupId);
+        Path published = root.getParent().resolve("published");
+        boolean available = hasPublishedExample(root, question.id());
         boolean current =
                 available
                         && "CONFIRMED".equals(status)
@@ -536,6 +578,17 @@ public class MdlQuestionStore {
                 receipt,
                 coverage(workspace.workspaceRoot(groupId), question),
                 new Publication(available, current));
+    }
+
+    private static boolean hasPublishedExample(Path root, String id) {
+        Path pair = root.getParent().resolve("published/knowledge/sql/" + id + ".md");
+        try {
+            return Files.isRegularFile(pair, LinkOption.NOFOLLOW_LINKS)
+                    && Files.readString(pair, StandardCharsets.UTF_8)
+                            .contains("\nverified: true\n");
+        } catch (IOException e) {
+            throw new DatasetException("读取已发布问题失败", e);
+        }
     }
 
     public Receipt saveExecution(
@@ -650,6 +703,18 @@ public class MdlQuestionStore {
      */
     public String saveVerifiedQuestion(
             String groupId, String question, String definition, String sql) {
+        return saveVerifiedQuestion(groupId, question, definition, sql, null, false);
+    }
+
+    public record Replacement(String id, String revision) {}
+
+    String saveVerifiedQuestion(
+            String groupId,
+            String question,
+            String definition,
+            String sql,
+            Replacement replacement,
+            boolean requireConfirmation) {
         String text = question == null ? "" : question.strip();
         if (text.isEmpty() || text.length() > 1000)
             throw new DatasetException("验证问题不能为空且不超过 1000 字", 400);
@@ -665,6 +730,15 @@ public class MdlQuestionStore {
                                     .map(Question::id)
                                     .findFirst()
                                     .orElse(null);
+                    if (requireConfirmation) {
+                        if (replacement == null && id != null)
+                            throw new DatasetException("已有同名问答，请刷新并确认替换", 409);
+                        if (replacement != null) {
+                            if (!java.util.Objects.equals(id, replacement.id()) || id == null)
+                                throw new DatasetException("要替换的问答已变化，请刷新后再操作", 409);
+                            requireUnchanged(groupId, id, replacement.revision());
+                        }
+                    }
                     if (id == null) {
                         if (existing.size() >= 50)
                             throw new DatasetException("每个知识库最多设置 50 个常用问题", 400);

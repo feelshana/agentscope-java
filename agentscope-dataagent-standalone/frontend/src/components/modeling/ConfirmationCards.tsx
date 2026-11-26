@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { Confirmation, ConfirmationAnswer } from '../../api/draftReview';
 
 type Choice = number | 'none' | 'own';
@@ -17,6 +17,7 @@ export default function ConfirmationCards({ questions, onSubmit }: {
   const [own, setOwn] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<ConfirmationAnswer[]>([]);
+  const optionGroup = useId();
   const current = questions[index];
   if (!current) return null;
 
@@ -36,7 +37,7 @@ export default function ConfirmationCards({ questions, onSubmit }: {
   const option = (key: Choice, title: string, detail?: string, recommended = false) => <label key={String(key)}
     className="mc-opt" data-on={choice === key}
     style={{ display: 'flex', gap: 9, alignItems: 'flex-start', padding: '7px 10px', borderRadius: 9, cursor: 'pointer', marginTop: 3 }}>
-    <input type="radio" name={`confirm-${current.id}`} checked={choice === key} onChange={() => { setChoice(key); setError(null); }} style={{ marginTop: 3, accentColor: 'var(--da-primary)', flex: 'none' }} />
+    <input type="radio" name={optionGroup} checked={choice === key} onChange={() => { setChoice(key); setError(null); }} style={{ marginTop: 3, accentColor: 'var(--da-primary)', flex: 'none' }} />
     <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>{title}{recommended && <span className="da-badge" style={{ marginLeft: 6 }}>推荐</span>}
       {detail && <span style={{ display: 'block', marginTop: 1, fontSize: 12, color: 'var(--da-text-muted)' }}>{detail}</span>}</span>
   </label>;
@@ -64,10 +65,12 @@ export default function ConfirmationCards({ questions, onSubmit }: {
       style={{ width: '100%', boxSizing: 'border-box', marginTop: 4 }} />}
     {option('none', '不采用', '不设这条口径，删除这个问题')}
     {error && <div role="alert" style={{ fontSize: 12, color: 'var(--da-danger)' }}>{error}</div>}
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
-      <button className="da-btn da-btn-primary da-btn-sm" onClick={confirm}>确定</button>
-      <button className="da-btn da-btn-sm" onClick={() => next(null)}>稍后</button>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 10 }}>
       {answers.length > 0 && <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>已确定 {answers.length} 题，最后一题后一起交给助手</span>}
+      <div style={{ display: 'flex', flexShrink: 0, gap: 8, marginInlineStart: 'auto' }}>
+        <button type="button" className="da-btn da-btn-sm" onClick={() => next(null)}>稍后</button>
+        <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={confirm}>确定</button>
+      </div>
     </div>
   </section>;
 }

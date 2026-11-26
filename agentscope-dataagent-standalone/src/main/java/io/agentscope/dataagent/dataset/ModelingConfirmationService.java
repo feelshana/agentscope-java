@@ -165,19 +165,12 @@ public class ModelingConfirmationService {
 
     /** Ids of the questions an open card was asked for; their SQL waits for the answer. */
     public static java.util.Set<String> awaitingQuestions(Path root) {
-        Path directory = root.resolve(DIRECTORY);
-        if (!Files.isDirectory(directory)) return java.util.Set.of();
         java.util.Set<String> out = new java.util.HashSet<>();
-        try (Stream<Path> files = Files.list(directory)) {
-            for (Path file : files.filter(f -> f.toString().endsWith(".json")).toList()) {
-                try {
-                    var ids = JSON.readValue(file.toFile(), Confirmation.class).questionIds();
-                    if (ids != null) out.addAll(ids);
-                } catch (IOException ignored) {
-                    // A torn card links nothing.
-                }
+        try {
+            for (Confirmation confirmation : read(root)) {
+                if (confirmation.questionIds() != null) out.addAll(confirmation.questionIds());
             }
-        } catch (IOException e) {
+        } catch (DatasetException e) {
             return java.util.Set.of();
         }
         return out;
@@ -242,13 +235,37 @@ public class ModelingConfirmationService {
     }
 
     private List<Confirmation> read(String groupId) {
-        Path directory = workspace.workspaceRoot(groupId).resolve(DIRECTORY);
+        return read(workspace.workspaceRoot(groupId));
+    }
+
+    private static List<Confirmation> read(Path root) {
+        Path directory = root.resolve(DIRECTORY);
         if (!Files.isDirectory(directory)) return List.of();
         try (Stream<Path> files = Files.list(directory)) {
             List<Confirmation> out = new ArrayList<>();
             for (Path file : files.filter(f -> f.toString().endsWith(".json")).toList()) {
                 try {
-                    out.add(JSON.readValue(file.toFile(), Confirmation.class));
+                    Confirmation value = JSON.readValue(file.toFile(), Confirmation.class);
+                    var ids = value.questionIds();
+                    if (ids != null && !ids.isEmpty()) {
+                        var activeIds =
+                                ids.stream()
+                                        .filter(id -> !MdlQuestionStore.isArchived(root, id))
+                                        .toList();
+                        if (activeIds.isEmpty()) continue;
+                        if (activeIds.size() != ids.size()) {
+                            value =
+                                    new Confirmation(
+                                            value.id(),
+                                            value.question(),
+                                            value.basis(),
+                                            value.options(),
+                                            value.createdAt(),
+                                            activeIds,
+                                            value.source());
+                        }
+                    }
+                    out.add(value);
                 } catch (IOException ignored) {
                     // A torn file loses one question, never the others.
                 }

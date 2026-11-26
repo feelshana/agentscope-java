@@ -51,11 +51,23 @@ class MdlQuestionServiceTest {
                         });
     }
 
-    /**
-     * 2026-10-25: a question confirmed while a publish waited for the workspace lock bumped the
-     * modeling revision after the lock was released, so the publish covered the old revision and
-     * querying stayed blocked with nothing left to publish. The bump now happens inside the lock.
-     */
+    @Test
+    void concurrentRewriteDuringPlanningCannotConfirmUnseenSql() {
+        var reviewed = new MdlQuestionStore.Question("q-1", "营收", "全部订单", "SELECT 1");
+        when(store.requireUnchanged("a", "q-1", "r1"))
+                .thenReturn(reviewed)
+                .thenThrow(new DatasetException("问题已变化，请刷新后再操作", 409));
+        var error =
+                assertThrows(
+                        DatasetException.class,
+                        () -> service.decide(new DatasetScope("alice"), "a", "q-1", true, "r1"));
+        org.assertj.core.api.Assertions.assertThat(error.status()).isEqualTo(409);
+        org.mockito.Mockito.verify(groups, org.mockito.Mockito.never()).markMdlDirty("alice", "a");
+        org.mockito.Mockito.verify(store, org.mockito.Mockito.never())
+                .decide("a", "q-1", true, "alice", null);
+    }
+
+    /** A publish must see the new question and its modeling revision together. */
     @Test
     void questionChangesBumpTheModelingRevisionInsideTheWorkspaceLock() {
         var scope = new DatasetScope("alice");
@@ -226,6 +238,7 @@ class MdlQuestionServiceTest {
     void narrowedScopeCannotReadValidateOrDecideAnotherGroup() {
         DatasetScope scope = new DatasetScope("alice", List.of("a"));
         assertThrows(DatasetException.class, () -> service.list(scope, "b"));
+        assertThrows(DatasetException.class, () -> service.reviewTitle(scope, "b", "sales", "rev"));
         assertThrows(DatasetException.class, () -> service.validate(scope, "b", "sales"));
         assertThrows(DatasetException.class, () -> service.decide(scope, "b", "sales", true));
         assertThrows(
@@ -239,6 +252,9 @@ class MdlQuestionServiceTest {
     void foreignOwnerIsCheckedBeforeReadingAnyFiles() {
         when(groups.getGroup("alice", "b")).thenThrow(new DatasetException("not found", 404));
         assertThrows(DatasetException.class, () -> service.list(new DatasetScope("alice"), "b"));
+        assertThrows(
+                DatasetException.class,
+                () -> service.reviewTitle(new DatasetScope("alice"), "b", "sales", "rev"));
         assertThrows(
                 DatasetException.class,
                 () -> service.validate(new DatasetScope("alice"), "b", "sales"));

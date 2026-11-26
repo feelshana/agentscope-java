@@ -7,6 +7,7 @@ export interface ChatRequest {
   allGroups?: boolean;
   /** Modeling only: why the turn runs; labels draft changes and gates capabilities (spec092). */
   purpose?: TurnPurpose;
+  modelingQuestionId?: string;
   /** Query only (spec102): the analysis method chosen for this turn; omitted for a plain query. */
   analysis?: AnalysisMethod;
   /** Query only: the parameters the user confirmed in the card; absent while proposing them. */
