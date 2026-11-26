@@ -29,6 +29,8 @@ MAX_DAYS = 3660
 DATE_TYPES = {"date", "datetime", "timestamp"}
 INT_TYPES = {"int", "mediumint", "bigint"}
 TEXT_TYPES = {"char", "varchar"}
+FILTER_INT_TYPES = INT_TYPES | {"tinyint", "smallint"}
+FILTER_TEXT_TYPES = TEXT_TYPES | {"tinytext", "text", "mediumtext", "longtext"}
 FORMATS = {
     "YYYYMMDD": ("DAY", "%Y%m%d"), "YYYY-MM-DD": ("DAY", "%Y-%m-%d"),
     "YYYY/MM/DD": ("DAY", "%Y/%m/%d"), "YYYYMM": ("MONTH", "%Y%m"),
@@ -258,6 +260,17 @@ def inspect(con, source, data, sample_only=False, check_indexed_nulls=True):
             and len(set(selected)) == len(selected), "INVALID_INPUT")
     available = {column["name"] for column in columns}
     require(set(selected) <= available, "SCHEMA_CHANGED")
+    source_filter = data.get("sourceFilter")
+    if source_filter is not None:
+        require(data.get("grain") in ("DAY", "MONTH") and isinstance(source_filter, dict), "INVALID_SOURCE_FILTER")
+        column = next((col for col in columns if col["name"] == source_filter.get("field")), None)
+        require(column and column["kind"] in (FILTER_TEXT_TYPES | FILTER_INT_TYPES), "INVALID_SOURCE_FILTER")
+        identifier(column["name"])
+        value = source_filter.get("value")
+        require(isinstance(value, str) and bool(value.strip()) and len(value) <= 1024, "INVALID_SOURCE_FILTER")
+        if column["kind"] in FILTER_INT_TYPES:
+            require(re.fullmatch(r"-?[0-9]{1,20}", value), "INVALID_SOURCE_FILTER")
+        source_filter = {"field": column["name"], "value": value, "kind": column["kind"]}
     date_field = data.get("dateField")
     columns = [c for c in columns if c["name"] in selected and (not sample_only or c["name"] == date_field)]
     require(columns, "DATE_FIELD_REQUIRED" if sample_only else "INVALID_INPUT")
@@ -287,11 +300,14 @@ def inspect(con, source, data, sample_only=False, check_indexed_nulls=True):
                     "NULL_DATE")
     else:
         field, fmt, storage_zone = None, None, None
-    return {
+    config = {
         "table": table, "columns": columns, "primary": primary, "grain": grain,
         "dateField": field["name"] if field else None, "dateKind": field["kind"] if field else None,
         "dateFormat": fmt, "storageZone": storage_zone, "timestampZone": zone,
     }
+    if source_filter is not None:
+        config["sourceFilter"] = source_filter
+    return config
 
 
 def fingerprint(config):
@@ -315,6 +331,17 @@ def bounds(config, day):
             end_time -= dt.timedelta(hours=8)
         return f" WHERE {field}>=%s AND {field}<%s", (start_time, end_time)
     return f" WHERE {field}>=%s AND {field}<%s", (day, end)
+
+
+def source_predicate(config, period_clause, period_args):
+    source_filter = config.get("sourceFilter")
+    if source_filter is None:
+        return period_clause, period_args
+    field = identifier(source_filter["field"])
+    value = source_filter["value"]
+    if source_filter["kind"] in FILTER_INT_TYPES:
+        value = int(value)
+    return f"{period_clause} AND {field}=%s", (*period_args, value)
 
 
 def input_source(data):
@@ -344,7 +371,7 @@ def explore(action, data, target_config):
                 require(config["grain"] != "FULL", "INVALID_PERIOD")
                 day = date_value(data.get("sampleDate"))
                 require(config["grain"] != "MONTH" or day.day == 1, "INVALID_PERIOD")
-                clause, args = bounds(config, day)
+                clause, args = source_predicate(config, *bounds(config, day))
                 field = identifier(config["dateField"])
                 table = qualified(database, config["table"])
                 rows = query(con, f"SELECT /*+ MAX_EXECUTION_TIME(30000) */ {field} FROM {table}{clause} LIMIT 3", args)
@@ -557,6 +584,8 @@ def task_view(con, task):
     }
     if grain == "MONTH":
         result["monthlyPlan"] = config.get("monthlyPlan", "MONTHLY")
+    if source_filter := config.get("sourceFilter"):
+        result["sourceFilter"] = {"field": source_filter["field"], "value": source_filter["value"]}
     if schedule is not None:
         when = now()
         monthly = monthly_slot(config)
@@ -644,7 +673,10 @@ def transfer(src, dst, source_db, config, mirror, clause, args, run):
     stream = src.cursor(MySQLdb.cursors.SSCursor)
     count, total_bytes = 0, 0
     try:
-        stream.execute(f"SELECT /*+ MAX_EXECUTION_TIME(60000) */ {cols} FROM {source}{clause} LIMIT {limit + 1}", args)
+        # The dedicated mirror may omit the filter column, so its replacement scope is the period only.
+        source_clause, source_args = source_predicate(config, clause, args)
+        stream.execute(f"SELECT /*+ MAX_EXECUTION_TIME(60000) */ {cols} FROM {source}{source_clause} LIMIT {limit + 1}",
+                       source_args)
         pending = batches(stream)
         first = next(pending, None)
         existing = scalar(dst, f"SELECT 1 FROM {mirror}{clause} LIMIT 1", args)

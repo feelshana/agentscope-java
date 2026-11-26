@@ -24,6 +24,7 @@ const runErrors: Record<string, string> = {
   UNSUPPORTED_TABLE: '源表类型或存储引擎已变更。',
   UNSUPPORTED_COLUMN: '源表列定义变更为不支持的类型。',
   INVALID_FORMAT: '源列类型与日期格式不匹配。',
+  INVALID_SOURCE_FILTER: '源筛选列已不存在，或不再支持此等值条件。',
   TARGET_EXISTS: '目标表名已被占用。',
   TARGET_OWNERSHIP: '目标表归属或结构与任务不符。',
   CREDENTIAL_ERROR: '无法读取旧任务的同步凭证。',
@@ -153,7 +154,8 @@ function TaskDetail({ task, today, onChange }: { task: SyncDetail; today: string
     {error && <p className="secondary-alert" role="alert">{error}</p>}
     {message && <p className="table-sync-feedback" role="status">{message}</p>}
     <section className="table-sync-card">
-      <div className="table-sync-section-head"><div><h2>{task.name}</h2><p>{task.sourceTable} → data_agent.{task.targetTable}</p></div>
+      <div className="table-sync-section-head"><div><h2>{task.name}</h2><p>{task.sourceTable} → data_agent.{task.targetTable}</p>
+        {task.sourceFilter && <p>源表筛选 · {task.sourceFilter.field} 等于 {task.sourceFilter.value}</p>}</div>
         {task.lastRun && <RunStatus run={task.lastRun} />}</div>
       <dl className="table-sync-stats">
         <div><dt>同步方式</dt><dd>{grains[task.grain]}</dd></div>

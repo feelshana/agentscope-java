@@ -49,6 +49,7 @@ public class AdminTableSyncController {
                     Map.entry("INVALID_TARGET", "目标表名须以 sync_ 开头，且只能包含小写字母、数字和下划线。"),
                     Map.entry("SOURCE_NOT_ALLOWED", "此源地址未加入表同步允许列表。"),
                     Map.entry("SOURCE_QUERY", "源库连接或读取失败，请检查账号权限、网络和 TLS 配置。"),
+                    Map.entry("INVALID_SOURCE_FILTER", "请选择有效的源筛选列，并填写与列类型匹配的等值条件。"),
                     Map.entry("SOURCE_TIME_ZONE", "源连接的 TIMESTAMP 时区必须为 UTC 或固定东八区。"),
                     Map.entry("UNSUPPORTED_SOURCE", "源库仅支持 MySQL 5.7 或 MySQL 8。"),
                     Map.entry("UNSUPPORTED_TARGET", "目标库须为 MySQL 8。"),
