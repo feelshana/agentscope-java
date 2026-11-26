@@ -211,6 +211,14 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                 validateQueryBoundary(tool, sql);
                                 // spec149 P5: tables with a published caliber list are read
                                 // through their Cube, never by rebuilding conditions in SQL.
+                                // spec149 P7-2 (ADR0156): a caliber knowledge base is read only
+                                // through its caliber Cubes; raw SQL would rebuild conditions.
+                                if ("run_sql".equals(tool)
+                                        && access.resolve(context, groupId).isCaliberMode())
+                                    throw new DatasetException(
+                                            "这是口径问数知识库，只能用 query_cube 按口径取数，不能用"
+                                                + " run_sql。按选表规则选指标（Cube）、按口径名筛选；清单里没有用户要的口径或范围时，告诉用户并给出最接近的口径。",
+                                            400);
                                 if ("run_sql".equals(tool) && projects != null) {
                                     String refused =
                                             io.agentscope.dataagent.dataset.CaliberQueryGate

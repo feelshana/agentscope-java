@@ -725,6 +725,11 @@ public class MdlPublishService {
                         projectDir,
                         props.groupRoot(groupId).resolve("published"),
                         true));
+        // spec149 P7-2 (ADR0156): a caliber knowledge base answers every table from its list.
+        // The draft is checked: staging holds unreviewed lists back, which the stage step already
+        // reports, and a table with a draft list is not "without a list".
+        if (group.isCaliberMode())
+            issues.addAll(CaliberReviews.coverage(workspace.workspaceRoot(groupId)));
         if (hasErrors(issues)) return failure(group, issues, "");
         issues.addAll(CaliberCompiler.ruleWarnings(projectDir));
         snapshot = shipped(snapshot, projectDir);

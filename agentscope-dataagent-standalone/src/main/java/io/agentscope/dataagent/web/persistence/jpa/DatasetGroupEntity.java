@@ -97,6 +97,31 @@ public class DatasetGroupEntity {
     @Column(name = "mdl_published_at")
     private Instant mdlPublishedAt;
 
+    /** spec149 P7-2 (ADR0156): ordinary questions over SQL. Also what a group without a mode is. */
+    public static final String MODE_NORMAL = "NORMAL";
+
+    /**
+     * spec149 P7-2 (ADR0156): every table is read through its caliber list's Cube; {@code run_sql}
+     * is refused for the whole knowledge base.
+     */
+    public static final String MODE_CALIBER = "CALIBER";
+
+    /** Chosen when the knowledge base is created and never changed; null is {@link #MODE_NORMAL}. */
+    @Column(name = "knowledge_mode", length = 16, updatable = false)
+    private String knowledgeMode;
+
+    public String getKnowledgeMode() {
+        return MODE_CALIBER.equals(knowledgeMode) ? MODE_CALIBER : MODE_NORMAL;
+    }
+
+    public boolean isCaliberMode() {
+        return MODE_CALIBER.equals(knowledgeMode);
+    }
+
+    public void setKnowledgeMode(String mode) {
+        knowledgeMode = mode;
+    }
+
     @Column(name = "public_query", nullable = false)
     @org.hibernate.annotations.ColumnDefault("false")
     private boolean publicQuery;

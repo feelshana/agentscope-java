@@ -100,7 +100,9 @@ public class DatasetGroupController {
             boolean deletionPending,
             String role,
             boolean canManage,
-            boolean canQuery) {}
+            boolean canQuery,
+            // spec149 P7-2: NORMAL or CALIBER, fixed at creation.
+            String mode) {}
 
     public record GroupPage(List<GroupVO> items, long total, int page, int size) {}
 
@@ -120,7 +122,11 @@ public class DatasetGroupController {
                 .onErrorMap(this::toStatus);
     }
 
-    public record CreateGroupRequest(String name, String description) {}
+    public record CreateGroupRequest(String name, String description, String mode) {
+        public CreateGroupRequest(String name, String description) {
+            this(name, description, null);
+        }
+    }
 
     public record UpdateGroupRequest(String name, String description) {}
 
@@ -142,7 +148,7 @@ public class DatasetGroupController {
                         () ->
                                 toVO(
                                         groupService.createGroup(
-                                                userId, req.name(), req.description()),
+                                                userId, req.name(), req.description(), req.mode()),
                                         0))
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
@@ -461,7 +467,8 @@ public class DatasetGroupController {
                 groupService.deletionPending(g.getId()),
                 role == null ? null : role.name(),
                 role == io.agentscope.dataagent.dataset.KnowledgeBaseAccessService.Role.MANAGE,
-                role != null && !groupService.deletionPending(g.getId()));
+                role != null && !groupService.deletionPending(g.getId()),
+                g.getKnowledgeMode());
     }
 
     private String extractText(String fileName, byte[] bytes) throws java.io.IOException {

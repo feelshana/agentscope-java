@@ -82,7 +82,21 @@ public final class WrenProjectAccess {
             boolean caliberTurn,
             // spec149 P6: the user's own words (a chat request or confirmation answers); it may
             // edit an existing caliber list.
-            boolean chatTurn) {
+            boolean chatTurn,
+            // spec149 P7-2 (ADR0156): a caliber knowledge base; only it uses caliber lists.
+            boolean caliberKb) {
+        public Project(
+                String ownerId,
+                String groupId,
+                String name,
+                Path root,
+                boolean assetTurn,
+                boolean coachTurn,
+                boolean caliberTurn,
+                boolean chatTurn) {
+            this(ownerId, groupId, name, root, assetTurn, coachTurn, caliberTurn, chatTurn, false);
+        }
+
         public Project(
                 String ownerId,
                 String groupId,
@@ -148,7 +162,8 @@ public final class WrenProjectAccess {
                 !chat && purpose.asset(),
                 !chat && purpose.coach(),
                 !chat && purpose.caliber(),
-                userWords);
+                userWords,
+                project.caliberKb());
     }
 
     public Project resolve(String owner, String group) {
@@ -164,7 +179,16 @@ public final class WrenProjectAccess {
                     syncRaw(group, root);
                     if (datasets != null)
                         DatasetSampleDocuments.sync(root, datasets.findByGroupId(group));
-                    return new Project(owner, group, entity.getName(), root);
+                    return new Project(
+                            owner,
+                            group,
+                            entity.getName(),
+                            root,
+                            false,
+                            false,
+                            false,
+                            false,
+                            entity.isCaliberMode());
                 });
     }
 
@@ -210,6 +234,10 @@ public final class WrenProjectAccess {
             }
             String lowerPath = relative.toLowerCase(Locale.ROOT);
             boolean caliberFile = first.equals(CaliberList.DIRECTORY);
+            // spec149 P7-2 (ADR0156): only a caliber knowledge base keeps caliber lists.
+            if (caliberFile && !project.caliberKb())
+                throw new DatasetException(
+                        "这是普通问数知识库，不使用口径清单：业务文档中的口径按规则和列描述写入。需要按口径严格取数时，请新建“口径问数”知识库。", 403);
             // spec149 P6: a chat turn may edit a list that exists; new lists come from documents.
             if (caliberFile
                     && !project.caliberTurn()
@@ -226,11 +254,20 @@ public final class WrenProjectAccess {
             }
             // The caliber turn drafts lists and may rewrite rules that duplicate them, nothing
             // else.
-            if (project.caliberTurn()
-                    && !caliberFile
-                    && !lowerPath.startsWith("knowledge/rules/")) {
+            if (project.caliberTurn() && !caliberFile) {
+                throw new DatasetException("本轮只起草口径清单：只能写 calibers/<名称>.yml。", 403);
+            }
+            // spec149 P7-3 (ADR0156): in a caliber knowledge base the lists are the only place
+            // for calibers, metrics and scope; rules and relationships would compete with them
+            // (2026-11-25: an answer wrote a non-existent vip_type_6 value into the rules).
+            if (project.caliberKb()
+                    && (lowerPath.equals("relationships.yml")
+                            || (lowerPath.startsWith("knowledge/")
+                                    && !lowerPath.startsWith("knowledge/questions/")))) {
                 throw new DatasetException(
-                        "本轮只起草口径清单：只能写 calibers/<名称>.yml，以及把 knowledge/rules/ 中重复的口径条件改写为指引。", 403);
+                        "口径问数知识库不写业务规则、术语和表间关系：口径、指标、统计范围和使用场景都只写在 calibers/"
+                                + " 的口径清单里（只能在起草口径清单、用户对话或写入用户确定的轮次修改），平台据此生成选表规则；列含义写在模型列描述。",
+                        403);
             }
             // spec090: Q&A pairs are written by MdlQuestionStore#decide after user confirmation
             // only.

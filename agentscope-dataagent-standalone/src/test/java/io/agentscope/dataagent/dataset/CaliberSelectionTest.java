@@ -235,6 +235,91 @@ class CaliberSelectionTest {
     }
 
     /**
+     * spec149 P7-4: units travel with measures and calibers, a month-to-date measure is read
+     * from the month's last day, and scope values listing only the summary are refused.
+     */
+    @Test
+    void unitsMonthToDateAndSummaryOnlyValues() throws Exception {
+        String mtd =
+                ACTIVE.replace(
+                                "default: true}",
+                                "default: true, unit: 人}\n"
+                                    + "    - {column: dau, name: mau_total, label: 月累计活跃, period:"
+                                    + " month_to_date}")
+                        .replace(
+                                "- {name: 全部用户, where: {user_type: 全部}}",
+                                "- {name: 全部用户, where: {user_type: 全部}, unit: 人}");
+        var compiled = CaliberCompiler.compile(root, "calibers/active.yml", mtd);
+        assertThat(compiled.errors()).isEmpty();
+        assertThat(compiled.cube()).contains("单位：人", "月累计值：按月问时按日查询该月", "取返回的最后一天的值");
+        assertThat(compiled.view()).contains("单位：人");
+        write("calibers/active.yml", mtd);
+        CaliberCompiler.sync(root);
+        assertThat(CaliberCompiler.rules(root))
+                .contains("月累计指标 mau_total（月累计活跃） 按月问时按日查询该月", "单位 日活跃用户数：人");
+
+        // A month table has no days to read the month from.
+        assertThat(
+                        CaliberCompiler.compile(
+                                        root,
+                                        "calibers/vip.yml",
+                                        VIP.replace(
+                                                "{column: cnt_zd, name: members",
+                                                "{column: cnt_zd, period: month_to_date, name:"
+                                                        + " members"))
+                                .errors())
+                .anyMatch(e -> e.contains("month_to_date 只用于按日统计的表"));
+        assertThat(
+                        CaliberCompiler.compile(
+                                        root,
+                                        "calibers/vip.yml",
+                                        VIP.replace(
+                                                "{column: cnt_zd, name: members",
+                                                "{column: cnt_zd, period: week, name: members"))
+                                .errors())
+                .anyMatch(e -> e.contains("period 只能写 month_to_date"));
+        // values with only the summary value would refuse "浙江" at query time.
+        assertThat(
+                        CaliberCompiler.compile(
+                                        root,
+                                        "calibers/vip.yml",
+                                        VIP.replace("values: [全国, 浙江, 广东]", "values: [全国]"))
+                                .errors())
+                .anyMatch(e -> e.contains("values 只写了汇总值"));
+    }
+
+    /**
+     * spec149 P7-2: in a caliber knowledge base each table needs a list before publishing, and
+     * once all have one the rules send no question to run_sql. ref_sql models are not tables.
+     */
+    @Test
+    void caliberKnowledgeBasesNeedAListForEveryTable() throws Exception {
+        write("calibers/vip.yml", VIP);
+        write("models/derived/metadata.yml", "name: derived\ncolumns: []\n");
+        write("models/derived/ref_sql.sql", "SELECT 1");
+        write("raw/docs/活跃.md", "适用模型：`active_daily`\n");
+        CaliberCompiler.sync(root);
+        assertThat(CaliberReviews.coverage(root))
+                .singleElement()
+                .satisfies(
+                        i -> {
+                            assertThat(i.severity()).isEqualTo("error");
+                            assertThat(i.message())
+                                    .contains("每张表都要有口径清单", "active_d 还没有")
+                                    .contains("文档《活跃.md》写的适用模型 active_daily 不是本知识库的表")
+                                    .doesNotContain("vip_m", "derived");
+                        });
+        assertThat(CaliberCompiler.rules(root)).contains("其他问题照常用 run_sql");
+
+        write("calibers/active.yml", ACTIVE);
+        CaliberCompiler.sync(root);
+        assertThat(CaliberReviews.coverage(root)).isEmpty();
+        assertThat(CaliberCompiler.rules(root))
+                .contains("任何问题都只用 query_cube，不用 run_sql")
+                .doesNotContain("其他问题照常用 run_sql");
+    }
+
+    /**
      * spec149 P7: rows are finished statistics. A day table is grouped by day, never summed into
      * weeks or months, and a result that met several rows (empty measure) is refused.
      */

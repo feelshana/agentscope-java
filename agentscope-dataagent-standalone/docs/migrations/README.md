@@ -17,6 +17,8 @@
 
 管理员在 BI 数据开发手工执行 [0152 同步元数据建表 SQL](0152-table-sync-mysql.sql)，在现有 `data_agent_platform` 新增四张表。权限和目标表的人工建表步骤见[表同步运维指引](../guides/configurable-table-sync.md)。
 
+知识库类型（spec149 P7-2/ADR0156）在升级应用前执行[0156迁移](0156-knowledge-base-mode-mysql.sql)：`dataagent_dataset_group` 新增可空列 `knowledge_mode`，已有知识库保持空值（按普通问数处理），不迁移旧口径清单。
+
 共享数据源（spec135/ADR0147）在升级应用前执行[0146迁移](0146-shared-datasources-mysql.sql)：仅新增enabled和授权/审计两张表。已有连接默认启用且私有，密码存储保持原状，不做密码转换、列扩容或新增密钥。模型服务原有加密不变。只执行缺失结构，已存在enabled时不要重复ALTER；空库使用最新完整DDL，不叠加此迁移。
 
 开发环境若由Hibernate update补enabled列，实体使用数据库ColumnDefault(true)，不能仅靠Java字段初值保证旧行启用。旧环境已出现全停用时，先核对列默认值、连接创建时间及DISABLE审计，针对确认受升级影响的旧记录备份后恢复；不得全量启用或移除前后端停用检查。已有列改默认值不会修复旧行；生产仍按0146/正式DDL升级。2026-11-18本地修复证据见[报告](../test-reports/20261118-datasource-window-fixes.md)。

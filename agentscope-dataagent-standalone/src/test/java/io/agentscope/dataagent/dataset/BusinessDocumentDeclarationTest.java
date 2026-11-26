@@ -38,4 +38,31 @@ class BusinessDocumentDeclarationTest {
         assertThat(BusinessDocumentService.documentsFor(root, "income_m"))
                 .containsOnlyKeys("收入.md");
     }
+
+    /**
+     * 2026-11-25: an uploaded table's model carries the platform prefix; a document naming the
+     * original table still declares it. Names meaning no model are reported for the publish hint.
+     */
+    @Test
+    void theOriginalTableNameDeclaresItsUploadedModel() throws Exception {
+        String model = "ds_8c6976e5_190cd16b_hhweb_video_vip_more_dimension_m";
+        assertThat(BusinessDocumentService.declares("hhweb_video_vip_more_dimension_m", model))
+                .isTrue();
+        assertThat(BusinessDocumentService.declares(model, model)).isTrue();
+        // Only the platform prefix may be left out, not an arbitrary part of the name.
+        assertThat(BusinessDocumentService.declares("more_dimension_m", model)).isFalse();
+        assertThat(
+                        BusinessDocumentService.declares(
+                                "vip_more_dimension_m", "x_vip_more_dimension_m"))
+                .isFalse();
+
+        Files.createDirectories(root.resolve("raw/docs"));
+        Files.writeString(
+                root.resolve("raw/docs/会员规模.md"), "适用模型：`hhweb_video_vip_more_dimension_m`。\n");
+        Files.writeString(root.resolve("raw/docs/写错.md"), "适用模型：`hhweb_video_vip_m`\n");
+        assertThat(BusinessDocumentService.documentsFor(root, model)).containsOnlyKeys("会员规模.md");
+        assertThat(BusinessDocumentService.unmatchedDeclarations(root, java.util.List.of(model)))
+                .containsOnlyKeys("写错.md")
+                .containsEntry("写错.md", java.util.List.of("hhweb_video_vip_m"));
+    }
 }

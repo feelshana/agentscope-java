@@ -62,6 +62,19 @@ public final class ModelingConfirmationTool {
                     List<String> questionIds) {
         try {
             var project = access.resolve(context);
+            var purpose =
+                    context == null
+                            ? null
+                            : context.get(
+                                    io.agentscope.dataagent.dataset.ModelingTurnPurpose.class);
+            String declared = purpose == null ? null : purpose.value();
+            // spec149 P7-3 (ADR0156): a caliber knowledge base asks only while drafting a list or
+            // in the user's own chat; initial modeling asked about calibers twice in other words.
+            if (project.caliberKb()
+                    && declared != null
+                    && !io.agentscope.dataagent.dataset.ModelingTurnPurpose.CALIBER.equals(
+                            declared))
+                return "error: 口径问数知识库只在起草口径清单的轮次提问，本轮不提问；口径、指标、范围的待定项由起草口径清单轮次处理，其余不确定之处在最终回复中说明。";
             List<String> labels = withoutPageOptions(optionLabels, optionRules);
             boolean relationship =
                     "relationship".equalsIgnoreCase(topic == null ? "" : topic.trim());
@@ -71,7 +84,13 @@ public final class ModelingConfirmationTool {
             requireCapacity(context, key, relationship);
             var created =
                     confirmations.create(
-                            project.groupId(), question, basis, labels, optionRules, questionIds);
+                            project.groupId(),
+                            question,
+                            basis,
+                            labels,
+                            optionRules,
+                            questionIds,
+                            project.caliberTurn() ? "caliber" : null);
             // Only questions that were actually created use up this turn's allowance.
             count(context, key);
             return "已提交给用户确认（" + created.question() + "）。不要等待，继续完成其余工作；用户确认后会发来消息。";

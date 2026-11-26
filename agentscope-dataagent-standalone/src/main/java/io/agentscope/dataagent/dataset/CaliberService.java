@@ -36,6 +36,8 @@ public class CaliberService {
     private final DatasetRepository datasets;
     private final TableProvisioner provisioner;
     private final MdlPublishService publisher;
+    // spec149 P7-4: reads the full distinct values of an associated (external) table.
+    private final DatasetService datasetService;
 
     public CaliberService(
             DatasetGroupService groups,
@@ -43,11 +45,23 @@ public class CaliberService {
             DatasetRepository datasets,
             TableProvisioner provisioner,
             MdlPublishService publisher) {
+        this(groups, workspace, datasets, provisioner, publisher, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CaliberService(
+            DatasetGroupService groups,
+            MdlWorkspaceService workspace,
+            DatasetRepository datasets,
+            TableProvisioner provisioner,
+            MdlPublishService publisher,
+            DatasetService datasetService) {
         this.groups = groups;
         this.workspace = workspace;
         this.datasets = datasets;
         this.provisioner = provisioner;
         this.publisher = publisher;
+        this.datasetService = datasetService;
     }
 
     /** {@code kind}: missing (uploaded table has no such value), sample (not seen in a sample). */
@@ -638,8 +652,17 @@ public class CaliberService {
             DatasetEntity dataset = byId.get(s.datasetByModel().get(list.model()));
             if (dataset == null) continue;
             Set<String> columns = referencedColumns(list);
-            if (!"datasource".equals(dataset.getOrigin())) {
-                String stamp = dataset.getRowCount() + "@" + dataset.getUpdatedAt();
+            // spec149 P7-4: external tables are read in full by the platform too, so a value check
+            // says "not in the table" instead of "not in the sample".
+            if (!"datasource".equals(dataset.getOrigin()) || datasetService != null) {
+                // An external table changes outside the platform, so its values are re-read daily.
+                String stamp =
+                        dataset.getRowCount()
+                                + "@"
+                                + dataset.getUpdatedAt()
+                                + ("datasource".equals(dataset.getOrigin())
+                                        ? "@" + java.time.LocalDate.now()
+                                        : "");
                 CaliberValues cached = s.cachedValues().get(dataset.getId());
                 Map<String, List<String>> known =
                         cached != null && stamp.equals(cached.stamp())
@@ -649,7 +672,10 @@ public class CaliberService {
                     String key = column.toLowerCase(Locale.ROOT);
                     if (known.containsKey(key)) continue;
                     List<String> v =
-                            provisioner.distinctValues(dataset.getTableName(), column, VALUE_LIMIT);
+                            "datasource".equals(dataset.getOrigin())
+                                    ? datasetService.distinctValues(dataset, column, VALUE_LIMIT)
+                                    : provisioner.distinctValues(
+                                            dataset.getTableName(), column, VALUE_LIMIT);
                     // High-cardinality or unreadable columns are remembered as "not checked".
                     known.put(key, v);
                 }

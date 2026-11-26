@@ -373,6 +373,77 @@ class OfficialWrenToolkitTest {
         assertThat(files.write(chat, "raw/docs/伪造.md", "x").isSuccess()).isFalse();
     }
 
+    /**
+     * spec149 P7-3: in a caliber knowledge base rules and relationships are never written, only
+     * the caliber turn (or the user's chat) asks, caliber questions carry their source, and a
+     * caliber turn sees what is already waiting for the user.
+     */
+    @Test
+    void caliberKnowledgeBasesKeepCalibersInTheirListsOnly() throws Exception {
+        DatasetGroupEntity caliberKb = new DatasetGroupEntity("a", "alice", "销售", "");
+        caliberKb.setKnowledgeMode(DatasetGroupEntity.MODE_CALIBER);
+        when(groups.getGroup("alice", "a")).thenReturn(caliberKb);
+        var purpose = io.agentscope.dataagent.dataset.ModelingTurnPurpose.class;
+        when(alice.get(purpose))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.AUTO));
+        assertThat(files.write(alice, "knowledge/rules/general.md", "# 规则\n").error())
+                .contains("口径问数知识库不写业务规则");
+        assertThat(files.write(alice, "relationships.yml", "relationships: []\n").error())
+                .contains("表间关系");
+        // Trial questions stay writable.
+        assertThat(files.write(alice, "knowledge/questions/q1.yml", "question: 会员数\n").isSuccess())
+                .isTrue();
+
+        var confirmations =
+                new io.agentscope.dataagent.dataset.ModelingConfirmationService(
+                        new MdlWorkspaceService(
+                                props, (cwd, timeout, args) -> new WrenCli.Result(0, "")),
+                        groups);
+        var tool = new ModelingConfirmationTool(access, confirmations);
+        var turn = RuntimeContext.builder().userId("alice").build();
+        turn.put(DatasetScope.class, new DatasetScope("alice", List.of("a")));
+        turn.put(
+                purpose,
+                new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                        io.agentscope.dataagent.dataset.ModelingTurnPurpose.AUTO));
+        assertThat(tool.request(turn, "钻石会员取几级", "依据", List.of("a", "b"), List.of("x", "y"), null))
+                .startsWith("error:")
+                .contains("只在起草口径清单的轮次提问");
+        var caliberTurn = RuntimeContext.builder().userId("alice").build();
+        caliberTurn.put(DatasetScope.class, new DatasetScope("alice", List.of("a")));
+        caliberTurn.put(
+                purpose,
+                new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                        io.agentscope.dataagent.dataset.ModelingTurnPurpose.CALIBER));
+        assertThat(
+                        tool.request(
+                                caliberTurn,
+                                "钻石会员取几级",
+                                "依据",
+                                List.of("a", "b"),
+                                List.of("x", "y"),
+                                null))
+                .startsWith("已提交给用户确认");
+        assertThat(confirmations.list("alice", "a"))
+                .singleElement()
+                .satisfies(c -> assertThat(c.source()).isEqualTo("caliber"));
+        var root = access.resolve(alice).root();
+        assertThat(
+                        io.agentscope.dataagent.dataset.ModelingConfirmationService
+                                .pendingQuestions(root))
+                .containsExactly("钻石会员取几级");
+        assertThat(
+                        io.agentscope.dataagent.runtime.session.WrenProjectContextMiddleware
+                                .pendingQuestions(root, "caliber"))
+                .contains("已在等待用户确认的问题", "- 钻石会员取几级");
+        assertThat(
+                        io.agentscope.dataagent.runtime.session.WrenProjectContextMiddleware
+                                .pendingQuestions(root, "auto"))
+                .isEmpty();
+    }
+
     @Test
     void confirmationQuestionsAreCappedPerTurnAndScopedToTheProject() {
         var confirmations =
@@ -678,7 +749,9 @@ class OfficialWrenToolkitTest {
                         + "  - {name: cnt_zd, type: BIGINT}\n"
                         + "  - {name: vip_type_6, type: VARCHAR}\n");
         Files.createDirectories(root.resolve("raw/docs"));
-        Files.writeString(root.resolve("raw/docs/会员.md"), "# 会员口径\n\n适用模型：`vip_m`\n");
+        Files.writeString(
+                root.resolve("raw/docs/会员.md"),
+                "# 会员口径\n\n适用模型：`vip_m`\n\n| 指标 | 会员数 |\n口径按 `vip_type_6` 取值\n");
         String list =
                 """
                 model: vip_m
@@ -692,6 +765,18 @@ class OfficialWrenToolkitTest {
                   - {name: 足球通, where: {vip_type_6: 足球通会员}}
                   - {name: 篮球通, where: {vip_type_6: 篮球通会员}}
                 """;
+
+        // spec149 P7-2: an ordinary knowledge base never keeps caliber lists, in any turn.
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.CALIBER));
+        assertThat(files.write(alice, "calibers/vip.yml", list).error())
+                .contains("普通问数知识库，不使用口径清单");
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class)).thenReturn(null);
+        DatasetGroupEntity caliberKb = new DatasetGroupEntity("a", "alice", "销售", "");
+        caliberKb.setKnowledgeMode(DatasetGroupEntity.MODE_CALIBER);
+        when(groups.getGroup("alice", "a")).thenReturn(caliberKb);
 
         // A chat turn cannot create a list; new lists are drafted from documents (spec149 P6).
         assertThat(files.write(alice, "calibers/vip.yml", list).error())
@@ -723,6 +808,14 @@ class OfficialWrenToolkitTest {
         assertThat(files.write(alice, "calibers/sub/vip.yml", list).isSuccess()).isFalse();
         assertThat(files.write(alice, "models/vip_m/metadata.yml", "name: vip_m\n").error())
                 .contains("本轮只起草口径清单");
+        // spec149 P7-3: a document draft cannot invent names, units or wordings.
+        assertThat(
+                        files.write(
+                                        alice,
+                                        "calibers/vip.yml",
+                                        list.replace("label: 会员数}", "label: 总订单数, unit: 笔}"))
+                                .error())
+                .contains("业务文档中找不到", "label「总订单数」", "unit「笔」");
         assertThat(files.write(alice, "calibers/vip.yml", list).isSuccess()).isTrue();
         assertThat(root.resolve("views/vip_caliber/metadata.yml")).exists();
         assertThat(root.resolve("cubes/vip_metrics/metadata.yml")).exists();

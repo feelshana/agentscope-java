@@ -45,7 +45,12 @@ export interface DatasetGroup {
   publishedVersion?: number;
   hasDescription: boolean;
   createdAt: string | null;
+  /** spec149 P7-2: NORMAL answers by SQL, CALIBER only through caliber Cubes; fixed at creation. */
+  mode?: KnowledgeMode;
 }
+
+/** spec149 P7-2 (ADR0156): chosen when the knowledge base is created and never changed. */
+export type KnowledgeMode = 'NORMAL' | 'CALIBER';
 
 export interface GroupDetail {
   publishedVersion?: number;
@@ -214,11 +219,11 @@ export async function listGroups(
   }
 }
 
-export async function createGroup(name: string, description: string): Promise<DatasetGroup> {
+export async function createGroup(name: string, description: string, mode: KnowledgeMode = 'NORMAL'): Promise<DatasetGroup> {
   const res = await apiFetch('/api/dataset-groups', {
     method: 'POST',
     headers: jsonHeaders(),
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, description, mode }),
   });
   if (!res.ok) {
     const fallback = res.status === 409

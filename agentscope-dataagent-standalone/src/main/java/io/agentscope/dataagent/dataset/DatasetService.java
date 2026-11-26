@@ -786,6 +786,51 @@ public class DatasetService implements DatasetContextProvider {
         }
     }
 
+    /**
+     * spec149 P7-4: every distinct value of one column of an associated table, read by the
+     * platform (not the modeling assistant) so caliber value checks no longer rest on a sample.
+     * Returns null when the column has more than {@code limit} values or cannot be read.
+     */
+    public java.util.List<String> distinctValues(DatasetEntity entity, String column, int limit) {
+        if (entity == null || column == null || !column.matches("[A-Za-z0-9_]{1,128}") || limit < 1)
+            return null;
+        boolean known =
+                readColumns(entity).stream().anyMatch(c -> c.name().equalsIgnoreCase(column));
+        if (!known) return null;
+        String quote =
+                "datasource".equals(entity.getOrigin())
+                                && resolveExternal(entity) != null
+                                && "postgresql".equalsIgnoreCase(resolveExternal(entity).getKind())
+                        ? "\""
+                        : "`";
+        String col = quote + column + quote;
+        String sql =
+                "SELECT DISTINCT "
+                        + col
+                        + " FROM "
+                        + qualifiedTable(entity)
+                        + " WHERE "
+                        + col
+                        + " IS NOT NULL LIMIT "
+                        + (limit + 1);
+        try (java.sql.Connection c = openFor(entity);
+                java.sql.Statement st = c.createStatement()) {
+            st.setQueryTimeout(30);
+            java.util.List<String> values = new java.util.ArrayList<>();
+            try (java.sql.ResultSet rs = st.executeQuery(sql)) {
+                while (rs.next()) values.add(rs.getString(1));
+            }
+            return values.size() > limit ? null : values;
+        } catch (java.sql.SQLException | RuntimeException e) {
+            log.warn(
+                    "Values of {}.{} unavailable: {}",
+                    entity.getTableName(),
+                    column,
+                    e.getMessage());
+            return null;
+        }
+    }
+
     /** Updates the dataset description and refreshes the metadata used by the agent. */
     @Transactional
     public DatasetEntity updateDescription(String ownerId, String datasetId, String description) {

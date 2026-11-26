@@ -140,6 +140,8 @@ function GraphLoading() {
 
 function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const groupId = group.id;
+  // spec149 P7-2 (ADR0156): caliber lists, their tab and auto-drafting belong to caliber knowledge bases.
+  const caliberKb = group.mode === 'CALIBER';
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const asset = params.get('asset');
@@ -194,7 +196,8 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   useEffect(() => { if (ADVANCED.has(legacyAsset ?? '')) setAdvancedOpen(true); }, [legacyAsset]);
   const publishedVersion = workflow?.publishedVersion ?? group.publishedVersion ?? 0;
   // Published knowledge bases open on what they contain; anything unfinished opens the conversation.
-  const tab: Tab = explicitTab ?? 'semantic';
+  // An ordinary knowledge base has no caliber tab, even from an old link.
+  const tab: Tab = explicitTab === 'calibers' && !caliberKb ? 'semantic' : explicitTab ?? 'semantic';
   // spec117 §3c: unfinished knowledge bases open with the assistant; published ones with details.
   const [panelChoice, setPanelChoice] = useState<Panel | undefined>(undefined);
   const defaultPanel: Panel = asset === 'modeling' || params.get('start') === '1' || !publishedVersion ? 'assistant' : 'detail';
@@ -362,7 +365,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const workbenchView = workbenchViewOf(asset, params.get('view'));
   const tabs: { key: Tab; label: string }[] = [
     { key: 'semantic', label: '语义模型' }, { key: 'coach', label: '问数优化' }, { key: 'calibers', label: '口径' }, { key: 'assets', label: '公共视图' }, { key: 'overview', label: '资料' },
-  ];
+  ].filter(t => caliberKb || t.key !== 'calibers') as { key: Tab; label: string }[];
   // A turn's changes are marked when it ends; marks accumulate from the earliest unmarked turn.
   const turnStart = useRef<string | null>(null);
   useEffect(() => {
@@ -451,7 +454,8 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
     const finished = submittedPurpose.current;
     submittedPurpose.current = undefined;
-    if (finished === 'auto' || finished === 'document') void queueCaliberDrafts();
+    // spec149 P7-2: only a caliber knowledge base keeps caliber lists.
+    if (caliberKb && (finished === 'auto' || finished === 'document')) void queueCaliberDrafts();
   };
   const locateConfirmations = () => { if (canLeaveField()) setPanelChoice('pending'); };
 

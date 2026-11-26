@@ -67,8 +67,9 @@ public final class ModelingTurnRules {
     static final String CALIBER =
             """
             # 本轮任务要求：起草口径清单
-            用户要求按业务文档为指定的表起草或更新口径清单。口径清单是该表取数口径的唯一来源，平台按清单自动生成查询模板和指标，你不写 views/、cubes/，也不写模型文件。本轮只能写 calibers/<名称>.yml（名称用小写字母、数字、下划线，通常与模型同名），以及把 knowledge/rules/ 中与清单重复的具体取数条件改写为一句指引。
-            先读：用户点名的业务文档（raw/docs/ 下，文档开头的"适用模型"写明对应的表）、对应模型的 metadata.yml（列名与取值说明）、已有的 calibers/ 清单和 knowledge/rules/。
+            用户要求按业务文档为指定的表起草或更新口径清单。口径清单是该表取数口径、指标、统计范围和使用场景的唯一来源，平台按清单自动生成查询模板、指标和全局选表规则，你不写 views/、cubes/、模型文件和 knowledge/ 下的规则。本轮只能写 calibers/<名称>.yml（名称用小写字母、数字、下划线，通常与模型同名）。
+            先读：用户点名的业务文档（raw/docs/ 下，文档开头的"适用模型"写明对应的表；上传表的模型名带 ds_<编号>_<编号>_ 前缀，文档写不带前缀的原表名也指同一张表，清单的 model 写模型名）、对应模型的 metadata.yml（列名与取值说明）和已有的 calibers/ 清单。
+            采样只是部分数据：文档写的取值逐字照抄，不因采样里没有而改写、删除或提问；平台会另外核对取值，结果只作提示。
             清单格式（YAML）：
             model: 模型名
             name: 生成名（字母、数字、下划线，平台生成 <name>_caliber 查询模板和 <name>_metrics 指标；模型名含中文时必须另写）
@@ -79,7 +80,7 @@ public final class ModelingTurnRules {
               audience: {name: 统计对象, synonyms: [用户的其他说法]}   # 照抄文档"统计对象"，例如会员、活跃用户；文档没写时不写
               time: {column: 时间列, grain: month 或 day, format: yyyymm、yyyymmdd 或 date}
               measures:
-                - {column: 度量列, name: 指标英文名（不能与列名相同）, label: 中文名, description: 含义, synonyms: [用户常见说法], default: true}   # 只写文档或用户说明的名称、含义和说法；文档没有定义时 label 写列名，description 写"含义文档未定义，待业务确认"，不要沿用模型列描述中的推断；文档写明的默认指标才写 default: true，最多一个
+                - {column: 度量列, name: 指标英文名（不能与列名相同）, label: 中文名, description: 含义, synonyms: [用户常见说法], default: true, unit: 单位, period: month_to_date}   # 只写文档或用户说明的名称、含义和说法；文档没有定义时 label 写列名，description 写"含义文档未定义，待业务确认"，不要沿用模型列描述中的推断；文档写明的默认指标才写 default: true，最多一个；unit 写文档给出的单位（人、元、% 等），没写不写；period 只在文档说明该列是"月累计"（每月最后一天的值为当月值）时写 month_to_date，其余不写
               scope:   # 文档"统计范围"中有汇总值与明细值并存的列（省份、渠道、支付方式等），每列一项
                 - {column: 范围列, name: 维度英文名（不能与列名相同，例如 province）, label: 中文名, total: 汇总值, default: 用户没指定时取的值, values: [文档列出的取值，没列时不写]}
               fixed_scope: {列: 取值}   # 文档要求所有口径都只取一个固定值、且问数不会按它细分的列；已写进 scope 的列不要再写
@@ -92,6 +93,7 @@ public final class ModelingTurnRules {
                 where: {列: 取值, 列: [候选1, 候选2], 列: 不限}
                 synonyms: [用户可能的其他说法，只写文档里出现过的]
                 note: 文档中的补充说明
+                unit: 单位   # 只在各口径单位不同（例如考核指标表的"指标名、指标值"两列，每个指标名一个口径）时写，覆盖指标的 unit
                 pending: 文档没有说清、需要业务确认的事项
                 source: {document: 文档文件名}
             照抄规则：
@@ -101,8 +103,9 @@ public final class ModelingTurnRules {
             - 写完清单后，把会改变取数结果的待定项（合并方式、范围取值写法、指标定义等）用 request_user_confirmation 一次性提问，每项一个问题，选项照抄文档给出的方案；用户确定后平台会发来答复，由那一轮改清单。文档已写清的不问；本会话此前轮次已经提出的同一事项不再重复提问。
             - 每张表一份清单；文档同时声明多张表时分别写。已有清单时只改与文档有差异的口径，其余保持原样；平台提示某些口径由用户修改过、不能覆盖时，保持它们原样再写一次。
             - 写入后平台立即按模型校验列名并生成查询模板与指标；校验失败会返回原因，按原因修正后重写，不要改动生成的文件。
-            - 写完清单后读 knowledge/rules/：其中逐条写出了与清单相同口径的具体取值条件的，改写成一句指引（例如"会员规模口径见指标 <name>_metrics，按口径名取数，不要自行拼条件"）；一般原则（汇总范围、不能相加等）保留。
-            不查询任何表数据。最终回复 3–6 行：为哪些表起草了多少个口径、提了哪些待确认问题、改写了哪些规则，并提示到口径页查看。
+            - 范围的 values 只写文档列出的明细取值；文档没列明细取值时不写 values（只有汇总值的 values 会被拒绝）。
+            - 键值类表（一列是指标名、一列是指标值）：每个指标名一个口径，where 写 {指标名列: 指标名}，各指标单位不同时写口径的 unit；文档没列全的指标名不自行补，在 scenario.description 末尾以"待业务确认："注明需要补充的指标。
+            不查询任何表数据。最终回复 3–6 行：为哪些表起草了多少个口径、提了哪些待确认问题，并提示到口径页查看。
             """;
 
     /** spec114 / ADR0132: the only turn that proposes modeling changes, from listed questions. */
@@ -126,6 +129,40 @@ public final class ModelingTurnRules {
             口径清单（calibers/<名称>.yml）：用户明确要求新增、修改、删除某张表的口径，或调整它的表说明（业务、统计对象、指标、范围）时，该表已有清单就只改这份清单，按文件已有格式写，不写规则，不改生成的 views/、cubes/；取值只用用户原话或业务文档原文，说法有歧义或缺条件时先用 request_user_confirmation 提问，不自行补全。该表还没有清单时不新建，告诉用户上传写明"适用模型"的业务文档后页面会自动起草。用户没有提到口径时不改清单。改完提示用户到"口径"页核查并验证，核查验证完成前知识库不能发布。
             """;
 
+    /**
+     * spec149 P7-3 (ADR0156): base modeling in a caliber knowledge base only describes columns;
+     * the caliber turn owns calibers, metrics, scope, use and questions about them.
+     */
+    static final String CALIBER_KB_AUTO =
+            """
+            # 本轮任务要求：口径问数知识库的基础建模
+            本知识库按口径问数：每张表的口径、指标、统计范围和使用场景只写在之后自动发起的"起草口径清单"轮次生成的口径清单里，平台据此生成查询模板、指标和全局选表规则。
+            本轮只补模型与列描述（列的中文名、含义、单位、取值说明），供起草口径清单参考；不写 knowledge/ 下的业务规则与术语，不写表间关系，不写 calibers/，不用 request_user_confirmation 提问（工具都会拒绝）。业务文档中的口径表、指标定义、统计范围本轮不处理，也不就它们提问。
+            采样只是部分数据：列描述里的样例取值只作参考，不能据采样质疑、改写或补充文档写的取值。不给模型增加表里没有的列。
+            工程现状以运行上下文为准：不执行 context show、memory status，不 list_files/glob 查找；一次读完模型文件和 raw/docs/ 下的业务文档（有文档时逐份读完）后直接写入。不查询任何表的数据（工具会拒绝）。
+            最终回复 2–4 行：理解了哪些表及各自的粒度（一行代表什么），并说明口径、指标与范围将由之后自动发起的起草口径清单轮次处理。
+            """;
+
+    static final String CALIBER_KB_DOCUMENT =
+            """
+            # 本轮任务要求：口径问数知识库的业务文档更新
+            只读有变化的文档和与之相关的模型文件，按文档补正列描述；文档中口径、指标、统计范围和使用场景的变化由之后自动发起的"起草口径清单"轮次处理。不写 knowledge/ 下的规则与术语，不写表间关系，不写 calibers/，不提问。不重新加载已加载的技能，不执行 context show、memory status。
+            最终回复 1–3 行：读了哪些文档、改了哪些列描述。
+            """;
+
+    static final String CALIBER_KB_CONFIRM =
+            """
+            # 本轮任务要求：写入用户的确定（口径问数知识库）
+            答复只写进对应表的口径清单 calibers/<名称>.yml：口径条件、合并方式、指标定义与单位、统计范围取值、表说明，按文件已有格式修改，删去已确定的 pending 和 scenario.description 中对应的"待业务确认"内容。不写 knowledge/ 下的规则、不写表间关系（工具会拒绝），也不改列描述。答复涉及还没有清单的表时不新建，在回复中说明待起草口径清单后再确定。不再就已确定的内容提问。
+            最终回复 1–2 行：改了哪张表清单的哪些内容，并提示到"口径"页核查并验证。
+            """;
+
+    static final String CALIBER_KB_CHAT =
+            """
+            # 口径问数知识库
+            本知识库按口径问数：口径、指标、统计范围和使用场景只改 calibers/ 下已有的口径清单，不写 knowledge/ 下的规则与术语、不写表间关系（工具会拒绝）；列含义改模型列描述。下面"用户对话"中关于规则、计算字段、默认过滤和试问 SQL 的要求在本知识库不适用。
+            """;
+
     private ModelingTurnRules() {}
 
     /**
@@ -141,6 +178,26 @@ public final class ModelingTurnRules {
         if (ModelingTurnPurpose.COACH.equals(purpose)) return COACH;
         if (ModelingTurnPurpose.CALIBER.equals(purpose)) return CALIBER;
         return CHAT + "\n" + QUESTION;
+    }
+
+    /**
+     * spec149 P7-2 (ADR0156): an ordinary knowledge base has no caliber lists, so the paragraphs
+     * about them are left out; its document calibers go to rules and column descriptions as before.
+     */
+    public static String forPurpose(String purpose, boolean caliberKb) {
+        if (caliberKb) {
+            if (ModelingTurnPurpose.AUTO.equals(purpose)) return CALIBER_KB_AUTO;
+            if (ModelingTurnPurpose.DOCUMENT.equals(purpose)) return CALIBER_KB_DOCUMENT;
+            if (ModelingTurnPurpose.CONFIRM.equals(purpose)) return CALIBER_KB_CONFIRM;
+            if (purpose == null) return CALIBER_KB_CHAT + "\n" + CHAT;
+            return forPurpose(purpose);
+        }
+        if (ModelingTurnPurpose.CALIBER.equals(purpose))
+            return "# 本轮任务要求\n这是普通问数知识库，不使用口径清单，本轮不写 calibers/。告诉用户：需要按口径严格取数时，请新建“口径问数”知识库。\n";
+        return forPurpose(purpose)
+                .lines()
+                .filter(line -> !line.contains("口径清单"))
+                .collect(java.util.stream.Collectors.joining("\n", "", "\n"));
     }
 
     /** Turns that may model tables need the probe boundary and relationship candidates. */

@@ -44,7 +44,24 @@ public record CaliberList(
             String label,
             String description,
             List<String> synonyms,
-            boolean isDefault) {}
+            boolean isDefault,
+            // spec149 P7-4: shown with every value; omitted when the document gives none.
+            String unit,
+            // spec149 P7-4: "month_to_date" when a day's row holds the month so far, so a month
+            // is read from its last day; null when a row holds only its own period.
+            String period) {
+        public static final String MONTH_TO_DATE = "month_to_date";
+
+        public Measure(
+                String column,
+                String name,
+                String label,
+                String description,
+                List<String> synonyms,
+                boolean isDefault) {
+            this(column, name, label, description, synonyms, isDefault, null, null);
+        }
+    }
 
     /** spec149 P5: a table selection key (business or audience) and its wordings. */
     public record Key(String name, List<String> synonyms) {
@@ -99,7 +116,22 @@ public record CaliberList(
             // "sum" when a person confirmed that rows of several candidate values add up.
             String combine,
             Map<String, Object> source,
-            Map<String, Object> conflict) {}
+            Map<String, Object> conflict,
+            // spec149 P7-4: a caliber's own unit, e.g. one key-value KPI per caliber.
+            String unit) {
+        public Caliber(
+                String name,
+                String group,
+                Map<String, List<String>> where,
+                List<String> synonyms,
+                String note,
+                String pending,
+                String combine,
+                Map<String, Object> source,
+                Map<String, Object> conflict) {
+            this(name, group, where, synonyms, note, pending, combine, source, conflict, null);
+        }
+    }
 
     /** The parsed list, or the problems that make it unusable (Chinese, shown to the assistant). */
     public record Parsed(CaliberList list, List<String> errors) {
@@ -228,7 +260,9 @@ public record CaliberList(
                                 text(r.get("description")),
                                 texts(r.get("synonyms")),
                                 Boolean.TRUE.equals(r.get("default"))
-                                        || "true".equalsIgnoreCase(text(r.get("default")))));
+                                        || "true".equalsIgnoreCase(text(r.get("default"))),
+                                text(r.get("unit")),
+                                period(text(r.get("period")), column, errors)));
             }
         }
         Map<String, String> fixedScope = new LinkedHashMap<>();
@@ -240,6 +274,9 @@ public record CaliberList(
                             errors.add("scenario.fixed_scope 的每项写成 列名: 取值");
                         else fixedScope.put(column, text(value));
                     });
+        if ((time == null || !"day".equals(time.grain()))
+                && measures.stream().anyMatch(x -> Measure.MONTH_TO_DATE.equals(x.period())))
+            errors.add("period: month_to_date 只用于按日统计的表（scenario.time.grain 为 day）");
         if (measures.stream().filter(Measure::isDefault).count() > 1)
             errors.add("scenario.measures 中只能有一个 default: true 的默认指标");
         List<Scope> scope = scope(m.get("scope"), fixedScope, measures, errors);
@@ -311,6 +348,12 @@ public record CaliberList(
             List<String> values = texts(r.get("values"));
             if (defaultValue != null && !values.isEmpty() && !values.contains(defaultValue))
                 errors.add("范围列 " + column + " 的 default 不在 values 中");
+            // spec149 P7-4: values listing only the summary would refuse every detail value
+            // ("浙江") at query time; without listed detail values nothing is written.
+            String total = text(r.get("total"));
+            if (!values.isEmpty()
+                    && values.stream().allMatch(v -> v.equals(total) || v.equals(defaultValue)))
+                errors.add("范围列 " + column + " 的 values 只写了汇总值，问数时会拒绝所有明细取值；文档没有列出明细取值时不写 values");
             out.add(
                     new Scope(
                             column,
@@ -372,7 +415,15 @@ public record CaliberList(
                 text(r.get("pending")),
                 text(r.get("combine")),
                 map(r.get("source")),
-                map(r.get("conflict")));
+                map(r.get("conflict")),
+                text(r.get("unit")));
+    }
+
+    private static String period(String value, String column, List<String> errors) {
+        if (value == null) return null;
+        if (Measure.MONTH_TO_DATE.equals(value)) return value;
+        errors.add("度量 " + column + " 的 period 只能写 month_to_date（月累计：每月最后一天的值为当月值），其余不写");
+        return null;
     }
 
     // ------------------------------------------------------------------ field names
@@ -395,7 +446,15 @@ public record CaliberList(
                     "not_for");
     private static final List<String> TIME_KEYS = List.of("column", "grain", "format");
     private static final List<String> MEASURE_KEYS =
-            List.of("column", "name", "label", "description", "synonyms", "default");
+            List.of(
+                    "column",
+                    "name",
+                    "label",
+                    "description",
+                    "synonyms",
+                    "default",
+                    "unit",
+                    "period");
     private static final List<String> SCOPE_KEYS =
             List.of("column", "name", "label", "total", "default", "values");
     private static final List<String> KEY_KEYS = List.of("name", "synonyms");
@@ -410,7 +469,8 @@ public record CaliberList(
                     "pending",
                     "combine",
                     "source",
-                    "conflict");
+                    "conflict",
+                    "unit");
 
     /** Reports fields the list format does not have, so nothing written is dropped unseen. */
     private static void unknown(

@@ -6,10 +6,15 @@ import KnowledgeBaseMembersModal from '../../components/KnowledgeBaseMembersModa
 import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon from '../../components/Icon';
 import { toast } from '../../components/Toast';
-import { createGroup, DatasetGroup, deleteGroup, listGroups, updateGroup } from '../../api/datasets';
+import { createGroup, DatasetGroup, deleteGroup, KnowledgeMode, listGroups, updateGroup } from '../../api/datasets';
 import './DatasetsPage.css';
 
 const NAME_RE = /^[一-龥A-Za-z0-9_-]{1,100}$/;
+/** spec149 P7-2: how the knowledge base answers questions, chosen once at creation. */
+const MODE_CHOICES: { mode: KnowledgeMode; title: string; hint: string }[] = [
+  { mode: 'NORMAL', title: '普通问数', hint: '按模型、关系和业务规则写 SQL 查询，适合明细表和灵活分析。' },
+  { mode: 'CALIBER', title: '口径问数', hint: '每张表按业务文档建立口径清单，只按核查过的口径取数，适合预先统计好的结果表。' },
+];
 
 const TOUR_GROUP_NAME = '我的第一个知识库';
 const PAGE_SIZE = 20;
@@ -42,6 +47,7 @@ export default function DatasetsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [mode, setMode] = useState<KnowledgeMode>('NORMAL');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -97,6 +103,7 @@ export default function DatasetsPage() {
     setEditGroup(null);
     setName('');
     setDescription('');
+    setMode('NORMAL');
     setFormError(null);
     setFormOpen(true);
   }
@@ -126,7 +133,7 @@ export default function DatasetsPage() {
     try {
       const g = editGroup
         ? await updateGroup(editGroup.id, name.trim(), description.trim())
-        : await createGroup(name.trim(), description.trim());
+        : await createGroup(name.trim(), description.trim(), mode);
       setFormOpen(false);
       setName('');
       setDescription('');
@@ -260,6 +267,7 @@ export default function DatasetsPage() {
                     {STATUS_LABELS[state]}{state === 'published' ? ` v${g.publishedVersion}` : ''}
                   </span>
                   <span className="kb-permission">{g.canManage ? '可管理' : '仅可使用'}</span>
+                  {g.mode === 'CALIBER' && <span className="kb-mode-tag" title="只按口径清单生成的指标问数">口径问数</span>}
                 </div>
               </div>
               <div className="kb-card-controls">
@@ -364,6 +372,19 @@ export default function DatasetsPage() {
                     限制 1000 个字符
                   </div>
                 </div>
+                {!editGroup && <>
+                  <span className="da-label" id="create-kb-mode">问数方式 *</span>
+                  <div role="radiogroup" aria-labelledby="create-kb-mode" className="kb-mode-choices">
+                    {MODE_CHOICES.map(choice => (
+                      <label key={choice.mode} className={`kb-mode-choice${mode === choice.mode ? ' is-selected' : ''}`}>
+                        <input type="radio" name="kb-mode" value={choice.mode} checked={mode === choice.mode}
+                          disabled={busy} onChange={() => { setMode(choice.mode); setFormError(null); }} />
+                        <span><strong>{choice.title}</strong><small>{choice.hint}</small></span>
+                      </label>
+                    ))}
+                    <div className="da-small">创建后不能更改。</div>
+                  </div>
+                </>}
               </div>
               {formError && (
                 <div id="create-kb-error" role="alert" style={{ color: 'var(--da-danger)', marginTop: 16 }}>

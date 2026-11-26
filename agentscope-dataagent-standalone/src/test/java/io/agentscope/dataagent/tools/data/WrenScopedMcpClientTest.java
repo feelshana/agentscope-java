@@ -121,6 +121,20 @@ class WrenScopedMcpClientTest {
                 .isInstanceOf(DatasetException.class);
     }
 
+    /** spec149 P7-2: a caliber knowledge base never runs raw SQL, whatever the table. */
+    @Test
+    void caliberKnowledgeBasesRefuseRunSql() {
+        var entity = new DatasetGroupEntity("a", "alice", "a", "");
+        entity.setMdlVersion(1);
+        entity.setKnowledgeMode(DatasetGroupEntity.MODE_CALIBER);
+        when(groups.queryGroups("alice", List.of("a"))).thenReturn(List.of(entity));
+        doReturn(List.of(sqlTool)).when(gateway).listTools("a");
+        var client = client("alice", "a");
+        assertThatThrownBy(() -> client.callTool("run_sql", Map.of("sql", "SELECT 1")).block())
+                .hasMessageContaining("口径问数知识库，只能用 query_cube");
+        verify(gateway, never()).call(anyString(), anyString(), anyMap());
+    }
+
     @Test
     void failedQueriesAreNotCached() {
         grant("alice", "a");

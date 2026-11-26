@@ -51,7 +51,9 @@ export default function ConfirmationCards({ questions, onSubmit }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <strong style={{ fontSize: 13, fontWeight: 650 }}>需要你确定</strong>
       <span style={{ padding: '1px 8px', borderRadius: 999, background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 11.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{index + 1}/{questions.length}</span>
-      <span style={{ fontSize: 11.5, color: 'var(--da-text-muted)' }}>会影响统计结果</span>
+      {current.source === 'caliber'
+        ? <span style={{ padding: '1px 8px', borderRadius: 6, background: '#efeafd', color: '#5b45b8', fontSize: 11.5, fontWeight: 600 }}>口径清单 · 答复写回清单</span>
+        : <span style={{ fontSize: 11.5, color: 'var(--da-text-muted)' }}>会影响统计结果</span>}
     </div>
     <div style={{ margin: '8px 0 3px', fontSize: 14, fontWeight: 550, lineHeight: 1.55 }}>{current.question}</div>
     {current.basis && <div style={{ fontSize: 12, color: 'var(--da-text-muted)', marginBottom: 4, lineHeight: 1.55 }}>依据：{current.basis}</div>}

@@ -234,6 +234,19 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
     }
 
     /** Reports the compiled-MDL state so the agent builds before its first query-class command. */
+    /**
+     * spec149 P7-3: a caliber turn sees the questions still waiting for the user, so it does not
+     * ask the same thing in other words (2026-11-25: one caliber was asked twice and answered
+     * both ways).
+     */
+    public static String pendingQuestions(java.nio.file.Path root, String purpose) {
+        if (!io.agentscope.dataagent.dataset.ModelingTurnPurpose.CALIBER.equals(purpose)) return "";
+        java.util.List<String> pending =
+                io.agentscope.dataagent.dataset.ModelingConfirmationService.pendingQuestions(root);
+        if (pending.isEmpty()) return "";
+        return "\n# 已在等待用户确认的问题（同一件事不要换个说法再问）\n- " + String.join("\n- ", pending) + "\n";
+    }
+
     static String buildState(java.nio.file.Path root) {
         boolean compiled =
                 root != null && java.nio.file.Files.isRegularFile(root.resolve("target/mdl.json"));
@@ -313,7 +326,8 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
                                     + tableContext
                                     + windowContext
                                     + "\n\n"
-                                    + ModelingTurnRules.forPurpose(purpose);
+                                    + ModelingTurnRules.forPurpose(purpose, project.caliberKb())
+                                    + pendingQuestions(project.root(), purpose);
                         })
                 .subscribeOn(Schedulers.boundedElastic());
     }

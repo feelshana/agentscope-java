@@ -219,6 +219,33 @@ class DataAgentConfigTest {
                 .contains("用 request_user_confirmation 一次性提问", "由那一轮改清单", "此前轮次已经提出的同一事项不再重复提问");
         assertThat(ModelingTurnRules.forPurpose("confirm"))
                 .contains("只改这份清单", "删去已确定的 pending", "不把这些条件写进规则或列描述");
+        // spec149 P7-2: an ordinary knowledge base hears nothing about caliber lists.
+        for (String purpose : new String[] {"auto", "document", "confirm", null})
+            assertThat(ModelingTurnRules.forPurpose(purpose, false))
+                    .doesNotContain("口径清单")
+                    .isNotBlank();
+        assertThat(ModelingTurnRules.forPurpose("auto", false))
+                .contains("按官方 enrich-context Auto-pilot");
+        assertThat(ModelingTurnRules.forPurpose("caliber", false))
+                .contains("普通问数知识库", "不写 calibers/");
+        // spec149 P7-3: in a caliber knowledge base base modeling only describes columns, asks
+        // nothing and leaves calibers to the caliber turn; answers go to the lists only.
+        assertThat(ModelingTurnRules.forPurpose("auto", true))
+                .contains(
+                        "只补模型与列描述",
+                        "不写 knowledge/ 下的业务规则",
+                        "不用 request_user_confirmation 提问",
+                        "采样只是部分数据")
+                .doesNotContain("Default filters");
+        assertThat(ModelingTurnRules.forPurpose("document", true)).contains("起草口径清单", "不提问");
+        assertThat(ModelingTurnRules.forPurpose("confirm", true))
+                .contains("答复只写进对应表的口径清单", "不写 knowledge/ 下的规则", "也不改列描述");
+        assertThat(ModelingTurnRules.forPurpose(null, true))
+                .startsWith("# 口径问数知识库")
+                .contains("用户对话");
+        assertThat(ModelingTurnRules.forPurpose("caliber", true))
+                .contains("采样只是部分数据", "不写 values", "unit", "month_to_date")
+                .doesNotContain("改写成一句指引");
         assertThat(ModelingTurnRules.forPurpose("confirm"))
                 .contains(
                         "指标定义、默认过滤和独立术语写入 knowledge/rules/",

@@ -44,7 +44,9 @@ public class ModelingConfirmationService {
             String basis,
             List<Option> options,
             String createdAt,
-            List<String> questionIds) {}
+            List<String> questionIds,
+            // spec149 P7-3: "caliber" when asked while drafting a caliber list, shown on the card.
+            String source) {}
 
     /** One user decision: an option's rule or the user's own text, or dismissed (no rule). */
     public record Answer(String id, String answer, boolean dismissed) {}
@@ -72,6 +74,17 @@ public class ModelingConfirmationService {
             List<String> labels,
             List<String> rules,
             List<String> questionIds) {
+        return create(groupId, question, basis, labels, rules, questionIds, null);
+    }
+
+    public Confirmation create(
+            String groupId,
+            String question,
+            String basis,
+            List<String> labels,
+            List<String> rules,
+            List<String> questionIds,
+            String source) {
         List<String> linked =
                 questionIds == null
                         ? List.of()
@@ -111,7 +124,8 @@ public class ModelingConfirmationService {
                                     b,
                                     List.copyOf(options),
                                     Instant.now().toString(),
-                                    linked);
+                                    linked,
+                                    source);
                     write(groupId, created);
                     // spec114: the meaning comes first. The assistant kept writing SQL on its own
                     // guess before asking (2026-11-03, twice), so the platform withdraws it here.
@@ -203,6 +217,28 @@ public class ModelingConfirmationService {
                     }
                     return out;
                 });
+    }
+
+    /**
+     * spec149 P7-3: questions still waiting for the user, read from a draft root, so a caliber
+     * turn does not ask again what an earlier turn asked in other words.
+     */
+    public static List<String> pendingQuestions(Path root) {
+        Path directory = root.resolve(DIRECTORY);
+        if (!Files.isDirectory(directory)) return List.of();
+        try (Stream<Path> files = Files.list(directory)) {
+            List<String> out = new ArrayList<>();
+            for (Path file : files.filter(f -> f.toString().endsWith(".json")).sorted().toList()) {
+                try {
+                    out.add(JSON.readValue(file.toFile(), Confirmation.class).question());
+                } catch (IOException ignored) {
+                    // A torn file loses one question, never the others.
+                }
+            }
+            return out;
+        } catch (IOException e) {
+            return List.of();
+        }
     }
 
     private List<Confirmation> read(String groupId) {

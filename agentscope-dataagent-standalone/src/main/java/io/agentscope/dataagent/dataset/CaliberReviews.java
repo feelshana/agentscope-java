@@ -132,6 +132,9 @@ public final class CaliberReviews {
                     if (mm.get("synonyms") instanceof List<?> l && l.isEmpty())
                         mm.remove("synonyms");
                     if (Boolean.FALSE.equals(mm.get("isDefault"))) mm.remove("isDefault");
+                    // spec149 P7-4 fields are left out while empty, keeping signed hashes.
+                    if (mm.get("unit") == null) mm.remove("unit");
+                    if (mm.get("period") == null) mm.remove("period");
                 }
         return shape;
     }
@@ -143,6 +146,52 @@ public final class CaliberReviews {
         if (hash.equals(r.verifiedHash())) return PASSED;
         if (hash.equals(r.problemHash())) return PROBLEM;
         return VERIFY_PENDING;
+    }
+
+    /**
+     * spec149 P7-2 (ADR0156): in a caliber knowledge base every table is read through its list,
+     * so a model without a list blocks publishing. ref_sql models are not tables and are skipped.
+     */
+    public static List<MdlIssue> coverage(Path root) {
+        Set<String> covered = new LinkedHashSet<>();
+        for (Map.Entry<String, String> e : CaliberCompiler.lists(root).entrySet()) {
+            CaliberList.Parsed parsed = CaliberList.parse(e.getKey(), e.getValue());
+            if (parsed.ok()) covered.add(parsed.list().model().toLowerCase(java.util.Locale.ROOT));
+        }
+        List<String> missing = new ArrayList<>();
+        List<String> all = new ArrayList<>();
+        Path models = root.resolve("models");
+        if (Files.isDirectory(models, LinkOption.NOFOLLOW_LINKS))
+            try (Stream<Path> dirs = Files.list(models)) {
+                dirs.filter(d -> Files.isRegularFile(d.resolve("metadata.yml")))
+                        .filter(d -> !Files.exists(d.resolve("ref_sql.sql")))
+                        .map(d -> d.getFileName().toString())
+                        .peek(all::add)
+                        .filter(m -> !covered.contains(m.toLowerCase(java.util.Locale.ROOT)))
+                        .sorted()
+                        .forEach(missing::add);
+            } catch (IOException e) {
+                return List.of(
+                        new MdlIssue("error", "读取模型目录失败：" + e.getMessage(), "calibers-blocked"));
+            }
+        if (missing.isEmpty()) return List.of();
+        StringBuilder hint = new StringBuilder();
+        BusinessDocumentService.unmatchedDeclarations(root, all)
+                .forEach(
+                        (doc, names) ->
+                                hint.append("文档《")
+                                        .append(doc)
+                                        .append("》写的适用模型 ")
+                                        .append(String.join("、", names))
+                                        .append(" 不是本知识库的表，请改成上面列出的表名后重新上传。"));
+        return List.of(
+                new MdlIssue(
+                        "error",
+                        "口径问数知识库的每张表都要有口径清单，"
+                                + String.join("、", missing)
+                                + " 还没有。上传开头写明“适用模型：表名”的业务文档后，建模页会自动起草；不需要的表请移出知识库。"
+                                + hint,
+                        "calibers-blocked"));
     }
 
     public static boolean scenarioReviewed(ListReview review, CaliberList list) {

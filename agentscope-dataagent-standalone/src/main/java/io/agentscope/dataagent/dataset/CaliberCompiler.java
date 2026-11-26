@@ -209,6 +209,7 @@ public final class CaliberCompiler {
                 if (w.getValue().size() > 1)
                     parts.add(
                             "数值为 " + w.getKey() + " 取 " + String.join("、", w.getValue()) + " 各行相加");
+        if (c.unit() != null) parts.add("单位：" + c.unit());
         if (c.pending() != null) parts.add("待业务确认：" + c.pending());
         return String.join("；", parts);
     }
@@ -253,6 +254,10 @@ public final class CaliberCompiler {
                                             ? ""
                                             : "。常见说法：" + String.join("、", m.synonyms()))
                                     + (m.isDefault() ? "。默认指标：用户只说统计对象、没说具体指标时用它" : "")
+                                    + (m.unit() == null ? "" : "。单位：" + m.unit())
+                                    + (CaliberList.Measure.MONTH_TO_DATE.equals(m.period())
+                                            ? "。月累计值：按月问时按日查询该月（period:day:月初,下月初），取返回的最后一天的值；最后一天不是月末时注明截至该日，不要相加"
+                                            : "")
                                     + "。统计结果已预先算好，每个结果只取一行：必须按 caliber 筛选单个口径或按 caliber"
                                     + " 分组，时间按表的粒度分组，不能把多个口径、多天或多月相加；对应多行时返回空。"));
         }
@@ -581,6 +586,27 @@ public final class CaliberCompiler {
                     new StringBuilder("- ").append(list.cubeName()).append("：").append(s.subject());
             if (!s.useFor().isEmpty()) note.append("；适用于").append(String.join("、", s.useFor()));
             if (!s.notFor().isEmpty()) note.append("；不适用于").append(String.join("、", s.notFor()));
+            // spec149 P7-4: how month-to-date measures are read, and the units to answer with.
+            List<String> monthToDate =
+                    s.measures().stream()
+                            .filter(x -> CaliberList.Measure.MONTH_TO_DATE.equals(x.period()))
+                            .map(
+                                    x ->
+                                            x.name()
+                                                    + "（"
+                                                    + (x.label() == null ? x.column() : x.label())
+                                                    + "）")
+                            .toList();
+            if (!monthToDate.isEmpty())
+                note.append("；月累计指标 ")
+                        .append(String.join("、", monthToDate))
+                        .append(" 按月问时按日查询该月、取返回的最后一天，最后一天不是月末时注明截至该日");
+            List<String> units =
+                    s.measures().stream()
+                            .filter(x -> x.unit() != null)
+                            .map(x -> (x.label() == null ? x.column() : x.label()) + "：" + x.unit())
+                            .toList();
+            if (!units.isEmpty()) note.append("；单位 ").append(String.join("，", units));
             notes.add(note.append("。").toString());
         }
         out.append("\n").append(String.join("\n", notes)).append("\n");
@@ -596,8 +622,32 @@ public final class CaliberCompiler {
                             + " month）。问一段时间（如最近一周）就按该粒度逐天或逐月列出，不能把多天、多月的值相加或平均；表里没有周、月去重数时如实说明，不把每天的值相加当作周活、月活。\n")
                 .append("- 以上指标覆盖的问题只用 query_cube 取数，不要自己拼取数条件，也不要对这些指标的原表或生成的口径视图（")
                 .append(String.join("、", models))
-                .append("）用 run_sql；其他问题照常用 run_sql。\n");
+                .append(
+                        allModelsCovered(root, lists)
+                                ? "）用 run_sql；本知识库每张表都按口径取数，任何问题都只用 query_cube，不用 run_sql。\n"
+                                : "）用 run_sql；其他问题照常用 run_sql。\n");
         return out.toString();
+    }
+
+    /**
+     * spec149 P7-2: whether every table model has a list, as in a caliber knowledge base. Then
+     * the rules say run_sql is never used, instead of sending other questions to it.
+     */
+    private static boolean allModelsCovered(Path root, List<CaliberList> lists) {
+        Set<String> covered = new java.util.HashSet<>();
+        for (CaliberList l : lists) covered.add(l.model().toLowerCase(Locale.ROOT));
+        Path models = root.resolve("models");
+        if (!Files.isDirectory(models, LinkOption.NOFOLLOW_LINKS)) return false;
+        try (java.util.stream.Stream<Path> dirs = Files.list(models)) {
+            return dirs.filter(d -> Files.isRegularFile(d.resolve("metadata.yml")))
+                    .filter(d -> !Files.exists(d.resolve("ref_sql.sql")))
+                    .allMatch(
+                            d ->
+                                    covered.contains(
+                                            d.getFileName().toString().toLowerCase(Locale.ROOT)));
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private static String keyText(CaliberList.Key key) {

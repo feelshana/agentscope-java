@@ -217,6 +217,21 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                     return "未写入：" + generated + " 已是手工建设的资产，请在口径清单中另写 name 避免同名。";
             }
             model = compiled.list().model();
+            // spec149 P7-3: a document draft copies its documents; the user's own words in chat
+            // or answers are not held to them.
+            if (!p.chatTurn()) {
+                var columns =
+                        io.agentscope.dataagent.dataset.CaliberCompiler.modelColumns(
+                                p.root(), model);
+                List<String> problems =
+                        io.agentscope.dataagent.dataset.CaliberDocumentCheck.problems(
+                                compiled.list(),
+                                io.agentscope.dataagent.dataset.BusinessDocumentService
+                                        .declaringText(p.root(), model),
+                                columns == null ? java.util.Set.of() : columns.types().keySet());
+                if (!problems.isEmpty())
+                    return "未写入：口径清单与业务文档不一致，请修正后重写：\n- " + String.join("\n- ", problems);
+            }
         } else if (before != null) {
             var parsed = io.agentscope.dataagent.dataset.CaliberList.parse(relative, before);
             model = parsed.list() == null ? null : parsed.list().model();

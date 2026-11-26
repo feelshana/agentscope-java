@@ -193,6 +193,8 @@ public final class CaliberSources {
         m.put("note", c.note());
         m.put("pending", c.pending());
         m.put("combine", c.combine());
+        // spec149 P7-4: only present when written, so earlier rows keep their reviewed hash.
+        if (c.unit() != null) m.put("unit", c.unit());
         return m;
     }
 

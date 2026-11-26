@@ -125,7 +125,7 @@ export default function CaliberPanel({ groupId, assistantIdle, onDraft }: {
             {pending.length > 0 && <button type="button" className="da-btn da-btn-sm" onClick={() => setPicked(Object.fromEntries(pending.filter(r => !conflicted.has(r.name)).map(r => [r.name, true])))}>全选待核查（{pending.length}）</button>}
             <button type="button" className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || (!scenario && chosen.length === 0)}
               onClick={() => void review()}>{busy === 'review' ? '提交中…' : `核查通过${chosen.length ? `（${chosen.length} 个口径）` : ''}`}</button>
-            <span className="da-small">逐行核对条件、待确认事项和取值检查后再勾选；结论只对当前内容有效，改动后需重新核查。</span>
+            <span className="da-small">逐行核对条件和待确认事项后再勾选；取值检查只是提示，以文档为准（测试数据可能不全），不影响核查和发布。结论只对当前内容有效，改动后需重新核查。</span>
           </div>}
 
           {table.rows.length === 0 ? <div className="sm-empty">{listPath ? '清单中还没有口径。' : '还没有口径清单。点“起草口径清单”，助手会照抄文档中的口径表，文档没有说明的内容标为待业务确认。'}</div>

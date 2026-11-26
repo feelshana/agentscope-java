@@ -100,6 +100,8 @@ export interface Confirmation {
   createdAt: string;
   /** spec114: coach or trial questions whose SQL waits for this answer. */
   questionIds?: string[] | null;
+  /** spec149 P7-3: "caliber" when asked while drafting a caliber list; the answer goes to that list. */
+  source?: string | null;
 }
 
 export interface ConfirmationAnswer { id: string; answer: string | null; dismissed: boolean }

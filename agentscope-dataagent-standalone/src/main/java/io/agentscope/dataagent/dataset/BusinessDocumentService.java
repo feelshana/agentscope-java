@@ -72,6 +72,47 @@ public class BusinessDocumentService {
         return List.copyOf(out);
     }
 
+    /**
+     * Whether a declared name means this model. An uploaded table's model is named {@code
+     * ds_<owner>_<upload>_<original name>}; people write the original name they know (twice a
+     * document said "hhweb_video_vip_more_dimension_m" for the "ds_..._" model and got no list).
+     */
+    public static boolean declares(String declared, String model) {
+        if (declared == null || model == null) return false;
+        if (declared.equalsIgnoreCase(model)) return true;
+        return model.toLowerCase(java.util.Locale.ROOT)
+                .matches(
+                        "ds_[0-9a-f]{8}_[0-9a-f]{8}_"
+                                + Pattern.quote(declared.toLowerCase(java.util.Locale.ROOT)));
+    }
+
+    /** Declared names, by document, that mean none of the given models. */
+    public static java.util.Map<String, List<String>> unmatchedDeclarations(
+            Path root, java.util.Collection<String> models) {
+        java.util.Map<String, List<String>> out = new java.util.TreeMap<>();
+        Path directory = root.resolve(DIRECTORY);
+        for (String name : names(directory)) {
+            List<String> unmatched =
+                    declaredModels(read(directory.resolve(name))).stream()
+                            .filter(d -> models.stream().noneMatch(m -> declares(d, m)))
+                            .toList();
+            if (!unmatched.isEmpty()) out.put(name, unmatched);
+        }
+        return out;
+    }
+
+    /** spec149 P7-3: the text of every document declaring a model, for checking a draft copies it. */
+    public static String declaringText(Path root, String model) {
+        StringBuilder out = new StringBuilder();
+        Path directory = root.resolve(DIRECTORY);
+        for (String name : names(directory)) {
+            String text = read(directory.resolve(name));
+            if (text != null && declaredModels(text).stream().anyMatch(m -> declares(m, model)))
+                out.append(text).append('\n');
+        }
+        return out.toString();
+    }
+
     /** Documents declaring a model, with a hash of their current content, by file name. */
     public static java.util.Map<String, String> documentsFor(Path root, String model) {
         java.util.Map<String, String> out = new java.util.TreeMap<>();
@@ -79,7 +120,7 @@ public class BusinessDocumentService {
         for (String name : names(directory)) {
             String text = read(directory.resolve(name));
             if (text == null) continue;
-            if (declaredModels(text).stream().anyMatch(m -> m.equalsIgnoreCase(model)))
+            if (declaredModels(text).stream().anyMatch(m -> declares(m, model)))
                 out.put(name, CaliberSources.sha(text));
         }
         return out;

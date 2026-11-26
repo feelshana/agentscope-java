@@ -155,6 +155,7 @@ CREATE TABLE `dataagent_dataset_group` (
   `created_at` datetime(6) DEFAULT NULL,
   `description` varchar(1000) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `fact_query_window_days` int DEFAULT NULL,
+  `knowledge_mode` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `mdl_last_error` varchar(2000) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `mdl_published_at` datetime(6) DEFAULT NULL,
   `recommended_question` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,

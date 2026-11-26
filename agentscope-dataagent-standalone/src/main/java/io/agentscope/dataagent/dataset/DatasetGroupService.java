@@ -106,6 +106,20 @@ public class DatasetGroupService {
 
     @Transactional
     public DatasetGroupEntity createGroup(String ownerId, String name, String description) {
+        return createGroup(ownerId, name, description, DatasetGroupEntity.MODE_NORMAL);
+    }
+
+    /**
+     * spec149 P7-2 (ADR0156): the mode is chosen here and never changed afterwards, so ordinary
+     * SQL tables and caliber tables are never mixed in one knowledge base.
+     */
+    @Transactional
+    public DatasetGroupEntity createGroup(
+            String ownerId, String name, String description, String mode) {
+        String chosen = mode == null || mode.isBlank() ? DatasetGroupEntity.MODE_NORMAL : mode;
+        if (!DatasetGroupEntity.MODE_NORMAL.equals(chosen)
+                && !DatasetGroupEntity.MODE_CALIBER.equals(chosen))
+            throw new DatasetException("知识库类型只能是普通问数（NORMAL）或口径问数（CALIBER）");
         access.requireUser(ownerId);
         if (name == null || !NAME.matcher(name.trim()).matches()) {
             throw new DatasetException(
@@ -126,6 +140,7 @@ public class DatasetGroupService {
                         ownerId,
                         name.trim(),
                         description == null ? null : description.trim());
+        group.setKnowledgeMode(chosen);
         return groupRepository.save(group);
     }
 
