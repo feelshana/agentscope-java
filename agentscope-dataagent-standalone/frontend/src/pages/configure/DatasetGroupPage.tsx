@@ -8,6 +8,7 @@ import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon from '../../components/Icon';
 import { WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import { releaseDecision } from '../../components/modeling/releaseDecision';
+import { caliberReleaseBlocker } from '../../components/modeling/caliberPresentation';
 import type { ReviewSection } from '../../components/modeling/releaseDecision';
 import { useKnowledgeReleaseData } from '../../components/modeling/useKnowledgeReleaseData';
 import { useQueryCoachData } from '../../components/modeling/useQueryCoachData';
@@ -87,7 +88,7 @@ function KnowledgeBaseWorkspace({ groupId }: { groupId: string }) {
   const hasExternalDatasets = detail?.datasets.some(dataset => dataset.origin === 'datasource') ?? false;
   const fileCount = detail?.datasets.length ?? 0;
   const knownVersion = detail?.publishedVersion ?? detail?.group.publishedVersion ?? 0;
-  const release = useKnowledgeReleaseData(groupId, canManage, fileCount > 0 || knownVersion > 0);
+  const release = useKnowledgeReleaseData(groupId, canManage, fileCount > 0 || knownVersion > 0, detail?.group.mode === 'CALIBER');
   const { reload: reloadRelease } = release;
   const workflow = canManage ? release.workflow : null;
   const publishedVersion = workflow?.publishedVersion ?? knownVersion;
@@ -492,6 +493,7 @@ function KnowledgeBaseWorkspace({ groupId }: { groupId: string }) {
     questionIds: coach.reviews.filter(question => question.status === 'REVIEW').map(question => question.question.id),
     removalIds: coach.pendingRemovals.map(({ question }) => question.id),
     publicationFailure: release.publicationFailure,
+    caliberBlocker: caliberReleaseBlocker(release.calibers),
   });
   const host: KnowledgeModelingHost = { versionTarget, actionsTarget, leave, select: selectModel, release, decision, coach, importing, onActivity: updateModelActivity };
   const go = async (destination: string) => {
@@ -546,6 +548,7 @@ function KnowledgeBaseWorkspace({ groupId }: { groupId: string }) {
         viewVersion: 'draft', viewStage: verify ? 'verify' : 'overview' });
       return { label: verify ? '去验证视图' : '去核查视图', action: () => void go(`${modelPath}?${params}`), tone: 'blocked' };
     }
+    if (decision.blocker?.kind === 'caliber') return { label: '完成口径', action: () => void go(`${modelPath}?asset=calibers&mode=board&check=1`), tone: 'blocked' };
     if (decision.blocker?.kind === 'engineering') return { label: '查看校验问题', action: () => review('checks'), tone: 'blocked' };
     if (!publishedVersion && release.screening?.some(table => !table.confirmed)) {
       return { label: '确认建模字段', action: () => void go(modelingPreparationPath(groupId)) };

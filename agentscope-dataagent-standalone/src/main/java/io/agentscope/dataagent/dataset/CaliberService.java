@@ -30,6 +30,17 @@ public class CaliberService {
     static final String VALUES_FILE = ".platform/caliber-values.json";
     static final int VALUE_LIMIT = 500;
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper EDIT_YAML =
+            new ObjectMapper(
+                    new com.fasterxml.jackson.dataformat.yaml.YAMLFactory()
+                            .disable(
+                                    com.fasterxml.jackson.dataformat.yaml.YAMLGenerator.Feature
+                                            .WRITE_DOC_START_MARKER)
+                            .enable(
+                                    com.fasterxml.jackson.dataformat.yaml.YAMLGenerator.Feature
+                                            .MINIMIZE_QUOTES));
+    private static final int MAX_EDIT_TEXT = 500;
+    private static final int MAX_EDIT_VALUES = 50;
 
     private final DatasetGroupService groups;
     private final MdlWorkspaceService workspace;
@@ -81,11 +92,14 @@ public class CaliberService {
             // spec149 P2: REVIEW_PENDING, VERIFY_PENDING, PROBLEM or PASSED (CaliberReviews).
             String review,
             String reviewedBy,
-            String verifiedBy) {}
+            String verifiedBy,
+            // spec149 P7-4: a caliber's own unit; shown and edited on the review page.
+            String unit) {}
 
     /**
      * {@code status}: DRAFTABLE (documents, no list), OUTDATED (a document changed or was added
-     * since the list was drafted), CURRENT, or MANUAL (a list no document declares).
+     * since the list was drafted), CURRENT, MANUAL (a list no document declares), or NO_DOCUMENT
+     * (a caliber knowledge base's table with neither a list nor a declaring document, spec153).
      */
     public record Table(
             String model,
@@ -110,11 +124,34 @@ public class CaliberService {
             List<String> ruleWarnings,
             // spec149 P5: business, audience, measures and scope, reviewed with the scenario.
             CaliberList.Scenario scenario,
-            List<ValueIssue> scopeIssues) {}
+            List<ValueIssue> scopeIssues,
+            // spec153 P1.5: the columns the list uses, for the row edit form.
+            List<Column> columns) {}
+
+    /**
+     * A column a list uses: its display name from the model and the values the platform counted
+     * ({@code null} when not counted, e.g. too many values or only a sample is known).
+     */
+    public record Column(String name, String label, List<String> values) {}
+
+    /**
+     * spec153 P1.5: a person's edit of one caliber from the review page. The name cannot change;
+     * blank texts are removed from the list.
+     */
+    public record RowEdit(
+            String group,
+            List<String> synonyms,
+            Map<String, List<String>> where,
+            String unit,
+            String note,
+            String pending,
+            // Rows of several values add up (combine: sum); only a person confirms it (P7-1).
+            boolean combine) {}
 
     public List<Table> overview(String userId, String groupId) {
-        groups.getGroup(userId, groupId);
-        Snapshot snapshot = workspace.withWorkspaceLock(groupId, () -> snapshot(groupId));
+        boolean caliberKb = groups.getGroup(userId, groupId).isCaliberMode();
+        Snapshot snapshot =
+                workspace.withWorkspaceLock(groupId, () -> snapshot(groupId, caliberKb));
         // Value lookups may query the dataset database; never hold the workspace lock for them.
         Map<String, Map<String, List<String>>> values = values(groupId, snapshot);
         List<Table> out = new ArrayList<>();
@@ -125,6 +162,7 @@ public class CaliberService {
     // ------------------------------------------------------------------ snapshot
 
     private record Snapshot(
+            Path root,
             List<String> models,
             Map<String, String> listPathByModel,
             Map<String, CaliberCompiler.Compiled> compiled,
@@ -137,7 +175,7 @@ public class CaliberService {
             Map<String, String> draftLists,
             Map<String, String> publishedLists) {}
 
-    private Snapshot snapshot(String groupId) {
+    private Snapshot snapshot(String groupId, boolean allTables) {
         Path root = workspace.workspaceRoot(groupId);
         Map<String, String> listPathByModel = new LinkedHashMap<>();
         Map<String, CaliberCompiler.Compiled> compiled = new LinkedHashMap<>();
@@ -156,11 +194,23 @@ public class CaliberService {
                 new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (String model : modelNames(root)) {
             Map<String, String> docs = BusinessDocumentService.documentsFor(root, model);
-            if (docs.isEmpty()) continue;
+            if (docs.isEmpty()) {
+                // spec153: in a caliber knowledge base every table needs a list before release
+                // (ADR0156), so a table without a document is listed as waiting for one instead
+                // of being hidden. ref_sql models are not tables.
+                boolean listed = models.stream().anyMatch(m -> m.equalsIgnoreCase(model));
+                if (allTables
+                        && !listed
+                        && !Files.exists(
+                                root.resolve("models").resolve(model).resolve("ref_sql.sql")))
+                    models.add(model);
+                continue;
+            }
             documentsByModel.put(model, docs);
             models.add(model);
         }
         return new Snapshot(
+                root,
                 List.copyOf(models),
                 listPathByModel,
                 compiled,
@@ -227,7 +277,7 @@ public class CaliberService {
                     model,
                     null,
                     null,
-                    "DRAFTABLE",
+                    docs.isEmpty() ? "NO_DOCUMENT" : "DRAFTABLE",
                     List.copyOf(docs.keySet()),
                     List.of(),
                     null,
@@ -242,6 +292,7 @@ public class CaliberService {
                     null,
                     List.of(),
                     null,
+                    List.of(),
                     List.of());
         Map<String, String> drafted = s.sources().documents().getOrDefault(listPath, Map.of());
         List<String> changed = new ArrayList<>();
@@ -273,7 +324,8 @@ public class CaliberService {
                                 valueIssues(list, c, values),
                                 CaliberReviews.rowStatus(review, c),
                                 r == null ? null : r.reviewedBy(),
-                                r == null ? null : r.verifiedBy()));
+                                r == null ? null : r.verifiedBy(),
+                                c.unit()));
             }
         List<CaliberSources.Conflict> conflicts =
                 s.sources().conflicts().stream().filter(c -> c.list().equals(listPath)).toList();
@@ -298,7 +350,46 @@ public class CaliberService {
                 compiled.cube(),
                 s.ruleWarnings().getOrDefault(listPath, List.of()),
                 list == null ? null : list.scenario(),
-                list == null ? List.of() : scopeIssues(list, values));
+                list == null ? List.of() : scopeIssues(list, values),
+                list == null ? List.of() : columns(s.root(), list, values));
+    }
+
+    /** Columns the list uses, in list order, with display names and counted values. */
+    private static List<Column> columns(
+            Path root, CaliberList list, Map<String, List<String>> values) {
+        Map<String, String> labels = displayNames(root, list.model());
+        boolean sampled = values != null && values.containsKey(CaliberValues.SAMPLE_MARKER);
+        List<Column> out = new ArrayList<>();
+        for (String column : referencedColumns(list)) {
+            List<String> known =
+                    values == null || sampled ? null : values.get(column.toLowerCase(Locale.ROOT));
+            out.add(
+                    new Column(
+                            column,
+                            labels.get(column.toLowerCase(Locale.ROOT)),
+                            known == null ? null : List.copyOf(known)));
+        }
+        return out;
+    }
+
+    /** Lower-cased column name to the model's display name; empty when unreadable. */
+    static Map<String, String> displayNames(Path root, String model) {
+        Map<String, String> out = new TreeMap<>();
+        if (model == null) return out;
+        Path file = root.resolve("models").resolve(model).resolve("metadata.yml");
+        if (!Files.isRegularFile(file)) return out;
+        try {
+            com.fasterxml.jackson.databind.JsonNode doc = EDIT_YAML.readTree(file.toFile());
+            for (com.fasterxml.jackson.databind.JsonNode column : doc.path("columns")) {
+                String name = column.path("name").asText("");
+                String label = column.path("properties").path("displayName").asText("").strip();
+                if (!name.isEmpty() && !label.isEmpty())
+                    out.put(name.toLowerCase(Locale.ROOT), label);
+            }
+        } catch (IOException | RuntimeException e) {
+            // Labels are a convenience; the form falls back to column names.
+        }
+        return out;
     }
 
     private static String publishedState(Snapshot s, String listPath) {
@@ -514,6 +605,133 @@ public class CaliberService {
                     return null;
                 });
         return tableOf(userId, groupId, listPath);
+    }
+
+    /**
+     * spec153 P1.5: a person edits one existing caliber from the review page. The whole list is
+     * compiled before anything is written; the row is recorded as a manual edit (later document
+     * drafts keep it and report a conflict instead), and its review and verification lapse because
+     * its content hash changes. Conflicting rows are refused: the person chooses a version first.
+     */
+    public Table edit(String userId, String groupId, String listPath, String name, RowEdit edit) {
+        groups.getGroup(userId, groupId);
+        if (edit == null) throw new DatasetException("缺少修改内容", 400);
+        workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    // Re-check after waiting for the lock: access may have been revoked meanwhile.
+                    groups.getGroup(userId, groupId);
+                    Path root = workspace.workspaceRoot(groupId);
+                    CaliberList list = requireList(root, listPath);
+                    requireCaliber(list, name);
+                    if (conflicted(root, listPath).contains(name))
+                        throw new DatasetException("口径「" + name + "」有待处理的冲突，先选择保留哪个版本再修改", 409);
+                    String before = CaliberCompiler.lists(root).get(listPath);
+                    String after = edited(before, name, edit);
+                    CaliberCompiler.Compiled compiled =
+                            CaliberCompiler.compile(root, listPath, after);
+                    if (!compiled.ok())
+                        throw new DatasetException(
+                                "未保存：" + String.join("；", compiled.errors()), 400);
+                    String refused =
+                            CaliberSources.apply(
+                                    root,
+                                    listPath,
+                                    before,
+                                    after,
+                                    CaliberSources.EDIT,
+                                    userId,
+                                    BusinessDocumentService.documentsFor(root, list.model()));
+                    if (refused != null) throw new DatasetException(refused, 409);
+                    try {
+                        Files.writeString(root.resolve(listPath), after, StandardCharsets.UTF_8);
+                    } catch (IOException e) {
+                        throw new DatasetException("保存口径清单失败：" + e.getMessage(), e);
+                    }
+                    CaliberCompiler.sync(root);
+                    DraftChangeLog.record(root, listPath, ModelingTurnPurpose.EDIT, userId);
+                    return null;
+                });
+        groups.markMdlDirty(userId, groupId);
+        return tableOf(userId, groupId, listPath);
+    }
+
+    /** The list YAML with one caliber's editable fields replaced; other content is kept. */
+    static String edited(String yaml, String name, RowEdit edit) {
+        com.fasterxml.jackson.databind.node.ObjectNode root;
+        try {
+            root = (com.fasterxml.jackson.databind.node.ObjectNode) EDIT_YAML.readTree(yaml);
+        } catch (IOException | ClassCastException e) {
+            throw new DatasetException("读取口径清单失败：" + e.getMessage(), 409);
+        }
+        com.fasterxml.jackson.databind.node.ObjectNode row = null;
+        for (com.fasterxml.jackson.databind.JsonNode node : root.path("calibers"))
+            if (node.isObject() && name.equals(node.path("name").asText(null)))
+                row = (com.fasterxml.jackson.databind.node.ObjectNode) node;
+        if (row == null) throw new DatasetException("口径不存在：" + name, 404);
+
+        Map<String, List<String>> where = new LinkedHashMap<>();
+        if (edit.where() != null)
+            for (Map.Entry<String, List<String>> e : edit.where().entrySet()) {
+                String column = e.getKey() == null ? "" : e.getKey().strip();
+                List<String> values = texts(e.getValue(), "取值");
+                if (column.isEmpty() || values.isEmpty())
+                    throw new DatasetException("每个条件都要选择列并至少填一个取值", 400);
+                if (values.size() > MAX_EDIT_VALUES)
+                    throw new DatasetException("每个条件最多 " + MAX_EDIT_VALUES + " 个取值", 400);
+                where.put(column, values);
+            }
+        if (where.isEmpty()) throw new DatasetException("口径至少要有一个取数条件", 400);
+        com.fasterxml.jackson.databind.node.ObjectNode conditions = row.objectNode();
+        for (Map.Entry<String, List<String>> e : where.entrySet()) {
+            if (e.getValue().size() == 1) {
+                conditions.put(e.getKey(), e.getValue().get(0));
+            } else {
+                com.fasterxml.jackson.databind.node.ArrayNode array = conditions.arrayNode();
+                e.getValue().forEach(array::add);
+                conditions.set(e.getKey(), array);
+            }
+        }
+        row.set("where", conditions);
+        List<String> synonyms = texts(edit.synonyms(), "说法");
+        if (synonyms.isEmpty()) {
+            row.remove("synonyms");
+        } else {
+            com.fasterxml.jackson.databind.node.ArrayNode array = row.arrayNode();
+            synonyms.forEach(array::add);
+            row.set("synonyms", array);
+        }
+        text(row, "group", edit.group());
+        text(row, "unit", edit.unit());
+        text(row, "note", edit.note());
+        text(row, "pending", edit.pending());
+        if (edit.combine()) row.put("combine", "sum");
+        else row.remove("combine");
+        try {
+            return EDIT_YAML.writeValueAsString(root);
+        } catch (IOException e) {
+            throw new DatasetException("生成口径清单失败：" + e.getMessage(), e);
+        }
+    }
+
+    private static void text(
+            com.fasterxml.jackson.databind.node.ObjectNode row, String field, String value) {
+        String v = value == null ? "" : value.strip();
+        if (v.length() > MAX_EDIT_TEXT)
+            throw new DatasetException(field + " 不能超过 " + MAX_EDIT_TEXT + " 字", 400);
+        if (v.isEmpty()) row.remove(field);
+        else row.put(field, v);
+    }
+
+    private static List<String> texts(List<String> values, String what) {
+        Set<String> out = new LinkedHashSet<>();
+        for (String value : values == null ? List.<String>of() : values) {
+            String v = value == null ? "" : value.strip();
+            if (v.isEmpty()) continue;
+            if (v.length() > 200) throw new DatasetException(what + "不能超过 200 字：" + v, 400);
+            out.add(v);
+        }
+        return List.copyOf(out);
     }
 
     private Table tableOf(String userId, String groupId, String listPath) {

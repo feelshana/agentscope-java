@@ -844,7 +844,9 @@ function ModelingWorkbench({ group, host }: { group: DatasetGroup; host: Knowled
           onCanvasDraft={setCanvasDraft} undoRequest={undoRequest} beforePublish={canLeaveField}
           reviewRequested={reviewRequested} onDismissReview={clearReviewRequest}
           onOpenEngineering={() => openEngineering()} onPrepareData={() => { if (!canLeaveField()) return false; navigate(knowledgePath(groupId) + '?section=datasets'); return true; }}
-          onPrepareModel={openFirstBuild} onRetryState={() => { void reloadRelease(); coachData.reload(); }} />
+          onPrepareModel={openFirstBuild}
+          onCalibers={() => { if (!canLeaveField()) return false; setParams({ asset: 'calibers', mode: 'board', check: '1' }); return true; }}
+          onRetryState={() => { void reloadRelease(); coachData.reload(); }} />
         <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={comparingConversation ? closeComparison : inChat ? showBoard : tab === 'engineering' ? () => setParams({ asset: 'semantic', mode: 'chat' }) : openAssistant}
           aria-label={inChat ? '查看模型' : '建模对话'} title={inChat ? '查看模型' : assistantLabel}>
           <Icon name={inChat ? 'model' : 'chat'} size="sm" /><span>{inChat ? tab === 'coach' ? '问数优化' : '查看模型' : '建模对话'}</span>
@@ -915,7 +917,9 @@ function ModelingWorkbench({ group, host }: { group: DatasetGroup; host: Knowled
           const sent = request(text, 'caliber', label);
           if (sent) setParams({ asset: 'calibers', mode: 'chat' });
           return sent;
-        }} />}
+        }}
+        onAsk={askAssistant}
+        onPublish={() => setReviewDraftSignal(n => n + 1)} onDocuments={() => selectTab('overview')} />}
       {tab === 'assets' && <SemanticAssetsPanel key={groupId} groupId={groupId} assistantIdle={idle} paired={comparingAsset} publishedVersion={publishedVersion}
         onDiscuss={trigger => pairResource(undefined, trigger)}
         onAsk={(view, version, published, trigger) => pairResource(viewScope(view, version, published), trigger)}

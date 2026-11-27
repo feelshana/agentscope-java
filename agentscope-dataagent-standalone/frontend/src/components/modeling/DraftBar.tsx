@@ -28,7 +28,7 @@ type CenterTab = 'changes' | 'tasks';
 export default function DraftBar({ groupId, release, decision, assistantActive, pendingConfirmations, onLocate, confirmations = [], onAnswer,
   reviewQuestions, questionTitles, onReviewQuestion, onReviewAsset, onInspectChange, onLocateChange,
   isUnseen, onSeen, publishSignal = 0, reviewSignal = 0, taskSignal = 0, onSummary, onCanvasDraft, undoRequest, beforePublish, terms, compact = false, editingBlocked = false, checksPending = false,
-  importing = false, stateError, reviewRequested, onDismissReview, onOpenEngineering, onPrepareData, onPrepareModel, onRetryState }: {
+  importing = false, stateError, reviewRequested, onDismissReview, onOpenEngineering, onPrepareData, onPrepareModel, onCalibers, onRetryState }: {
   groupId: string;
   release: KnowledgeReleaseData;
   decision: KnowledgeReleaseDecision;
@@ -66,6 +66,8 @@ export default function DraftBar({ groupId, release, decision, assistantActive, 
   onOpenEngineering?: () => boolean;
   onPrepareData?: () => boolean;
   onPrepareModel?: () => boolean;
+  /** spec153: opens the caliber page's publish check. */
+  onCalibers?: () => boolean;
   onRetryState?: () => void;
 }) {
   const [items, setItems] = useState<DraftItem[]>([]);
@@ -368,6 +370,8 @@ export default function DraftBar({ groupId, release, decision, assistantActive, 
         onClick={() => setRepairView(blocker.name)}>处理未完成视图</button>
         : blocker?.kind === 'data' || blocker?.kind === 'model' ? <button type="button" className="da-btn da-btn-primary" disabled={!!busy}
           onClick={() => leaveFor(blocker.kind === 'data' ? onPrepareData : onPrepareModel)}>{blocker.kind === 'data' ? '前往数据集' : '继续建模'}</button>
+          : blocker?.kind === 'caliber' ? <button type="button" className="da-btn da-btn-primary" disabled={!!busy}
+            onClick={() => leaveFor(onCalibers)}>查看口径发布检查</button>
           : blocker?.kind === 'engineering' ? <button type="button" className="da-btn da-btn-primary" data-tour="draft-publish" disabled={!!busy}
             onClick={() => void checkAgain()}>{busy === 'check' ? '正在检查…' : '重新检查'}</button>
             : (changes.length > 0 || republish) && publishButton;

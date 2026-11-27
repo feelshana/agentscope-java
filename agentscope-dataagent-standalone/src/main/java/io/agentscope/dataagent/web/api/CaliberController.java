@@ -36,6 +36,8 @@ public class CaliberController {
 
     public record VerdictRequest(String listPath, Map<String, String> verdicts) {}
 
+    public record EditRequest(String listPath, String name, CaliberService.RowEdit row) {}
+
     @GetMapping
     public Mono<List<CaliberService.Table>> overview(
             @PathVariable String groupId, Authentication auth) {
@@ -65,6 +67,15 @@ public class CaliberController {
             @PathVariable String groupId, @RequestBody VerdictRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return blocking(() -> calibers.verdict(userId, groupId, req.listPath(), req.verdicts()));
+    }
+
+    /** spec153 P1.5: a person edits one caliber from the review page. */
+    @PostMapping("/row")
+    public Mono<CaliberService.Table> edit(
+            @PathVariable String groupId, @RequestBody EditRequest req, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return blocking(
+                () -> calibers.edit(userId, groupId, req.listPath(), req.name(), req.row()));
     }
 
     private static <T> Mono<T> blocking(Callable<T> call) {

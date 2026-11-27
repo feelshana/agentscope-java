@@ -20,6 +20,18 @@ export interface CaliberRow {
   review: CaliberReviewState;
   reviewedBy: string | null;
   verifiedBy: string | null;
+  unit: string | null;
+}
+
+/** spec153 P1.5: a column the list uses, with its display name and counted values (null: not counted). */
+export interface CaliberColumn { name: string; label: string | null; values: string[] | null }
+
+/** A person's edit of one caliber; blank texts are removed, the name cannot change. */
+export interface CaliberRowEdit {
+  group: string; synonyms: string[]; where: Record<string, string[]>;
+  unit: string; note: string; pending: string;
+  /** Rows of several values add up (combine: sum), confirmed by the person. */
+  combine: boolean;
 }
 
 /** A document's version of a caliber kept back because a person had changed it. */
@@ -45,7 +57,8 @@ export interface CaliberScenario {
 
 export type CaliberPublishedState = 'NONE' | 'CURRENT' | 'OLDER';
 
-export type CaliberTableStatus = 'DRAFTABLE' | 'OUTDATED' | 'CURRENT' | 'MANUAL';
+/** NO_DOCUMENT: a caliber knowledge base's table with neither a list nor a declaring document (spec153). */
+export type CaliberTableStatus = 'DRAFTABLE' | 'OUTDATED' | 'CURRENT' | 'MANUAL' | 'NO_DOCUMENT';
 
 export interface CaliberTable {
   model: string;
@@ -71,6 +84,8 @@ export interface CaliberTable {
   scenario: CaliberScenario | null;
   /** Scope totals, defaults and listed values the table is not known to contain. */
   scopeIssues: CaliberValueIssue[];
+  /** spec153 P1.5: columns the list uses, for the row edit form. */
+  columns: CaliberColumn[];
 }
 
 export async function getCalibers(groupId: string): Promise<CaliberTable[]> {
@@ -111,5 +126,7 @@ export const reviewCalibers = (groupId: string, listPath: string, scenario: bool
   post<CaliberTable>(groupId, '/review', { listPath, scenario, calibers });
 export const verifyCalibers = (groupId: string, listPath: string, calibers?: string[]) =>
   post<CaliberCheck[]>(groupId, '/verify', { listPath, calibers: calibers ?? null });
-export const judgeCalibers = (groupId: string, listPath: string, verdicts: Record<string, 'EXPECTED' | 'PROBLEM'>) =>
+export const editCaliber = (groupId: string, listPath: string, name: string, row: CaliberRowEdit) =>
+  post<CaliberTable>(groupId, '/row', { listPath, name, row });
+export const judgeCalibers =(groupId: string, listPath: string, verdicts: Record<string, 'EXPECTED' | 'PROBLEM'>) =>
   post<CaliberTable>(groupId, '/verdict', { listPath, verdicts });

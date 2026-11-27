@@ -265,6 +265,175 @@ class CaliberServiceTest {
         assertThatThrownBy(() -> service.review("alice", "g", "../x.yml", true, List.of()))
                 .hasMessageContaining("路径无效");
         assertThat(CaliberReviews.read(root)).isEmpty();
+        // spec153 P1.5: a conflicted row cannot be edited either.
+        assertThatThrownBy(
+                        () ->
+                                service.edit(
+                                        "alice",
+                                        "g",
+                                        "calibers/vip_m.yml",
+                                        "足球通",
+                                        edit(java.util.Map.of("vip_type_6", List.of("足球会员")))))
+                .hasMessageContaining("冲突");
+    }
+
+    private static CaliberService.RowEdit edit(java.util.Map<String, List<String>> where) {
+        return new CaliberService.RowEdit(
+                "体育",
+                List.of("足球", " 足球 ", ""),
+                where,
+                "人",
+                "说明",
+                "",
+                where.values().stream().anyMatch(v -> v.size() > 1));
+    }
+
+    @Test
+    void aCaliberKnowledgeBaseListsTablesWithoutDocumentsAsWaitingForOne() throws Exception {
+        write("models/view_m/metadata.yml", "name: view_m\ncolumns: []\n");
+        write("models/view_m/ref_sql.sql", "select 1");
+        // An ordinary knowledge base only shows tables a document declares.
+        assertThat(service.overview("alice", "g"))
+                .extracting(CaliberService.Table::model)
+                .containsExactly("vip_m");
+
+        DatasetGroupEntity caliber = new DatasetGroupEntity("g", "alice", "会员", "");
+        caliber.setKnowledgeMode(DatasetGroupEntity.MODE_CALIBER);
+        when(groups.getGroup("alice", "g")).thenReturn(caliber);
+        var tables = service.overview("alice", "g");
+        assertThat(tables)
+                .extracting(CaliberService.Table::model)
+                .containsExactlyInAnyOrder("vip_m", "other_m");
+        assertThat(tables)
+                .filteredOn(t -> t.model().equals("other_m"))
+                .singleElement()
+                .satisfies(
+                        t -> {
+                            assertThat(t.status()).isEqualTo("NO_DOCUMENT");
+                            assertThat(t.documents()).isEmpty();
+                            assertThat(t.listPath()).isNull();
+                        });
+        assertThat(
+                        tables.stream()
+                                .filter(t -> t.model().equals("vip_m"))
+                                .findFirst()
+                                .orElseThrow()
+                                .status())
+                .isEqualTo("DRAFTABLE");
+    }
+
+    @Test
+    void aPersonEditsOneCaliberAndItsReviewLapsesWhileDocumentsKeepIt() throws Exception {
+        draft();
+        String path = "calibers/vip_m.yml";
+        when(provisioner.distinctValues("ds_vip", "vip_type_6", CaliberService.VALUE_LIMIT))
+                .thenReturn(List.of("足球通会员", "足球会员"));
+        service.review("alice", "g", path, true, List.of("足球通", "橄榄球"));
+        write(
+                "models/vip_m/metadata.yml",
+                Files.readString(root.resolve("models/vip_m/metadata.yml"))
+                        .replace(
+                                "{name: vip_type_6, type: VARCHAR}",
+                                "{name: vip_type_6, type: VARCHAR, properties: {displayName:"
+                                        + " 会员类型6}}"));
+
+        var table =
+                service.edit(
+                        "alice",
+                        "g",
+                        path,
+                        "足球通",
+                        edit(java.util.Map.of("vip_type_6", List.of("足球通会员", "足球会员"))));
+
+        var row = table.rows().get(0);
+        assertThat(row.where()).containsEntry("vip_type_6", List.of("足球通会员", "足球会员"));
+        assertThat(row.synonyms()).containsExactly("足球");
+        assertThat(row.group()).isEqualTo("体育");
+        assertThat(row.note()).isEqualTo("说明");
+        assertThat(row.pending()).isNull();
+        assertThat(row.source().kind()).isEqualTo(CaliberSources.EDIT);
+        assertThat(row.source().user()).isEqualTo("alice");
+        assertThat(row.review()).isEqualTo(CaliberReviews.REVIEW_PENDING);
+        // The other row keeps its review; the generated view follows the list.
+        assertThat(table.rows().get(1).review()).isEqualTo(CaliberReviews.VERIFY_PENDING);
+        assertThat(table.viewYaml()).contains("足球会员");
+        assertThat(table.columns())
+                .anySatisfy(
+                        c -> {
+                            assertThat(c.name()).isEqualTo("vip_type_6");
+                            assertThat(c.label()).isEqualTo("会员类型6");
+                            assertThat(c.values()).containsExactly("足球通会员", "足球会员");
+                        });
+        assertThat(DraftChangeLog.read(root))
+                .anySatisfy(
+                        e -> {
+                            assertThat(e.path()).isEqualTo(path);
+                            assertThat(e.source()).isEqualTo(ModelingTurnPurpose.EDIT);
+                        });
+        verify(groups).markMdlDirty("alice", "g");
+
+        // A later document draft that changes the edited row is kept as a conflict.
+        String edited = Files.readString(root.resolve(path));
+        assertThat(
+                        CaliberSources.apply(
+                                root,
+                                path,
+                                edited,
+                                LIST,
+                                CaliberSources.DOCUMENT,
+                                "alice",
+                                BusinessDocumentService.documentsFor(root, "vip_m")))
+                .isNotNull();
+    }
+
+    @Test
+    void invalidEditsAndOtherUsersLeaveTheListUnchanged() throws Exception {
+        draft();
+        String path = "calibers/vip_m.yml";
+        String before = Files.readString(root.resolve(path));
+
+        assertThatThrownBy(
+                        () ->
+                                service.edit(
+                                        "alice",
+                                        "g",
+                                        path,
+                                        "足球通",
+                                        edit(java.util.Map.of("city_name", List.of("杭州")))))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("未保存");
+        assertThatThrownBy(() -> service.edit("alice", "g", path, "足球通", edit(java.util.Map.of())))
+                .hasMessageContaining("至少要有一个取数条件");
+        assertThatThrownBy(
+                        () ->
+                                service.edit(
+                                        "alice",
+                                        "g",
+                                        path,
+                                        "足球通",
+                                        edit(java.util.Map.of("vip_type_6", List.of(" ")))))
+                .hasMessageContaining("至少填一个取值");
+        assertThatThrownBy(
+                        () ->
+                                service.edit(
+                                        "alice",
+                                        "g",
+                                        path,
+                                        "不存在",
+                                        edit(java.util.Map.of("vip_type_6", List.of("x")))))
+                .hasMessageContaining("口径不存在");
+        // Someone without MANAGE on this knowledge base cannot edit it.
+        assertThatThrownBy(
+                        () ->
+                                service.edit(
+                                        "bob",
+                                        "g",
+                                        path,
+                                        "足球通",
+                                        edit(java.util.Map.of("vip_type_6", List.of("x")))))
+                .isInstanceOf(DatasetException.class);
+        assertThat(Files.readString(root.resolve(path))).isEqualTo(before);
+        assertThat(DraftChangeLog.read(root)).isEmpty();
     }
 
     private void draft() throws Exception {

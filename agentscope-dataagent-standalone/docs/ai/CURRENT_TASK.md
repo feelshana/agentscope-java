@@ -1,15 +1,18 @@
 # 当前任务 · 合并 liyufan_dev 工作台改版与口径页交互重设计
 
-2026-11-26，分支 develop-2.0（合并未提交）。合并前的两条线：[口径资产 P0–P7](archive/CURRENT_TASK-caliber-p7-20261126.md)（已提交 0af2f85a）、[liyufan_dev 知识库工作台改版](archive/CURRENT_TASK-liyufan-workspace-20261126.md)（8d6ab688）。
+2026-11-26，分支 develop-2.0（合并已提交 54d6a425，未推送）。合并前的两条线：[口径资产 P0–P7](archive/CURRENT_TASK-caliber-p7-20261126.md)（已提交 0af2f85a）、[liyufan_dev 知识库工作台改版](archive/CURRENT_TASK-liyufan-workspace-20261126.md)（8d6ab688）。
 
 ## 合并
 
 - 合并 origin/liyufan_dev（3 个提交，前端工作台、问数优化单题会话、资产验证快照）。冲突按"两边都保留"解决：`WrenProjectAccess.Project` 同时含口径轮/对话轮/口径库标志与 `questionId`；路径与提问限制两套都生效；口径页签、自动起草与草稿栏口径提示并入新工作台。
 - 静态资源重新构建；spec 编号重复：本分支 spec149（口径资产）与 liyufan_dev 的 spec149（对话建模工作台）并存，索引均保留。
 
-## 口径页重设计（待确认）
+## 口径页重设计（spec153 已确认，P1 本地完成）
 
-- 现状：口径页把表说明、逐行核查、问题验证、判定挤在一张表里。用户要求参照主流产品先出原型，再定方案。
+- 现状：口径页把表说明、逐行核查、问题验证、判定挤在一张表里。已出 4 张原型（总览、逐条核对、问题验证、发布检查）。
+- [spec153](../specs/153-caliber-review-workbench.md)：按"起草 → 核对 → 验证 → 发布"拆页；验证不执行查询（修正原型中的结果数值）；P1 前端拆页与发布抽屉，P2 后端补原文片段、发布差异、条件对照、判定说明。P1 已实现：`CaliberOverview`/`CaliberReview`/`CaliberVerify`/`CaliberPublishDrawer`/`CaliberStepper`，发布数据带口径阻断；前端测试 186×3、tsc、构建通过，浏览器看过总览、核对、验证（全部通过的表）与抽屉。未验：有待核对/待验证行的表上的点击流程（核查与判定须用户本人点）。
+- P1.5：实测发现“直接编辑”跳到只读工程页，改为核对页表单编辑（`CaliberRowForm` + `CaliberService#edit`，多取值须人勾选合并统计）；验证完成后的操作区改为结论 + 重新判定 + 去发布。
+- 合并遗留已补：草稿栏口径未完成显示阻断并跳到发布检查。
 
 ## 待办
 
