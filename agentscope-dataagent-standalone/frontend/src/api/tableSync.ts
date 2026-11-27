@@ -6,9 +6,11 @@ export type SyncTlsMode = 'VERIFY_IDENTITY' | 'VERIFY_CA' | 'REQUIRED' | 'DISABL
 export type SyncTarget = { host: string; port: number; username: string; sslMode: SyncTlsMode };
 export type SyncConnection = SyncTarget & { database: string; password: string };
 export type SyncColumn = { name: string; type: string; kind: string; nullable: boolean; indexed: boolean; comment: string };
+export type SyncSourceFilter = { field: string; value: string };
 export type SyncSelection = SyncConnection & {
   table: string; columns: string[]; targetTable: string; grain: SyncGrain;
   dateField: string; dateFormat: string; storageZone: string;
+  sourceFilter?: SyncSourceFilter;
 };
 export type SyncRun = {
   id: string; kind: string; actor: string; state: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED';
@@ -21,6 +23,7 @@ export type SyncTask = {
   dateField: string | null; dateFormat: string | null; initialized: boolean; from: string | null;
   through: string | null; scheduleTime: string | null; nextRunAt?: string; nextPeriod?: string;
   nextPeriodFrom?: string | null; monthlyPlan?: SyncMonthlyPlan;
+  sourceFilter?: SyncSourceFilter;
   lastRun: SyncRun | null;
 };
 export type SyncDetail = SyncTask & {

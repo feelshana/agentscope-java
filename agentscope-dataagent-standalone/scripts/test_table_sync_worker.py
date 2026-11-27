@@ -129,6 +129,46 @@ class DateFormatsTest(unittest.TestCase):
         query.assert_called_once_with(source, "SELECT /*+ MAX_EXECUTION_TIME(30000) */ `period_id` "
                                       "FROM `books`.`report` WHERE `period_id`=%s LIMIT 3", ("202609",))
 
+    def test_sample_uses_source_filter_independent_of_projection(self):
+        data = {"database": "books", "table": "report", "columns": ["period_id"], "grain": "DAY",
+                "dateField": "period_id", "dateFormat": "YYYYMMDD", "sampleDate": "2026-11-24",
+                "sourceFilter": {"field": "city_name", "value": "全省"}}
+        columns = [{"name": "period_id", "kind": "varchar", "indexed": False, "type": "varchar(20)",
+                    "charset": None, "collation": None, "extra": ""},
+                   {"name": "city_name", "kind": "varchar"}]
+        source = Mock()
+        with (patch.object(worker, "source_connection", return_value=source),
+              patch.object(worker, "table_version", return_value="5.7.44"),
+              patch.object(worker, "source_metadata", return_value=(columns, [])),
+              patch.object(worker, "query", return_value=[{"period_id": "20261124"}]) as query):
+            self.assertEqual(worker.explore("test-date", data, None), {"matches": 1, "sampleValues": ["20261124"]})
+            query.assert_called_once_with(source, "SELECT /*+ MAX_EXECUTION_TIME(30000) */ `period_id` "
+                                          "FROM `books`.`report` WHERE `period_id`=%s AND `city_name`=%s LIMIT 3",
+                                          ("20261124", "全省"))
+            for invalid in ({"field": "missing", "value": "全省"}, {"field": "city_name", "value": "   "}):
+                with self.assertRaisesRegex(worker.SyncError, "INVALID_SOURCE_FILTER"):
+                    worker.explore("test-date", {**data, "sourceFilter": invalid}, None)
+
+    def test_filtered_rerun_changes_only_the_source_predicate(self):
+        config = {"columns": [{"name": "period_id"}], "grain": "DAY", "table": "report",
+                  "sourceFilter": {"field": "city_name", "value": "全省", "kind": "varchar"}}
+        src, dst = Mock(), MagicMock()
+        stream = src.cursor.return_value
+        writer = dst.cursor.return_value.__enter__.return_value
+        writer.executemany.return_value = 1
+        date_where, date_args = " WHERE `period_id`=%s", ("20261124",)
+        with (patch.object(worker, "batches", return_value=iter([([("20261124",)], 8)])),
+              patch.object(worker, "scalar", return_value=1) as existing,
+              patch.object(worker, "execute", return_value=1) as delete,
+              patch.object(worker.time, "sleep")):
+            self.assertEqual(worker.transfer(src, dst, "books", config, "mirror", date_where, date_args,
+                                             {"kind": "MANUAL"}), 1)
+        stream.execute.assert_called_once_with("SELECT /*+ MAX_EXECUTION_TIME(60000) */ `period_id` "
+                                               "FROM `books`.`report` WHERE `period_id`=%s AND `city_name`=%s LIMIT 100001",
+                                               ("20261124", "全省"))
+        existing.assert_called_once_with(dst, "SELECT 1 FROM mirror WHERE `period_id`=%s LIMIT 1", date_args)
+        delete.assert_called_once_with(dst, "DELETE FROM mirror WHERE `period_id`=%s LIMIT 100001", date_args)
+
     def test_failed_write_rolls_back_the_period(self):
         dst = Mock()
         with patch.object(worker, "update_phase"), patch.object(
@@ -184,14 +224,16 @@ class LiveMySqlTest(unittest.TestCase):
         # Only the disposable source fixture administrator changes the seed data.
         subprocess.run(
             ["docker", "exec", "-i", "-e", "MYSQL_PWD=fixture-local-148",
-             "codex-table-sync-148-source", "mysql", "-uroot", "fixture_source"],
-            input=sql, text=True, check=True, capture_output=True,
+             "codex-table-sync-148-source", "mysql", "--default-character-set=utf8mb4", "-uroot", "fixture_source"],
+            input=sql, encoding="utf-8", check=True, capture_output=True,
         )
 
-    def setup_task(self, table, columns, grain, field=None, fmt=None, start=None, through=None):
+    def setup_task(self, table, columns, grain, field=None, fmt=None, start=None, through=None, source_filter=None):
         target = "sync_" + table + "_" + worker.uuid.uuid4().hex[:8]
         payload = {**self.source, "name": table, "table": table, "columns": columns, "grain": grain,
                    "targetTable": target, "dateField": field, "dateFormat": fmt, "from": start, "through": through}
+        if source_filter is not None:
+            payload["sourceFilter"] = source_filter
         preview = self.call("preview", payload)
         self.assertIn("CREATE TABLE", preview["ddl"])
         self.assertFalse(preview["targetReady"])
@@ -230,6 +272,41 @@ class LiveMySqlTest(unittest.TestCase):
         self.assertEqual(detail["lastRun"]["rows_committed"], 2)
         self.assertEqual(self.count(target), 3)
         self.assertNotIn("credential", detail)
+
+    def test_filtered_daily_sync_reruns_without_filter_column_in_target(self):
+        table = "fixture_filter_" + worker.uuid.uuid4().hex[:8]
+        self.source_sql(f"CREATE TABLE {table} (id INT PRIMARY KEY, period_id VARCHAR(8), city_name VARCHAR(12), "
+                        "INDEX(period_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4; "
+                        f"INSERT INTO {table} VALUES (1,'20261123','全省'),(2,'20261123','杭州'),"
+                        "(3,'20261124','全省'),(4,'20261124','宁波');")
+        self.addCleanup(self.source_sql, f"DROP TABLE {table}")
+        source_filter = {"field": "city_name", "value": "全省"}
+        with patch.object(worker, "now", return_value=dt.datetime(2026, 11, 25, 1)) as clock:
+            task_id, target, payload = self.setup_task(
+                table, ["id", "period_id"], "DAY", "period_id", "YYYYMMDD", "2026-11-23", "2026-11-24", source_filter)
+            sample = self.call("test-date", {**payload, "sampleDate": "2026-11-24"})
+            self.assertEqual(sample, {"matches": 1, "sampleValues": ["20261124"]})
+            self.assertNotIn("`city_name`", self.call("preview", payload)["ddl"])
+            with self.assertRaisesRegex(worker.SyncError, "TARGET_OWNERSHIP"):
+                self.call("preview", {**payload, "sourceFilter": {"field": "city_name", "value": "宁波"}})
+            detail = self.process(task_id)
+            self.assertEqual(detail["lastRun"]["state"], "SUCCESS", detail)
+            self.assertEqual(detail["sourceFilter"], source_filter)
+            self.assertEqual(self.count(target), 2)
+            self.source_sql(f"UPDATE {table} SET city_name='杭州' WHERE id=3; "
+                            f"UPDATE {table} SET city_name='全省' WHERE id=4;")
+            clock.return_value = dt.datetime(2026, 11, 25, 1, 1)
+            self.call("rerun", {"id": task_id, "from": "2026-11-24", "through": "2026-11-24"})
+            self.assertEqual(self.process(task_id)["lastRun"]["rows_committed"], 1)
+            self.call("schedule", {"id": task_id, "time": "02:00"})
+            clock.return_value = dt.datetime(2026, 11, 25, 2)
+            detail = self.process(task_id)
+            self.assertEqual(detail["lastRun"]["kind"], "DAILY")
+            self.assertEqual(detail["lastRun"]["rows_committed"], 2)
+            with worker.contextlib.closing(worker.target_connection()) as con:
+                rows = worker.query(con, f"SELECT id FROM {worker.qualified(worker.TARGET_DB, target)} ORDER BY id")
+            self.assertEqual(rows, [{"id": 1}, {"id": 4}])
+            self.call("schedule", {"id": task_id, "time": None})
 
     def test_full_reload_source_readonly_and_collision(self):
         task_id, target, payload = self.setup_task("small_dim", ["id", "label"], "FULL")

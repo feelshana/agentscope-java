@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { syncAction } from '../../api/tableSync';
-import type { SyncColumn, SyncConnection, SyncGrain, SyncPreview, SyncSelection, SyncTarget, SyncTlsMode } from '../../api/tableSync';
+import type { SyncColumn, SyncConnection, SyncGrain, SyncPreview, SyncSelection, SyncSourceFilter, SyncTarget, SyncTlsMode } from '../../api/tableSync';
 import Icon from '../../components/Icon';
 
 const defaults: SyncConnection = { host: '', port: 3306, database: '', username: '', password: '', sslMode: 'REQUIRED' };
@@ -28,6 +28,8 @@ const formats = {
   MONTH: ['YYYYMM', 'YYYY-MM', 'NATIVE'],
 };
 const dateColumnKinds = new Set(['date', 'datetime', 'timestamp', 'char', 'varchar', 'int', 'mediumint', 'bigint']);
+const filterColumnKinds = new Set(['char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext', 'tinyint', 'smallint', 'mediumint', 'int', 'bigint']);
+const emptyFilter: SyncSourceFilter = { field: '', value: '' };
 const sampleQueryLabel = '查询样本';
 type SampleFeedback = { matches: number; sampleValues: string[] } | { error: string };
 
@@ -63,6 +65,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
   const [target, setTarget] = useState('');
   const [grain, setGrain] = useState<SyncGrain>('FULL');
   const [field, setField] = useState('');
+  const [sourceFilter, setSourceFilter] = useState(emptyFilter);
   const [format, setFormat] = useState('NATIVE');
   const [zone, setZone] = useState('+08:00');
   const [from, setFrom] = useState('');
@@ -74,9 +77,12 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
   const sampling = busy === sampleQueryLabel;
   const through = previousPeriod(today, grain);
   const dateField = columns.find(column => column.name === field);
+  const filter = grain !== 'FULL' && sourceFilter.field ? sourceFilter : undefined;
+  const filterIncomplete = !!filter && !filter.value.trim();
   const selection: SyncSelection = {
     ...source, table, columns: selected, targetTable: target.trim(), grain,
     dateField: field, dateFormat: format, storageZone: zone,
+    sourceFilter: filter,
   };
 
   useEffect(() => { dialog.current?.showModal(); }, []);
@@ -84,7 +90,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
   function invalidate() { setPreview(undefined); setSampleResult(undefined); }
   function changeSource(patch: Partial<SyncConnection>) {
     setSource(value => ({ ...value, ...patch }));
-    setDiscovery(undefined); setTable(''); setSelected([]); setColumns([]); invalidate();
+    setDiscovery(undefined); setTable(''); setSelected([]); setColumns([]); setSourceFilter(emptyFilter); invalidate();
   }
 
   async function perform(label: string, action: () => Promise<void>, onError: (message: string) => void = setError) {
@@ -117,7 +123,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
   }
 
   function selectTable(value: string) {
-    setTable(value); setColumns([]); setSelected([]); setField(''); invalidate();
+    setTable(value); setColumns([]); setSelected([]); setField(''); setSourceFilter(emptyFilter); invalidate();
     if (!value) return;
     void perform('读取字段', async () => {
       const result = await syncAction<{ columns: SyncColumn[] }>('columns', { ...source, table: value });
@@ -130,6 +136,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
 
   function changeGrain(value: SyncGrain) {
     setGrain(value); setField(''); setFormat('NATIVE'); setFrom(''); setSample(''); invalidate();
+    if (value === 'FULL') setSourceFilter(emptyFilter);
   }
 
   return <dialog className="table-sync-dialog" ref={dialog} onCancel={event => {
@@ -140,7 +147,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
     </header>
     <form onSubmit={event => {
       event.preventDefault();
-      if (!preview?.targetReady || busy || editingTarget) return;
+      if (!preview?.targetReady || busy || editingTarget || filterIncomplete) return;
       void perform('保存任务', async () => {
         const result = await syncAction<{ id: string }>('create', {
           ...selection, name: name.trim(), fingerprint: preview.fingerprint,
@@ -231,9 +238,21 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
             <label>首次起始{grain === 'MONTH' ? '月' : '日'}<input className="da-input" type={grain === 'MONTH' ? 'month' : 'date'} required max={through} value={from} onChange={e => setFrom(e.target.value)} /></label>
             <label>首次截止{grain === 'MONTH' ? '月' : '日'}<input className="da-input" value={through} readOnly /></label>
           </div>}
+          {grain !== 'FULL' && <div className="table-sync-form-grid">
+            <label>源表筛选字段<select className="da-input" value={sourceFilter.field} onChange={event => {
+              setSourceFilter({ field: event.target.value, value: '' }); invalidate();
+            }}>
+              <option value="">不筛选</option>
+              {columns.filter(column => filterColumnKinds.has(column.kind)).map(column =>
+                <option key={column.name} value={column.name}>{column.name}</option>
+              )}
+            </select><small>此条件只在源表查询时使用。目标表列由上方勾选决定。</small></label>
+            {filter && <label>等于<input className="da-input" required maxLength={1024} value={filter.value}
+              onChange={event => { setSourceFilter({ ...filter, value: event.target.value }); invalidate(); }} /></label>}
+          </div>}
           {grain !== 'FULL' && <div className="table-sync-inline table-sync-sample">
             <label>测试{grain === 'MONTH' ? '月份' : '日期'}<input className="da-input" type={grain === 'MONTH' ? 'month' : 'date'} value={sample} onChange={e => { setSample(e.target.value); setSampleResult(undefined); }} /></label>
-            <button className="da-btn" type="button" disabled={!field || !sample} onClick={() => {
+            <button className="da-btn" type="button" disabled={!field || !sample || filterIncomplete} onClick={() => {
               setSampleResult(undefined);
               void perform(sampleQueryLabel, async () => {
                 setSampleResult(await syncAction('test-date', { ...selection, sampleDate: toStoragePeriod(sample, grain) }));
@@ -244,7 +263,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
               ? <p className="secondary-alert table-sync-sample-error" role="alert">{sampleResult.error}</p>
               : <span role="status">{sampleResult.matches ? `命中 ${sampleResult.matches} 条样本 · ${sampleResult.sampleValues.join('、')}` : '查询成功，该期未查到数据。'}</span>)}
           </div>}
-          <button className="da-btn" type="button" disabled={!savedTarget || editingTarget || !target || !selected.length || (grain !== 'FULL' && !field)}
+          <button className="da-btn" type="button" disabled={!savedTarget || editingTarget || !target || !selected.length || filterIncomplete || (grain !== 'FULL' && !field)}
             onClick={() => void perform('核对表结构', async () => { setPreview(await syncAction('preview', selection)); })}>{preview ? '重新核对目标表' : '生成目标建表 SQL'}</button>
           {preview && <>
             <small role="status">{preview.targetReady ? '已核对目标表结构。' : '请在 BI 数据开发执行以下 SQL，再点击「重新核对目标表」。'}</small>
@@ -254,7 +273,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
       </div>
       <footer><span aria-live="polite">{busy && !sampling ? `正在${busy}…` : ''}</span>
         <button className="da-btn" type="button" onClick={onClose} disabled={!!busy}>取消</button>
-        <button className="da-btn da-btn-primary" type="submit" disabled={!preview?.targetReady || !!busy || editingTarget || !name.trim() || (grain !== 'FULL' && !from)}>创建并首次同步</button>
+        <button className="da-btn da-btn-primary" type="submit" disabled={!preview?.targetReady || !!busy || editingTarget || !name.trim() || filterIncomplete || (grain !== 'FULL' && !from)}>创建并首次同步</button>
       </footer>
     </form>
   </dialog>;

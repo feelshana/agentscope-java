@@ -19,3 +19,7 @@
 - 66 按新 requirements 重装 Wren 并回归；受限事实表 `query_cube` 时间维度门禁；键值类表指标名由平台补全；口径页"重新统计取值"按钮。
 - 会员表默认指标"无，先问"时助手未先问（第一次违反，暂记）。
 - 本机启动注意：JVM 需 `-Djdk.net.unixdomain.tmpdir=E:/jdk-tmp -Dfile.encoding=UTF-8`。
+
+## 2026-11-26 · 数据同步源表筛选
+
+在 develop-2.0 的 [spec148](../specs/148-configurable-table-sync.md) 增加按日/月的源表等值筛选。目标列由勾选决定，旧任务缺省保持原读取条件。隔离 MySQL 5.7→8.4、浏览器和完整构建已通过。66 由用户部署，升级前核对主线已有的 0156 迁移是否已执行，再用新目标表试查和试同步。
