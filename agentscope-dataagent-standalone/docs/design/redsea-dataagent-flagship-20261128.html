@@ -1,0 +1,2373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>红海 DataAgent · 世界级双模式数据智能体产品设计稿 · 2026.11.28</title>
+<style>
+:root {
+  /* Core Neutrals - Apple HIG / Linear crispness */
+  --bg-page: #F2F3F7;
+  --bg-canvas: #F8F9FC;
+  --surface: #FFFFFF;
+  --surface-sub: #F6F7FA;
+  --surface-hover: #F0F2F7;
+  --border: rgba(15, 23, 42, 0.09);
+  --border-strong: rgba(15, 23, 42, 0.16);
+  --ink: #0F172A;
+  --ink-2: #334155;
+  --muted: #64748B;
+  --faint: #94A3B8;
+
+  /* Mode 1: NORMAL (Explore / SQL) - Electric Indigo */
+  --indigo: #5046E5;
+  --indigo-hover: #4338CA;
+  --indigo-soft: #EEF2FF;
+  --indigo-line: rgba(80, 70, 229, 0.24);
+
+  /* Mode 2: CALIBER (Governed / Cube) - Mineral Teal */
+  --teal: #0D7A74;
+  --teal-hover: #0B6560;
+  --teal-soft: #E8F7F6;
+  --teal-line: rgba(13, 122, 116, 0.26);
+
+  /* Active Primary (switches dynamically in simulator) */
+  --pri: var(--indigo);
+  --pri-hover: var(--indigo-hover);
+  --pri-soft: var(--indigo-soft);
+  --pri-line: var(--indigo-line);
+
+  /* Semantic Status - Dots & subtle hairlines only, never full yellow floods */
+  --ok: #15803D;
+  --ok-soft: #ECFDF5;
+  --warn: #B45309;
+  --warn-dot: #D97706;
+  --warn-soft: #FFFBEB;
+  --danger: #BE123C;
+  --danger-soft: #FFF1F2;
+
+  /* Elevation & Radius */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --sh-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --sh-md: 0 8px 24px -4px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+  --sh-lg: 0 24px 54px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.06);
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg-page);
+  color: var(--ink);
+  font: 400 14px/1.6 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+code, pre { font-family: var(--mono); }
+button { font-family: inherit; cursor: pointer; }
+
+/* Page Shell */
+.doc-wrap { max-width: 1380px; margin: 0 auto; padding: 0 28px 120px; }
+
+/* Sticky Top Navigation */
+.top-nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(242, 243, 247, 0.86);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  margin: 0 -28px 36px;
+  padding: 12px 28px;
+}
+.top-nav-inner {
+  max-width: 1324px; margin: 0 auto;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.brand-mark {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-weight: 700; font-size: 14px; color: var(--ink); letter-spacing: -0.02em;
+}
+.brand-mark i {
+  width: 26px; height: 26px; border-radius: 8px;
+  background: linear-gradient(145deg, #6366F1, #4338CA);
+  display: grid; place-items: center; color: #fff; font-style: normal; font-size: 13px;
+  box-shadow: 0 3px 10px rgba(80, 70, 229, 0.28);
+}
+.nav-links { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-left: 8px; }
+.nav-links a {
+  text-decoration: none; font-size: 12.5px; font-weight: 500; color: var(--muted);
+  padding: 6px 10px; border-radius: 7px; transition: all .15s;
+}
+.nav-links a:hover { background: var(--surface); color: var(--ink); box-shadow: var(--sh-sm); }
+.nav-badge {
+  margin-left: auto; font-size: 11.5px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px;
+}
+
+/* Hero Cover */
+.hero {
+  background: linear-gradient(135deg, #FFFFFF 0%, #F7F8FD 60%, #F0F9F8 100%);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px 44px 36px;
+  box-shadow: var(--sh-md);
+  margin-bottom: 44px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::after {
+  content: ""; position: absolute; right: -80px; top: -80px; width: 340px; height: 340px;
+  background: radial-gradient(circle, rgba(80, 70, 229, 0.08) 0%, rgba(13, 122, 116, 0.05) 50%, transparent 70%);
+  pointer-events: none;
+}
+.hero-kicker {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 12px; border-radius: 999px;
+  background: var(--indigo-soft); color: var(--indigo);
+  font-size: 12px; font-weight: 600;
+}
+.hero h1 {
+  margin: 16px 0 0; font-size: 38px; line-height: 1.2; letter-spacing: -0.03em; font-weight: 760;
+}
+.hero h1 .hl-indigo { color: var(--indigo); }
+.hero h1 .hl-teal { color: var(--teal); }
+.hero-lede {
+  margin: 16px 0 0; max-width: 920px; font-size: 15px; line-height: 1.8; color: var(--ink-2);
+}
+.hero-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 28px;
+}
+.stat-card {
+  background: rgba(255,255,255,0.85); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 14px 16px;
+}
+.stat-card b { display: block; font-size: 22px; font-weight: 740; letter-spacing: -0.02em; color: var(--ink); }
+.stat-card span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* Sections */
+.sec { padding-top: 24px; margin-bottom: 56px; scroll-margin-top: 74px; }
+.sec-head {
+  display: flex; align-items: flex-end; gap: 14px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--border-strong); margin-bottom: 24px;
+}
+.sec-num {
+  font: 700 12px/1 var(--mono); color: #fff; background: var(--ink);
+  padding: 6px 9px; border-radius: 7px; letter-spacing: 0.04em;
+}
+.sec-head h2 { margin: 0; font-size: 24px; font-weight: 720; letter-spacing: -0.025em; }
+.sec-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
+.sec-meta { margin-left: auto; font-size: 12px; color: var(--faint); font-family: var(--mono); }
+
+.sub-title {
+  margin: 28px 0 12px; font-size: 16px; font-weight: 680; display: flex; align-items: center; gap: 8px;
+}
+.sub-tag {
+  font: 600 11px/1 var(--mono); padding: 3px 7px; border-radius: 5px;
+  background: var(--indigo-soft); color: var(--indigo);
+}
+.sub-tag.teal { background: var(--teal-soft); color: var(--teal); }
+
+/* Grids & Cards */
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 18px 20px; box-shadow: var(--sh-sm);
+}
+.panel h3 { margin: 0 0 8px; font-size: 15px; font-weight: 680; display: flex; align-items: center; gap: 8px; }
+.panel p { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink-2); }
+
+/* Severity Badges & Findings */
+.sev {
+  font: 700 10.5px/1 var(--mono); padding: 4px 6px; border-radius: 5px; flex: none;
+}
+.sev.p0 { background: var(--danger-soft); color: var(--danger); }
+.sev.p1 { background: var(--warn-soft); color: var(--warn); }
+.sev.new { background: var(--indigo-soft); color: var(--indigo); }
+.sev.adopt { background: var(--ok-soft); color: var(--ok); }
+.sev.upgrade { background: var(--teal-soft); color: var(--teal); }
+
+.finding {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 15px 17px; display: flex; gap: 12px; align-items: flex-start; box-shadow: var(--sh-sm);
+}
+.finding h4 { margin: 0 0 4px; font-size: 13.5px; font-weight: 680; color: var(--ink); }
+.finding p { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.finding .ev {
+  display: inline-block; margin-top: 6px; font: 500 11px/1.4 var(--mono);
+  color: var(--ink-2); background: var(--surface-sub); padding: 2px 7px; border-radius: 5px;
+}
+
+/* Spec Tables */
+.spec-table {
+  width: 100%; border-collapse: collapse; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden;
+  box-shadow: var(--sh-sm); font-size: 13px;
+}
+.spec-table th {
+  text-align: left; font-size: 11.5px; font-weight: 650; color: var(--muted);
+  background: var(--surface-sub); padding: 11px 14px; border-bottom: 1px solid var(--border);
+}
+.spec-table td {
+  padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--ink-2); vertical-align: top; line-height: 1.6;
+}
+.spec-table tr:last-child td { border-bottom: 0; }
+.spec-table code {
+  font-size: 11.5px; background: var(--surface-sub); padding: 1px 5px; border-radius: 4px; color: var(--indigo);
+}
+
+/* Pillars */
+.pillar {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 20px; position: relative; overflow: hidden; box-shadow: var(--sh-sm);
+}
+.pillar::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3.5px; background: var(--indigo);
+}
+.pillar.teal::before { background: var(--teal); }
+.pillar.ink::before { background: var(--ink); }
+.pillar .p-no { font: 700 11px/1 var(--mono); color: var(--muted); margin-bottom: 6px; }
+.pillar h3 { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
+.pillar p { margin: 0; font-size: 12.8px; line-height: 1.7; color: var(--ink-2); }
+
+/* =========================================================
+   INTERACTIVE PROTOTYPE STUDIO (SECTION 02)
+   ========================================================= */
+.studio-shell {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  box-shadow: var(--sh-lg);
+  overflow: hidden;
+}
+.studio-bar {
+  background: #0F172A;
+  color: #E2E8F0;
+  padding: 12px 18px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.studio-dots { display: flex; gap: 6px; }
+.studio-dots span { width: 10px; height: 10px; border-radius: 50%; background: #334155; }
+.studio-dots span:nth-child(1) { background: #EF4444; }
+.studio-dots span:nth-child(2) { background: #F59E0B; }
+.studio-dots span:nth-child(3) { background: #22C55E; }
+
+.mode-switch {
+  display: inline-flex; background: rgba(255,255,255,0.08); padding: 3px; border-radius: 9px; gap: 3px;
+}
+.mode-btn {
+  border: 0; background: transparent; color: #CBD5E1; font-size: 12px; font-weight: 600;
+  padding: 6px 12px; border-radius: 7px; display: inline-flex; align-items: center; gap: 6px; transition: all .15s;
+}
+.mode-btn .dot { width: 7px; height: 7px; border-radius: 50%; }
+.mode-btn.active[data-mode="NORMAL"] { background: #5046E5; color: #fff; box-shadow: 0 2px 8px rgba(80,70,229,0.45); }
+.mode-btn.active[data-mode="CALIBER"] { background: #0D7A74; color: #fff; box-shadow: 0 2px 8px rgba(13,122,116,0.45); }
+
+.studio-url {
+  margin-left: auto; font: 400 11.5px/1 var(--mono); color: #94A3B8;
+  background: rgba(255,255,255,0.06); padding: 6px 12px; border-radius: 7px;
+}
+
+.screen-strip {
+  background: #1E293B;
+  padding: 8px 14px;
+  display: flex; gap: 6px; overflow-x: auto; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.scr-btn {
+  border: 1px solid transparent; background: transparent; color: #94A3B8;
+  font-size: 12px; font-weight: 500; padding: 6px 11px; border-radius: 7px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; transition: all .15s;
+}
+.scr-btn:hover { background: rgba(255,255,255,0.07); color: #F8FAFC; }
+.scr-btn.active { background: #FFFFFF; color: #0F172A; font-weight: 650; }
+.scr-btn .s-idx { font: 600 10px/1 var(--mono); opacity: 0.6; }
+
+/* Design Note Ribbon under screen strip */
+.studio-note {
+  background: var(--indigo-soft); color: var(--indigo);
+  padding: 9px 18px; font-size: 12.5px; display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.studio-shell[data-mode="CALIBER"] .studio-note { background: var(--teal-soft); color: var(--teal); }
+.studio-note b { font-weight: 700; }
+.studio-note .sub-toggles { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.sub-pill {
+  border: 1px solid rgba(15,23,42,0.14); background: #fff; color: var(--ink-2);
+  font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+}
+.sub-pill.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* Simulated App Viewport */
+.app-vp {
+  height: 700px;
+  background: var(--bg-canvas);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.studio-shell[data-mode="CALIBER"] {
+  --pri: var(--teal);
+  --pri-hover: var(--teal-hover);
+  --pri-soft: var(--teal-soft);
+  --pri-line: var(--teal-line);
+}
+
+/* App Chrome */
+.app-topbar {
+  height: 52px; flex: none; background: #fff; border-bottom: 1px solid var(--border);
+  padding: 0 18px; display: flex; align-items: center; gap: 10px;
+}
+.crumb { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.crumb b { color: var(--ink); font-weight: 680; }
+.mode-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 650; padding: 3px 8px; border-radius: 6px;
+  background: var(--pri-soft); color: var(--pri); border: 1px solid var(--pri-line);
+}
+.ver-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 550; padding: 3px 8px; border-radius: 6px;
+  background: var(--surface-sub); color: var(--ink-2);
+}
+.dot-sm { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+.dot-ok { background: var(--ok); }
+.dot-warn { background: var(--warn-dot); }
+.dot-danger { background: var(--danger); }
+.dot-pri { background: var(--pri); }
+.dot-muted { background: #CBD5E1; }
+
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* UI Buttons (Strict 4-Tier Hierarchy) */
+.ui-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 30px; padding: 0 12px; border-radius: 8px;
+  font-size: 12.5px; font-weight: 550; border: 1px solid var(--border-strong);
+  background: #fff; color: var(--ink-2); transition: all .12s; white-space: nowrap;
+}
+.ui-btn:hover { background: var(--surface-sub); color: var(--ink); }
+.ui-btn.pri {
+  background: var(--pri); border-color: transparent; color: #fff; font-weight: 600;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.14);
+}
+.ui-btn.pri:hover { background: var(--pri-hover); }
+.ui-btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.ui-btn.ghost:hover { background: var(--surface-hover); color: var(--ink); }
+.ui-btn.danger { background: var(--danger-soft); border-color: rgba(190,18,60,0.2); color: var(--danger); }
+.ui-btn.dis { background: #F1F5F9; border-color: transparent; color: #94A3B8; cursor: not-allowed; }
+.ui-btn.sm { height: 26px; padding: 0 9px; font-size: 12px; border-radius: 7px; }
+
+/* Workspace Split */
+.app-body { flex: 1; display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: 0; }
+.app-sidebar {
+  background: #FAFBFD; border-right: 1px solid var(--border);
+  padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
+}
+.sb-group {
+  font-size: 11px; font-weight: 650; color: var(--faint);
+  padding: 12px 10px 4px; display: flex; align-items: center; justify-content: space-between;
+}
+.sb-group:first-child { padding-top: 2px; }
+.sb-draft-tag {
+  font: 600 10.5px/1 var(--mono); color: var(--pri); background: var(--pri-soft);
+  padding: 2px 6px; border-radius: 5px;
+}
+.sb-item {
+  border: 0; background: transparent; width: 100%; text-align: left;
+  height: 33px; padding: 0 10px; border-radius: 8px;
+  display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 500; color: var(--ink-2);
+}
+.sb-item:hover { background: var(--surface-hover); color: var(--ink); }
+.sb-item.active { background: var(--pri-soft); color: var(--pri); font-weight: 650; }
+.sb-item.dim { color: var(--faint); font-size: 12.5px; }
+.sb-item .cnt { margin-left: auto; font: 500 11px/1 var(--mono); color: var(--faint); }
+.sb-item.active .cnt { color: var(--pri); }
+.sb-fold-btn {
+  border: 0; background: transparent; width: 100%; text-align: left;
+  padding: 10px 10px 4px; font-size: 11px; font-weight: 650; color: var(--faint);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.app-main {
+  min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; position: relative;
+}
+
+/* Reusable In-App UI Blocks */
+.pg-head {
+  padding: 18px 24px 12px; display: flex; align-items: flex-start; gap: 14px; flex: none;
+}
+.pg-head h1 { margin: 0; font-size: 20px; font-weight: 720; letter-spacing: -0.02em; }
+.pg-head p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+.pg-acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+
+.ui-card {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-md);
+  box-shadow: var(--sh-sm);
+}
+.ui-card-head {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.ui-card-head h3 { margin: 0; font-size: 13.5px; font-weight: 660; }
+.ui-card-head .r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.ui-input {
+  height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; background: #fff;
+  padding: 0 10px; font-size: 12.5px; color: var(--ink); display: flex; align-items: center; gap: 7px;
+}
+.ui-pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+  border-radius: 6px; font-size: 11px; font-weight: 600; background: var(--surface-sub); color: var(--ink-2);
+  white-space: nowrap;
+}
+.ui-pill.pri { background: var(--pri-soft); color: var(--pri); }
+.ui-pill.ok { background: var(--ok-soft); color: var(--ok); }
+.ui-pill.warn { background: var(--warn-soft); color: var(--warn); }
+.ui-pill.danger { background: var(--danger-soft); color: var(--danger); }
+
+.health-strip {
+  margin: 0 24px 14px; background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 14px; display: flex; align-items: center; gap: 14px; font-size: 12.5px;
+}
+.health-sep { width: 1px; height: 14px; background: var(--border-strong); }
+
+/* Canvas Dotted Grid */
+.dot-canvas {
+  background-color: #FAFBFD;
+  background-image: radial-gradient(rgba(15,23,42,0.12) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* Modal Backdrop inside simulator */
+.sim-modal-bg {
+  position: absolute; inset: 0; background: rgba(15, 23, 42, 0.36); backdrop-filter: blur(3px);
+  display: grid; place-items: center; z-index: 20; padding: 20px;
+}
+.sim-modal {
+  background: #fff; border-radius: 16px; box-shadow: var(--sh-lg);
+  border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column;
+  max-height: 100%;
+}
+
+/* Interactive State Machine Tester */
+.sm-grid { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 16px; }
+.sm-list { display: flex; flex-direction: column; gap: 6px; }
+.sm-opt {
+  text-align: left; border: 1px solid var(--border); background: #fff; border-radius: 10px;
+  padding: 10px 12px; display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 550; color: var(--ink-2);
+}
+.sm-opt:hover { border-color: var(--border-strong); }
+.sm-opt.active { border-color: var(--indigo); background: var(--indigo-soft); color: var(--indigo); font-weight: 650; }
+.sm-opt[data-m="CALIBER"].active { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
+
+/* Code / Handoff Block */
+pre.handoff {
+  background: #0F172A; color: #E2E8F0; border-radius: 12px; padding: 18px 20px;
+  font: 400 12.5px/1.8 var(--mono); overflow-x: auto; margin: 0;
+}
+pre.handoff .k { color: #818CF8; }
+pre.handoff .t { color: #5EEAD4; }
+pre.handoff .c { color: #94A3B8; }
+
+/* Responsive fallback */
+@media (max-width: 1080px) {
+  .hero-stats, .grid-4, .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .grid-2, .sm-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="doc-wrap">
+  <!-- Sticky Navigation -->
+  <nav class="top-nav">
+    <div class="top-nav-inner">
+      <div class="brand-mark"><i>红</i>红海 DataAgent · 旗舰设计稿</div>
+      <div class="nav-links">
+        <a href="#s0">00 实测诊断与对标</a>
+        <a href="#s1">01 五大旗舰设计原则</a>
+        <a href="#s2">02 14 屏交互式原型</a>
+        <a href="#s3">03 设计系统与视觉语言</a>
+        <a href="#s4">04 发布状态机模拟器</a>
+        <a href="#s5">05 前端落地图谱 (F01–F36)</a>
+      </div>
+      <span class="nav-badge">实测日期 2026.11.28 · 双模式全链路</span>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <header class="hero">
+    <span class="hero-kicker">✦ 真实浏览器双模式走查 + 源码级审计 + 世界级 Agent 产品重设计</span>
+    <h1>让 <span class="hl-indigo">探索式语义建模</span> 与 <span class="hl-teal">强管控口径工坊</span><br>拥有各自最顺手的形态</h1>
+    <p class="hero-lede">
+      这份设计稿不是在上一版参考稿（<code>kb-workspace-20261127-full.html</code>）上做局部修补，而是基于我刚才在 <code>localhost:5173</code> 真实操控浏览器、用电商测试数据走通<strong>普通问数（NORMAL）</strong>、<strong>口径问数（CALIBER）</strong>与<strong>端到端问数对话（Chat）</strong>全链路，并结合前端源码深度审计后，从「世界顶级 Agent 产品」视角重构的全新设计方案。下方内嵌 <strong>14 屏可点击交互原型</strong>，可随时切换双模式与各中间态体验。
+    </p>
+    <div class="hero-stats">
+      <div class="stat-card"><b>12 项核心根因</b><span>实测暴露的 Agent 泄漏、Git 噪音与双门禁问题</span></div>
+      <div class="stat-card"><b>5 大旗舰跃迁</b><span>超越传统 SaaS 改样式，重构人机协同范式</span></div>
+      <div class="stat-card"><b>14 屏可交互</b><span>覆盖列表→创建→建模→口径→审阅→问数闭环</span></div>
+      <div class="stat-card"><b>36 条派工单</b><span>F01–F36 精确映射现有前端组件与验收红线</span></div>
+    </div>
+  </header>
+
+  <!-- =========================================================
+       SECTION 00: DIAGNOSIS & COMPARISON
+       ========================================================= -->
+  <section class="sec" id="s0">
+    <div class="sec-head">
+      <span class="sec-num">00</span>
+      <div>
+        <h2>真实浏览器走查发现 &amp; 与参考稿（WorkBuddy 版）的深度对比</h2>
+        <p>实测对象：UX走查-电商-A（新建 NORMAL）、总部常规分析-本地复刻（线上 v16 NORMAL）、UI走查-口径问数 &amp; 测试三（CALIBER）、Chat 问数</p>
+      </div>
+      <span class="sec-meta">12 FINDINGS · ADOPT / UPGRADE / REJECT</span>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:24px;">
+      <div class="finding">
+        <span class="sev p0">P0 · 致命</span>
+        <div>
+          <h4>1. 内部编排 Prompt 原样暴露成「用户紫色气泡」</h4>
+          <p>在「公共视图 → 边聊边核对」打开抽屉后，直接加载全局建模历史，将平台拼接的内部指令（<code>read_file</code>、<code>knowledge/questions/&lt;ID&gt;.yml</code>、<code>wren_cli dry-plan</code>、<code>propose_modeling_change</code>）当成用户发出的紫色对话气泡展示。</p>
+          <span class="ev">实测：总部常规分析-本地复刻 · 公共视图边聊边核对</span>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="sev p0">P0 · 致命</span>
+        <div>
+          <h4>2. Git/脚手架文件污染「变更与待办」且草稿计数互相打架</h4>
+          <p>审阅弹窗顶部赫然列出 <code>.gitignore</code>、<code>AGENTS.md</code>、<code>wren_project.yml</code> 和 5 个 <code>.gitkeep</code>；导致同一页面顶栏显示 <b>16 项</b>、画布底部显示 <b>草稿改动 9</b>、工程页显示 <b>7</b>，用户完全失去信任。</p>
+          <span class="ev">实测：UX走查-电商-A &amp; UI走查-口径问数 · 变更与待办</span>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="sev p0">P0 · 致命</span>
+        <div>
+          <h4>3. 口径模式「双重发布门禁」与「概览完全失忆」</h4>
+          <p>口径库顶栏显示「• 完成口径」，但「概览」的 3 步引导和 4 张统计卡完全不提「口径」；点「查看审阅单」先跳关系图弹出一堆 <code>.gitkeep</code> 的「变更与待办」，再被红字拦住让你点「查看口径发布检查」跳去第二个抽屉。</p>
+          <span class="ev">实测：UI走查-口径问数 · 概览 → 审阅单 → 口径抽屉</span>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="sev p0">P0 · 致命</span>
+        <div>
+          <h4>4. 首次建模「弹窗套向导」+ 底部孤悬「伪对话输入框」</h4>
+          <p>整理字段时，明明整页都是向导，点编辑却弹出大弹窗盖住向导且右上角写「返回对话」；向导底部还孤零零摆着一个禁用态聊天框写着「输入『查看字段』Tab 填入」，且此时侧栏错误高亮「关系图」。</p>
+          <span class="ev">实测：UX走查-电商-A &amp; UI走查-口径问数 · 首次建模</span>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="sev p1">P1 · 严重</span>
+        <div>
+          <h4>5. 确认卡、规则与过程流持续泄漏工程术语与枚举</h4>
+          <p>确认卡暴露 <code>join_type 为 MANY_TO_ONE</code> 且下方紧贴重复的琥珀色条「有 3 项口径待确认 去确认」；建模过程重复 4 次「学习建模方法」并暴露「技能挂载不可用」；口径页提示泄露 <code>ds_</code> 前缀；规则页截断在半括号且含「升级 Wren 后可转指标」。</p>
+          <span class="ev">实测：UX走查-电商-A · 对话建模 &amp; 业务规则 &amp; 口径</span>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="sev p1">P1 · 严重</span>
+        <div>
+          <h4>6. 同屏 3 个实心紫主按钮 + 关系图元信息失真</h4>
+          <p>关系图同时出现 3 个实心紫按钮（审阅草稿 / 去确认口径 / 自动识别候选关系）；口径页每张表各一个实心紫按钮。关系图将 <code>table_role: FACT</code> 的订单表错标为「维」，并展示原始 <code>VARCHAR(1024)</code>。</p>
+          <span class="ev">实测：UX走查-电商-A 关系图 &amp; UI走查-口径问数</span>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="sev p1">P1 · 严重</span>
+        <div>
+          <h4>7. 口径文档绑定依赖「手写魔法文本」，而非可视化关联</h4>
+          <p>口径模式最核心的动作是把业务文档绑定到目标表，但目前要求业务人员在 Markdown 开头手动精确写一行 <code>适用模型：视频</code>，写错就永远卡在「缺业务文档」阻断发布。</p>
+          <span class="ev">实测：UI走查-口径问数 · 资料与口径总览</span>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="sev p1">P1 · 严重</span>
+        <div>
+          <h4>8. 问数闭环断层：跨库推荐劫持 + 过程前言倒置</h4>
+          <p>在「总部常规分析」点「开始提问」进入对话后，下方「从这些问题开始」却推了其他知识库的问题，一点就偷偷切库；展开执行过程时，Agent 开场白被渲染在 5 个工具胶囊<b>下方</b>，且暴露「部分步骤重试」。</p>
+          <span class="ev">实测：Chat 问数新建页 &amp; 历史图表会话</span>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="sub-title">与参考稿（WorkBuddy 版 <code>kb-workspace-20261127-full.html</code>）的客观评议 <span class="sub-tag">采纳 · 升级 · 超越</span></h3>
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th style="width:18%">维度</th>
+          <th style="width:28%">参考稿（WorkBuddy）做得好的</th>
+          <th style="width:26%">参考稿漏掉或做得不够的</th>
+          <th style="width:28%">本旗舰方案（Antigravity）的做法</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>视觉克制与去黄化</b></td>
+          <td><span class="sev adopt">采纳</span> 提出「一屏唯一实心主色」、干掉画布中央大黄卡和模型卡底黄条、改用 6px 状态点。</td>
+          <td>视觉风格仍偏旧式后台（9px 极小字、单调灰紫），且 HTML 稿本身存在多处 DOM 重复粘贴与错位。</td>
+          <td><span class="sev upgrade">升级</span> 建立双模式色彩语言（探索 Indigo / 口径 Mineral Teal），完整 12–22px 现代字阶与克制层级。</td>
+        </tr>
+        <tr>
+          <td><b>双模式 IA 与创建决策</b></td>
+          <td><span class="sev adopt">采纳</span> 加宽创建弹窗做左右对比、将「创建后不可更改」前置；口径侧栏拆出「口径工作台 + 模型辅助」。</td>
+          <td>没改「概览」和「设置」（口径库概览仍无口径）；创建卡仍只有文字，无直观结构差异；未解决文档手写绑定痛点。</td>
+          <td><span class="sev new">重构</span> 顶栏常驻模式徽标、双模式原生概览、设置页展示模式说明、新增可视化「文档 ↔ 表绑定」器。</td>
+        </tr>
+        <tr>
+          <td><b>Agent 对话建模 &amp; HITL</b></td>
+          <td><span style="color:var(--danger);font-weight:600">几乎空白</span> — 整篇 23 屏未设计对话建模、过程流、HITL 确认卡、402 错误恢复。</td>
+          <td>没发现 Prompt 泄漏成用户气泡、<code>MANY_TO_ONE</code> 枚举泄漏、过程步骤重复与底部伪聊天框等核心 Agent 痛点。</td>
+          <td><span class="sev new">核心突破</span> 设计完整 Agent 协作层：意图胶囊遮蔽 Prompt、里程碑时间轴、可视化关系确认卡、画布幽灵连线 Diff、优雅错误恢复。</td>
+        </tr>
+        <tr>
+          <td><b>审阅与发布中心</b></td>
+          <td><span class="sev adopt">采纳</span> 梳理了 8 态主按钮状态机，修剪了审阅单弹窗布局。</td>
+          <td>没发现 <code>.gitkeep</code>/<code>AGENTS.md</code> 污染变更清单导致计数打架，也没解决口径模式「审阅单 → 口径抽屉」双重跳转。</td>
+          <td><span class="sev new">重构</span> 语义对象优先、工程脚手架折叠不计入徽标；口径模式合并为单一「口径发布检查与审阅台」。</td>
+        </tr>
+        <tr>
+          <td><b>口径核对与验证</b></td>
+          <td><span class="sev adopt">采纳</span> 四步改进度轨、合并统计卡为单行条、提出左队列+右表单核对。</td>
+          <td>核对页缺少「原文对照」，业务人员仍需来回切页核对文档；验证页未将「口径要求 vs 编译 WHERE」可视化对照。</td>
+          <td><span class="sev upgrade">升级</span> 核对页内嵌可折叠「文档原文高亮溯源」侧栏 + 取值异常内联提示；验证页双栏条件对照 + 键盘流 <code>J/K/A</code>。</td>
+        </tr>
+        <tr>
+          <td><b>建模 → 问数闭环</b></td>
+          <td><span style="color:var(--muted)">未覆盖</span> — 停在「去问数」按钮为止。</td>
+          <td>未打通端到端问数信任感，也未解决跨库推荐劫持和溯源回流问题。</td>
+          <td><span class="sev new">闭环设计</span> 锁定当前库推荐问题、回答底部展示「语义/口径溯源条」+ 管理员一键「调优此题」回流建模。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =========================================================
+       SECTION 01: 5 WORLD-CLASS DESIGN PILLARS
+       ========================================================= -->
+  <section class="sec" id="s1">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <div>
+        <h2>打造世界级 Data Agent 的五大架构设计原则</h2>
+        <p>对标 Linear 的结构秩序、Cursor / Claude Code 的透明人机协同、以及现代语义层产品的数据可信度</p>
+      </div>
+      <span class="sec-meta">5 PILLARS</span>
+    </div>
+
+    <div class="grid-3" style="margin-bottom:14px;">
+      <div class="pillar">
+        <div class="p-no">PILLAR 01 · DUAL-MODE NATIVE</div>
+        <h3>双模式原生形态，而非「一套壳子打补丁」</h3>
+        <p><b>普通问数（探索分析）</b>以靛蓝为识别色，围绕「关系图谱 + 业务规则 + 问数优化」运转；<b>口径问数（强管控）</b>以矿石青为识别色，围绕「文档绑定 + 口径四步流水线 + 选表目录 + 门禁发布」运转。顶栏、侧栏、概览、首次准备与发布台全部随模式原生变形。</p>
+      </div>
+      <div class="pillar teal">
+        <div class="p-no">PILLAR 02 · CO-PILOT TRANSPARENCY</div>
+        <h3>Agent 是透明协作者，不是黑盒也不是杂乱终端</h3>
+        <p>彻底禁止将内部编排 Prompt 渲染为用户气泡；将平台触发动作抽象为结构化<b>意图卡片</b>；将 20+ 工具调用折叠为 4 阶段里程碑；HITL 确认卡用人话和可视化结构表达（<code>N ── 1</code>），并在画布上以<b>幽灵连线（Ghost Edge）</b>直接呈现草稿提议，做到 Cursor 级别的就地审阅。</p>
+      </div>
+      <div class="pillar ink">
+        <div class="p-no">PILLAR 03 · SEMANTIC-FIRST GOVERNANCE</div>
+        <h3>只暴露语义对象，把 Git 与脚手架藏在后台</h3>
+        <p>业务与数据建模人员关心的是「模型、关系、规则、口径、视图」，而不是 <code>.gitkeep</code> 或 <code>AGENTS.md</code>。审阅单、侧栏草稿数与画布角标统一按「语义对象」单一数据源计数；工程源码留给「工程与快照」整页，不污染日常审阅。</p>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="pillar">
+        <div class="p-no">PILLAR 04 · ZERO-FRICTION FLOWS</div>
+        <h3>消除伪对话、弹窗套向导与竞争主按钮</h3>
+        <p>首次建模用纯结构化分步工作区（内联 Master-Detail 选字段 + 模式自适应准备清单），砍掉底部尴尬的命令输入框；任何屏幕永远只有 <b>1 个实心主按钮</b>，禁用态必带可点击修复原因；状态全部用 <code>6px 状态点 + 轻文字</code>，根治黄块泛滥。</p>
+      </div>
+      <div class="pillar teal">
+        <div class="p-no">PILLAR 05 · EVIDENCE &amp; CLOSED LOOP</div>
+        <h3>每条口径可溯源原文，每次问数可回流调优</h3>
+        <p>在口径核对页，右侧直接高亮《业务口径手册》原文段落，告别切屏对照；在端到端问数页，每条回答自带「已命中口径 / 引用规则 / 引擎路径」可信溯源条，管理员一键点击即可回流「问数优化」或「修正口径」，形成越用越准的飞轮。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       SECTION 02: INTERACTIVE 14-SCREEN PROTOTYPE STUDIO
+       ========================================================= -->
+  <section class="sec" id="s2">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <div>
+        <h2>全链路 14 屏交互式高保真原型（可切换双模式与各状态）</h2>
+        <p>点击顶部深色工具条切换「普通问数 / 口径问数」以及 14 个核心场景，点击蓝色条右侧子状态按钮可体验空态、运行态、确认态、阻断态等</p>
+      </div>
+      <span class="sec-meta">LIVE INTERACTIVE SIMULATOR</span>
+    </div>
+
+    <div class="studio-shell" id="studio" data-mode="NORMAL">
+      <!-- Window Bar -->
+      <div class="studio-bar">
+        <div class="studio-dots"><span></span><span></span><span></span></div>
+        <div class="mode-switch" role="group" aria-label="切换问数模式">
+          <button type="button" class="mode-btn active" data-mode="NORMAL" onclick="setMode('NORMAL')">
+            <span class="dot" style="background:#818CF8"></span>普通问数 · NORMAL（探索分析）
+          </button>
+          <button type="button" class="mode-btn" data-mode="CALIBER" onclick="setMode('CALIBER')">
+            <span class="dot" style="background:#5EEAD4"></span>口径问数 · CALIBER（强管控）
+          </button>
+        </div>
+        <div class="studio-url" id="studioUrl">localhost:5173/configure/datasets</div>
+      </div>
+
+      <!-- 14-Screen Selector Strip -->
+      <div class="screen-strip" id="screenStrip"></div>
+
+      <!-- Design Rationale & Sub-state Switcher -->
+      <div class="studio-note">
+        <div id="studioNoteText"></div>
+        <div class="sub-toggles" id="subToggles"></div>
+      </div>
+
+      <!-- Simulated 1440-class App Viewport -->
+      <div class="app-vp" id="appVp"></div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       SECTION 03: DESIGN SYSTEM & VISUAL TOKENS
+       ========================================================= -->
+  <section class="sec" id="s3">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <div>
+        <h2>设计系统：双模式视觉语法与 Agent 专属组件规范</h2>
+        <p>一套严格收敛的 Token，确保从列表到图谱、从对话到口径核对全部拥有一致的精致质感</p>
+      </div>
+      <span class="sec-meta">TOKENS &amp; PATTERNS</span>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:18px;">
+      <div class="panel">
+        <h3><span class="dot-sm" style="background:var(--indigo)"></span>普通问数 · Indigo</h3>
+        <div style="display:flex;gap:6px;margin:10px 0;">
+          <div style="flex:1;height:30px;border-radius:6px;background:#5046E5" title="#5046E5"></div>
+          <div style="flex:1;height:30px;border-radius:6px;background:#EEF2FF;border:1px solid var(--indigo-line)" title="#EEF2FF"></div>
+        </div>
+        <p><code>#5046E5</code> 主动作 / <code>#EEF2FF</code> 选中态。传达「灵活探索、智能推理」。</p>
+      </div>
+      <div class="panel">
+        <h3><span class="dot-sm" style="background:var(--teal)"></span>口径问数 · Mineral Teal</h3>
+        <div style="display:flex;gap:6px;margin:10px 0;">
+          <div style="flex:1;height:30px;border-radius:6px;background:#0D7A74" title="#0D7A74"></div>
+          <div style="flex:1;height:30px;border-radius:6px;background:#E8F7F6;border:1px solid var(--teal-line)" title="#E8F7F6"></div>
+        </div>
+        <p><code>#0D7A74</code> 主动作 / <code>#E8F7F6</code> 选中态。传达「权威口径、精确治理、可信审核」。</p>
+      </div>
+      <div class="panel">
+        <h3><span class="dot-sm dot-warn"></span>克制状态色（仅点+轻条）</h3>
+        <div style="display:flex;gap:6px;margin:10px 0;align-items:center;">
+          <span class="ui-pill ok"><i class="dot-sm dot-ok"></i>已就绪</span>
+          <span class="ui-pill warn"><i class="dot-sm dot-warn"></i>待处理</span>
+          <span class="ui-pill danger"><i class="dot-sm dot-danger"></i>阻断</span>
+        </div>
+        <p>严禁整块黄色/紫色状态背景卡；状态提示统一使用 <code>6px 圆点 + 左侧 2px 色条</code>。</p>
+      </div>
+      <div class="panel">
+        <h3><span class="dot-sm" style="background:var(--ink)"></span>字阶与空间节奏</h3>
+        <div style="margin:8px 0;font-size:12px;color:var(--ink-2);line-height:1.8;">
+          页面标题 <b>20–22px / 720</b> · 卡片头 <b>13.5px</b><br>
+          正文 <b>13px / 1.65</b> · 辅助 <b>12px</b> · 代码 <b>11.5px</b>
+        </div>
+        <p>间距严格遵守 <code>4 / 8 / 12 / 16 / 24</code> 五档，主区内容边距 <code>24px</code>。</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Agent 专属视觉原语（世界级 Agent 产品的核心细节）</h3>
+        <table class="spec-table" style="margin-top:10px;box-shadow:none;">
+          <thead><tr><th>组件</th><th>设计规则</th></tr></thead>
+          <tbody>
+            <tr><td><b>Intent Chip（意图胶囊）</b></td><td>替代原始系统 Prompt 气泡：单行淡色胶囊显示「图标 + 任务类型 + 业务对象」，技术 Prompt 默认隐藏，仅管理员在开发者模式可展开。</td></tr>
+            <tr><td><b>Milestone Rail（过程轨）</b></td><td>4 阶段（读取采样 → 推断结构 → 写入草稿 → 校验编译）+ 实时计时；连续相同动作自动聚合，隐藏底层 skill 挂载降级日志。</td></tr>
+            <tr><td><b>HITL Decision Card</b></td><td>左侧 3px 主题色条，顶部进度 <code>1/3</code> + 影响标签；严禁出现 <code>MANY_TO_ONE</code> 等代码枚举，必须用「多对一」+ 可视化 <code>N──1</code> 图示与行数采样证据。</td></tr>
+            <tr><td><b>Ghost Edge（画布幽灵连线）</b></td><td>Agent 提议的候选关系直接以虚线绘制在关系图上，悬浮或点击节点即可就地「✓ 采纳 / ✕ 忽略」，不打断空间思考。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h3>按钮四档铁律 &amp; 无障碍底线</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px;">
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--surface-sub);border-radius:9px;">
+            <button class="ui-btn pri" type="button">发布 v17</button>
+            <div><b style="font-size:12.5px">① 唯一主动作（Primary）</b><div style="font-size:12px;color:var(--muted)">整个视口严格 ≤ 1 个实心按钮，标明「现在唯一最该点的动作」。</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--surface-sub);border-radius:9px;">
+            <button class="ui-btn" type="button">模型检查</button>
+            <div><b style="font-size:12.5px">② 描边次动作（Secondary）</b><div style="font-size:12px;color:var(--muted)">白底 + 1px 轻边框，顶栏同排 ≤ 2 个。</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--surface-sub);border-radius:9px;">
+            <button class="ui-btn ghost" type="button">放弃全部草稿</button>
+            <div><b style="font-size:12.5px">③ 轻量三级（Ghost）</b><div style="font-size:12px;color:var(--muted)">无边框，用于次要查看、返回或危险前导入口。</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--surface-sub);border-radius:9px;">
+            <button class="ui-btn dis" type="button">发布 v1</button>
+            <div><b style="font-size:12.5px">④ 禁用必带可点原因（Disabled + Fix）</b><div style="font-size:12px;color:var(--danger)">旁侧必给内联跳转：「2 张表口径未完成 → 去处理」。</div></div>
+          </div>
+        </div>
+        <p style="margin-top:10px;font-size:12px;color:var(--muted);"><b>无障碍底线：</b>所有 Modal 与 Drawer（含创建知识库、口径发布检查）强制 <code>role="dialog"</code>、<code>aria-modal="true"</code>、焦点锁与 <code>Esc</code> 关闭。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       SECTION 04: INTERACTIVE RELEASE STATE MACHINE
+       ========================================================= -->
+  <section class="sec" id="s4">
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <div>
+        <h2>统一审阅与发布状态机（8 态交互式验证器）</h2>
+        <p>彻底终结「审阅草稿 / 完成口径 / 去问数 / 检查并发布 / 发布检查」五套混乱术语，并修复 <code>DraftBar.blocked</code> 逻辑缺口</p>
+      </div>
+      <span class="sec-meta">8 STATES · SINGLE TRUTH</span>
+    </div>
+
+    <div class="sm-grid">
+      <div class="sm-list" id="smList"></div>
+      <div class="panel" id="smPreview" style="display:flex;flex-direction:column;gap:16px;"></div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       SECTION 05: ENGINEERING HANDOFF ROADMAP
+       ========================================================= -->
+  <section class="sec" id="s5">
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <div>
+        <h2>前端工程落地图谱（F01–F36，直接对应仓库文件）</h2>
+        <p>按「止血（P0）→ 架构重塑（P1）→ 体验打磨（P2）」分 6 批派工，保留已落地的工程整页与事实表时间范围能力</p>
+      </div>
+      <span class="sec-meta">6 WAVES · 36 TICKETS</span>
+    </div>
+
+    <table class="spec-table" style="margin-bottom:20px;">
+      <thead>
+        <tr>
+          <th style="width:11%">批次</th>
+          <th style="width:11%">编号</th>
+          <th style="width:32%">核心改造内容</th>
+          <th style="width:24%">涉及源码文件</th>
+          <th style="width:22%">可量化验收标准</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="sev p0">Wave 1 · P0</span><br><small>Agent 止血</small></td>
+          <td><code>F01–F06</code></td>
+          <td>
+            • 编排 Prompt 彻底改为 <b>Intent Chip</b> 展示，禁止渲染原始指令气泡<br>
+            • 过滤 <code>.gitignore / .gitkeep / AGENTS.md</code> 不计入语义草稿数，折叠至工程尾栏<br>
+            • 确认卡枚举转人话（<code>多对一</code>+图示），隐藏冗余琥珀提醒条<br>
+            • 402/异常卡增加内联「重试」并折叠原始 JSON；修复 Chat 过程前言顺序
+          </td>
+          <td><code>ModelingChatPanel.tsx</code><br><code>DraftBar.tsx</code><br><code>draftChangeGroups.ts</code><br><code>ConfirmationCards.tsx</code><br><code>ChatPanel.tsx</code></td>
+          <td>边聊边核对中 <code>read_file</code> 出现次数 = 0；顶栏/画布/审阅单草稿数完全一致；错误卡 1 步可重试。</td>
+        </tr>
+        <tr>
+          <td><span class="sev p0">Wave 2 · P0</span><br><small>双模式骨架</small></td>
+          <td><code>F07–F13</code></td>
+          <td>
+            • 知识库工作台顶栏常驻模式徽标（<code>探索分析</code> vs <code>口径管控</code>），设置页只读展示模式<br>
+            • 侧栏按模式分组：CALIBER 主组「口径工坊」，辅助组折叠<br>
+            • 概览页双模式原生视图（CALIBER 展示口径进度与选表目录）<br>
+            • 合并口径双门禁为单一 Release Sheet，修复 <code>DraftBar.blocked</code>
+          </td>
+          <td><code>KnowledgeWorkspaceShell.tsx</code><br><code>KnowledgeWorkspaceOverview.tsx</code><br><code>KnowledgeWorkspaceSettings.tsx</code><br><code>releaseDecision.ts</code></td>
+          <td>CALIBER 概览直接展示口径表进度；点「发布检查」不再弹窗套抽屉；<code>DraftBar</code> 正确读取 <code>workflow.blockers</code>。</td>
+        </tr>
+        <tr>
+          <td><span class="sev p1">Wave 3 · P1</span><br><small>入口与引导</small></td>
+          <td><code>F14–F19</code></td>
+          <td>
+            • 创建弹窗加宽至 760px：顶部不可逆提示条 + 左右结构化对比卡 + 底部上下文按钮 + Esc 关闭<br>
+            • 列表页 3 列等宽卡片、新增「问数方式」筛选、合并状态行、「查看数据」直达 <code>datasets</code><br>
+            • 首次建模取消「弹窗套向导」与底部伪聊天框；Step 2 按模式差异化（口径库支持可视化文档绑定表）
+          </td>
+          <td><code>DatasetsPage.tsx</code><br><code>DatasetGroupPage.tsx</code><br><code>FieldScreeningReview.tsx</code><br><code>ModelingPreparation.tsx</code><br><code>SemanticModelingPage.tsx</code></td>
+          <td>1440 下卡片标题零截断；首次建模步骤中底部无禁用聊天框；口径文档可通过 UI 选择适用表。</td>
+        </tr>
+        <tr>
+          <td><span class="sev p1">Wave 4 · P1</span><br><small>语义建模工作台</small></td>
+          <td><code>F20–F26</code></td>
+          <td>
+            • 关系图删除中央黄卡与底黄条，对象目录默认展开 240px，支持画布幽灵连线就地采纳，修复 <code>FACT</code> 表标「维」与 <code>VARCHAR(1024)</code> 显示<br>
+            • 业务规则满态改「左分组清单 + 右原文详情」，去除截断与内部路线图措辞<br>
+            • 问数优化等高两栏，去除重复入口；公共视图抽屉锁 360px 且正文 ≥640px
+          </td>
+          <td><code>SemanticWorkbench.tsx</code><br><code>RelationsPanel.tsx</code><br><code>RulesWorkspace.tsx</code><br><code>QueryCoachPanel.tsx</code><br><code>SemanticAssetsPanel.tsx</code></td>
+          <td>整屏实心主按钮 = 1；大面积黄底 = 0；<code>订单</code>正确标为「事实」；抽屉展开时正文实测 ≥640px。</td>
+        </tr>
+        <tr>
+          <td><span class="sev p1">Wave 5 · P1</span><br><small>口径工坊升级</small></td>
+          <td><code>F27–F31</code></td>
+          <td>
+            • 口径总览：4 统计卡压成单行进度条、4 步画成连贯进度轨、全页唯一主按钮、去除表名重复两行与 <code>ds_</code> 提示<br>
+            • 口径核对：右侧增加可折叠「业务文档原文高亮溯源」抽屉 + 取值检查内联提示<br>
+            • 口径验证：双栏对比「口径要求 vs 编译 WHERE 条件」，隐藏 <code>caliber_name</code> 标签噪音
+          </td>
+          <td><code>CaliberOverview.tsx</code><br><code>CaliberReview.tsx</code><br><code>CaliberVerify.tsx</code><br><code>CaliberPublishDrawer.tsx</code></td>
+          <td>核对页无需切 tab 即可看到文档出处；验证页单屏完成条件对比与判定；键盘 <code>J/K/A</code> 全程可用。</td>
+        </tr>
+        <tr>
+          <td><span class="sev p2">Wave 6 · P2</span><br><small>阅读器与问数闭环</small></td>
+          <td><code>F32–F36</code></td>
+          <td>
+            • 工程文件列表「路径为主、文件名为次」；数据集预览列分组 + 横向滚动提示<br>
+            • 成员页空态容器收紧 ≤180px；设置页对「不适用」表置灰移除「设置范围」链接<br>
+            • Chat 问数：指定库进入时锁定本库推荐问题；回答底部新增「语义/口径溯源条」+ 管理员「调优此题」回流入口
+          </td>
+          <td><code>KnowledgeEngineeringPage.tsx</code><br><code>DatasetDetailPage.tsx</code><br><code>ChatPage.tsx</code><br><code>ChatPanel.tsx</code></td>
+          <td>工程列表不再 8 行全叫 <code>metadata.yml</code>；从指定库进入问数 100% 展示该库推荐题；问数可一键跳转问数优化/口径。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub-title">给研发/编码 Agent 的执行指令摘要</h3>
+    <pre class="handoff"><span class="c"># 执行红海 DataAgent 旗舰界面重构（F01–F36）</span>
+<span class="k">优先级顺序</span>：Wave 1 (Agent止血与Git噪音过滤) → Wave 2 (双模式顶栏/侧栏/概览/统一发布台) → Wave 3 (创建决策卡/列表/结构化首次建模) → Wave 4 (关系图/规则/问数优化/公共视图) → Wave 5 (口径溯源核对与验证) → Wave 6 (工程/详情/问数闭环)
+
+<span class="t">五条铁律（验收零容忍）</span>：
+1. 严禁将平台拼接的 orchestrator prompt 渲染为用户气泡（统一用 Intent Chip + label）。
+2. 严禁将 .gitkeep / .gitignore / AGENTS.md 计入业务草稿徽标或置顶于审阅清单。
+3. 严禁同屏出现超过 1 个实心主按钮，严禁使用大面积黄底作为状态提示卡。
+4. 严禁在首次建模的表单向导底部保留假聊天输入框或用弹窗嵌套在整页向导上。
+5. 保留已落地的工程整页与事实表时间范围能力，不重复造轮子；不单独新建「草稿与发布」一级菜单。</pre>
+  </section>
+</div>
+
+<script>
+const state = {
+  mode: 'NORMAL',
+  screen: 'list',
+  sub: {
+    chat: 'hitl',       // running | hitl | error | done
+    rules: 'populated', // empty | populated
+    caliber: 'review',  // overview | review | verify
+    review: 'normal',   // clean vs raw comparison
+  },
+  smIndex: 3,
+  caliberAuxOpen: false,
+  selectedRule: 0,
+  selectedCaliber: 2,
+  docEvidenceOpen: true,
+};
+
+const SCREENS = [
+  { id: 'list',      no: '01', name: '知识库列表',       url: '/configure/datasets' },
+  { id: 'create',    no: '02', name: '创建决策台',       url: '/configure/datasets?create=1' },
+  { id: 'overview',  no: '03', name: '工作台概览',       url: '/configure/datasets/{id}' },
+  { id: 'empty',     no: '04', name: '空库数据接入',     url: '/configure/datasets/{id}?section=datasets' },
+  { id: 'fields',    no: '05', name: '首次建模·整理字段', url: '/configure/datasets/{id}/modeling?step=fields' },
+  { id: 'prepare',   no: '06', name: '首次建模·准备清单', url: '/configure/datasets/{id}/modeling?step=prepare' },
+  { id: 'chat',      no: '07', name: '对话建模·Agent',   url: '/configure/datasets/{id}/modeling?mode=chat' },
+  { id: 'graph',     no: '08', name: '关系图画布',       url: '/configure/datasets/{id}/modeling?view=graph' },
+  { id: 'rules',     no: '09', name: '业务规则',         url: '/configure/datasets/{id}/modeling?view=rules' },
+  { id: 'coach',     no: '10', name: '问数优化',         url: '/configure/datasets/{id}/modeling?asset=coach' },
+  { id: 'views',     no: '11', name: '公共视图·边聊核对', url: '/configure/datasets/{id}/modeling?asset=assets' },
+  { id: 'caliber',   no: '12', name: '口径工坊',         url: '/configure/datasets/{id}/modeling?asset=calibers' },
+  { id: 'review',    no: '13', name: '统一审阅发布台',   url: '/configure/datasets/{id}/modeling?review=1' },
+  { id: 'ask',       no: '14', name: '问数溯源闭环',     url: '/chat?groups={id}' },
+];
+
+const NOTES = {
+  list: '3 列宽卡彻底消除标题截断；工具条一行收齐并新增「问数方式」筛选；每卡 ≤ 1 个模式徽标；「查看数据」直达数据集页；虚线创建卡一眼区分。',
+  create: '760px 决策弹窗：不可逆提示前置顶部；左右对比卡加入可视化引擎示意与 3 条硬边界；底部明确提示「将以 XX 模式创建」；支持 Esc 关闭。',
+  overview: '双模式原生概览！切换上方「普通问数 / 口径问数」可看到：口径模式直接呈现「口径四步总进度 + 选表目录」，彻底消除概览失忆。',
+  empty: '收拢 5 个竞争入口为「左侧大拖放区 + 右侧双通道卡片」，数据源连接状态压为顶部一行；导入历史按需展开。',
+  fields: '彻底取消「弹窗套向导」和底部伪聊天框！整页内联 Master-Detail：左表进度，右字段语义类型（文本/整数/日期）、事实/维度角色与 AI 推荐理由。',
+  prepare: '双模式自适应 Step 2！普通模式突出事实表时间窗口 + 可选文档；口径模式将「业务文档上传 + 可视化绑定适用表」升为核心引擎，告别手写「适用模型：xx」。',
+  chat: '世界级 Agent 协作体验：里程碑过程轨 + 意图胶囊（零 Prompt 泄漏）+ 人话版 N──1 确认卡 + 402 优雅内联重试 + 完成态直连画布 Diff。',
+  graph: '干掉画布中央大黄卡与卡片底黄条！对象目录默认展开（关联建议收进左栏）；候选关系以「幽灵虚线」直接画在画布上就地采纳；订单正确标为「事实」。',
+  rules: '空态教写法并折叠代码骨架；满态改「左 6 小节分组清单 + 右原文与影响详情」，修复截断与内部引擎路线图措辞。',
+  coach: '铺满主区的等高双栏工作区：左列「批量提问 → 优先级待处理队列 → SQL Dry-Plan 核对」，右列去重后的「问答示例库与首页推荐」。',
+  views: '正文锁定 ≥640px 清晰阅读，右侧 360px 独立上下文抽屉：仅加载本视图相关对话，平台动作渲染为意图胶囊，引用原文紧贴输入框。',
+  caliber: '口径工坊核心升级：总览改单行汇总 + 4 段进度轨 + 唯一主按钮；核对页新增右侧「文档原文高亮溯源」；验证页双栏对比「口径要求 vs 编译 WHERE」。',
+  review: '语义对象优先：彻底隐藏 .gitignore / .gitkeep / AGENTS.md 至工程尾栏；顶栏/画布/审阅单计数统一；口径模式合并为单一发布门禁台，零双重跳转！',
+  ask: '端到端问数闭环：从指定库进入锁定本库推荐问题；修复过程前言顺序；回答底部新增「语义/口径溯源条」+ 管理员一键「调优此题」回流建模。',
+};
+
+const SUB_CONFIG = {
+  chat: [
+    { k: 'running', label: '① 运行中·过程轨' },
+    { k: 'hitl',    label: '② HITL 关系确认卡' },
+    { k: 'error',   label: '③ 402 优雅错误恢复' },
+    { k: 'done',    label: '④ 完成态·画布联动' },
+  ],
+  rules: [
+    { k: 'populated', label: '满态·33条分组' },
+    { k: 'empty',     label: '空态·写法引导' },
+  ],
+  caliber: [
+    { k: 'overview', label: '总览·进度轨' },
+    { k: 'review',   label: '核对·原文溯源' },
+    { k: 'verify',   label: '验证·WHERE对照' },
+  ],
+};
+
+function setMode(m) {
+  state.mode = m;
+  document.getElementById('studio').setAttribute('data-mode', m);
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  render();
+}
+
+function setScreen(id) {
+  state.screen = id;
+  render();
+}
+
+function setSub(group, val) {
+  state.sub[group] = val;
+  render();
+}
+
+function kbName() {
+  return state.mode === 'NORMAL' ? '电商销售分析 · 演练库' : '视频业务口径 · 管控库';
+}
+
+function renderTopbar(activeKey) {
+  const isCal = state.mode === 'CALIBER';
+  const draftCount = isCal ? 2 : 5;
+  const verHtml = isCal
+    ? `<span class="ver-chip"><i class="dot-sm dot-warn"></i>尚未发布 · 2 项阻断</span>`
+    : `<span class="ver-chip"><i class="dot-sm dot-ok"></i>线上 v16</span>`;
+
+  let rightActs = '';
+  if (activeKey === 'fields' || activeKey === 'prepare') {
+    rightActs = `<button class="ui-btn ghost sm" onclick="setScreen('empty')">← 返回数据集</button>`;
+  } else if (activeKey === 'chat') {
+    rightActs = `
+      <button class="ui-btn sm" onclick="setScreen('${isCal ? 'caliber' : 'graph'}')">查看${isCal ? '口径' : '模型'}</button>
+      <button class="ui-btn pri sm" onclick="setScreen('review')">${isCal ? '发布检查 · 2 阻断' : '审阅草稿 · ' + draftCount + ' 项'}</button>`;
+  } else {
+    rightActs = `
+      ${!isCal ? `<button class="ui-btn sm" onclick="setScreen('review')"><i class="dot-sm dot-ok"></i>模型检查</button>` : ''}
+      <button class="ui-btn sm" onclick="setScreen('chat')">✦ 建模对话</button>
+      <button class="ui-btn pri sm" onclick="setScreen('review')">${isCal ? '发布检查 · 2 阻断' : '审阅草稿 · ' + draftCount + ' 项'}</button>
+      ${!isCal ? `<button class="ui-btn sm" onclick="setScreen('ask')">去问数 →</button>` : ''}`;
+  }
+
+  return `
+    <header class="app-topbar">
+      <div class="crumb">
+        <button class="ui-btn ghost sm" style="padding:0 6px" onclick="setScreen('list')">‹ 知识库</button>
+        <span style="opacity:.4">/</span>
+        <b>${kbName()}</b>
+        <span class="mode-chip"><i class="dot-sm dot-pri"></i>${isCal ? '口径管控 · Cube' : '探索分析 · SQL'}</span>
+        ${verHtml}
+      </div>
+      <div class="topbar-right">${rightActs}</div>
+    </header>`;
+}
+
+function renderSidebar(activeKey) {
+  const isCal = state.mode === 'CALIBER';
+  const item = (key, label, icon, cnt = '', dim = false) => `
+    <button class="sb-item ${activeKey === key ? 'active' : ''} ${dim ? 'dim' : ''}" onclick="setScreen('${key}')">
+      <span style="width:16px;text-align:center;opacity:${activeKey === key ? 1 : .65}">${icon}</span>
+      <span>${label}</span>
+      ${cnt !== '' ? `<span class="cnt">${cnt}</span>` : ''}
+    </button>`;
+
+  const semanticSection = isCal ? `
+    <div class="sb-group"><span>口径工坊</span><span class="sb-draft-tag">2 阻断</span></div>
+    ${item('caliber', '口径清单与验证', '☑', '2 表')}
+    ${item('prepare', '文档与表绑定', '◫', '1 篇')}
+    ${item('review', '工程与快照', '⟨⟩')}
+    <button class="sb-fold-btn" onclick="state.caliberAuxOpen=!state.caliberAuxOpen;render()">
+      <span>模型辅助（低频）</span><span>${state.caliberAuxOpen ? '▾' : '▸'}</span>
+    </button>
+    ${state.caliberAuxOpen ? `
+      ${item('graph', '关系图', '☍', '2', true)}
+      ${item('rules', '业务规则', '☰', '0', true)}
+      ${item('coach', '问数优化', '◈', '0', true)}
+      ${item('views', '公共视图', '◩', '0', true)}
+    ` : ''}
+  ` : `
+    <div class="sb-group"><span>语义模型</span><span class="sb-draft-tag">5 处草稿</span></div>
+    ${item('graph', '关系图', '☍', '4')}
+    ${item('rules', '业务规则', '☰', '33')}
+    ${item('coach', '问数优化', '◈', '2 待办')}
+    ${item('views', '公共视图', '◩', '3')}
+    ${item('prepare', '业务资料', '◫', '1')}
+    ${item('review', '工程与快照', '⟨⟩')}
+  `;
+
+  return `
+    <aside class="app-sidebar">
+      <div class="sb-group"><span>工作区</span></div>
+      ${item('overview', '概览', '◰')}
+      <div class="sb-group"><span>数据</span></div>
+      ${item('empty', '数据集', '▦', isCal ? '2' : '4')}
+      ${semanticSection}
+      <div class="sb-group"><span>协作与管理</span></div>
+      <button class="sb-item" onclick="setScreen('overview')"><span style="width:16px;text-align:center;opacity:.65">⚿</span><span>成员与权限</span><span class="cnt">3</span></button>
+      <button class="sb-item" onclick="setScreen('create')"><span style="width:16px;text-align:center;opacity:.65">⚙</span><span>设置 · 模式说明</span></button>
+    </aside>`;
+}
+
+function renderScreen() {
+  const s = state.screen;
+  const isCal = state.mode === 'CALIBER';
+
+  // 01: KB LIST
+  if (s === 'list') {
+    const cards = [
+      { name: '总部常规分析-本地复刻', mode: 'NORMAL', desc: '线上总部常规分析已发布 v15 的本地演练，含收入、会员与渠道 5 张核心表。', status: '已发布 v16 · 可管理', ok: true, meta: '5 个数据集 · bob · 11月22日', cta: '开始提问', target: 'ask' },
+      { name: '电商销售分析 · 演练库', mode: 'NORMAL', desc: '订单、订单明细、商品、客户四表星型模型，含 GMV、客单价、复购率规则。', status: '已发布 v7 · 5 处草稿', ok: true, meta: '4 个数据集 · admin · 11月28日', cta: '开始提问', target: 'ask' },
+      { name: '视频业务口径 · 管控库', mode: 'CALIBER', desc: '基于《视频口径手册.md》逐条审核的预聚合结果表，仅按核查口径取数。', status: '尚未发布 · 2 项阻断', ok: false, meta: '2 个数据集 · bob · 11月27日', cta: '继续完成口径', target: 'caliber' },
+      { name: '曜境零售-全渠道经营样板', mode: 'NORMAL', desc: '合成演示数据：覆盖收入、毛利、目标、区域、渠道与商品的经营看板。', status: '已发布 v1 · 可管理', ok: true, meta: '4 个数据集 · bob · 11月16日', cta: '开始提问', target: 'ask' },
+      { name: '财务月报口径 · 审计专库', mode: 'CALIBER', desc: '财报预统计汇总宽表，严格按审计口径清单经双人核对与验证后发布。', status: '已发布 v3 · 全部就绪', ok: true, meta: '3 个数据集 · bob · 11月20日', cta: '开始提问', target: 'ask' },
+    ];
+    return `
+      <div class="app-body" style="grid-template-columns:206px minmax(0,1fr)">
+        <aside class="app-sidebar" style="background:#F5F6FA;">
+          <div style="padding:4px 8px 14px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;">
+            <span style="width:24px;height:24px;border-radius:7px;background:var(--indigo);color:#fff;display:grid;place-items:center;font-size:12px;">红</span>红海 DataAgent
+          </div>
+          <button class="ui-btn" style="width:100%;justify-content:flex-start;margin-bottom:10px;" onclick="setScreen('ask')">✎ 新建对话</button>
+          <button class="sb-item active" onclick="setScreen('list')">▦ 知识库</button>
+          <button class="sb-item" onclick="setScreen('ask')">◔ 仪表盘</button>
+          <button class="sb-item" onclick="setScreen('empty')">◷ 例行任务</button>
+          <div style="margin:10px 8px;padding:8px 10px;border-radius:8px;background:#EEF2FF;font-size:11.5px;color:#4338CA;line-height:1.5;">
+            <b>IA 收敛：</b>移除全局冗余「语义模型」一级入口，建模统一归属知识库内。
+          </div>
+          <div class="sb-group"><span>最近会话</span></div>
+          <button class="sb-item dim" onclick="setScreen('ask')">2026-05 至 10 月净销售额</button>
+          <button class="sb-item dim" onclick="setScreen('ask')">各省咪咕视频会员排名</button>
+        </aside>
+        <div class="app-main">
+          <div class="pg-head">
+            <div><h1>知识库</h1><p>管理业务数据与语义口径，选择知识库开始问数</p></div>
+            <div class="pg-acts">
+              <button class="ui-btn">数据源管理</button>
+              <button class="ui-btn pri" onclick="setScreen('create')">＋ 创建知识库</button>
+            </div>
+          </div>
+          <div style="padding:0 24px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div class="ui-input" style="width:240px;color:var(--faint)">⌕ 搜索知识库名称或说明…</div>
+            <div style="display:flex;background:#fff;border:1px solid var(--border);padding:2px;border-radius:8px;font-size:12px;">
+              <span style="padding:4px 10px;border-radius:6px;background:var(--indigo-soft);color:var(--indigo);font-weight:650;">全部 5</span>
+              <span style="padding:4px 10px;color:var(--muted);">可管理 5</span>
+              <span style="padding:4px 10px;color:var(--faint);">仅使用 0</span>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:6px;">
+              <button class="ui-btn sm">方式 · 全部 ▾</button>
+              <button class="ui-btn sm">状态 · 全部 ▾</button>
+              <button class="ui-btn sm">最近创建 ▾</button>
+            </div>
+          </div>
+          <div style="padding:4px 24px 24px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;">
+            ${cards.map(c => `
+              <div class="ui-card" style="padding:16px;display:flex;flex-direction:column;gap:10px;cursor:pointer;" onclick="setMode('${c.mode}');setScreen('overview')">
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                  <div style="width:32px;height:32px;border-radius:9px;flex:none;display:grid;place-items:center;font-weight:700;font-size:14px;background:${c.mode==='CALIBER'?'var(--teal-soft)':'var(--indigo-soft)'};color:${c.mode==='CALIBER'?'var(--teal)':'var(--indigo)'}">${c.mode==='CALIBER'?'☑':'☍'}</div>
+                  <div style="min-width:0;flex:1;">
+                    <div style="font-size:14px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+                    <div style="font-size:11.5px;color:${c.ok?'var(--muted)':'var(--danger)'};display:flex;align-items:center;gap:5px;margin-top:2px;">
+                      <i class="dot-sm ${c.ok?'dot-ok':'dot-danger'}"></i>${c.status}
+                    </div>
+                  </div>
+                  ${c.mode==='CALIBER' ? `<span class="ui-pill" style="background:var(--teal-soft);color:var(--teal);">口径问数</span>` : ''}
+                </div>
+                <div style="font-size:12.5px;color:var(--ink-2);line-height:1.6;flex:1;">${c.desc}</div>
+                <div style="font-size:11.5px;color:var(--faint);">${c.meta}</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid var(--border);">
+                  <button class="ui-btn ghost sm" onclick="event.stopPropagation();setMode('${c.mode}');setScreen('empty')">查看数据集 ›</button>
+                  <button class="ui-btn sm" style="color:${c.mode==='CALIBER'?'var(--teal)':'var(--indigo)'};border-color:${c.mode==='CALIBER'?'var(--teal-line)':'var(--indigo-line)'}" onclick="event.stopPropagation();setMode('${c.mode}');setScreen('${c.target}')">${c.cta}</button>
+                </div>
+              </div>
+            `).join('')}
+            <button onclick="setScreen('create')" style="border:1.5px dashed var(--border-strong);border-radius:12px;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:190px;color:var(--muted);">
+              <span style="width:36px;height:36px;border-radius:50%;background:#fff;border:1px solid var(--border);display:grid;place-items:center;font-size:18px;color:var(--indigo);">＋</span>
+              <b style="font-size:13.5px;color:var(--ink);">创建知识库</b>
+              <span style="font-size:12px;">上传 Excel / CSV 或关联数据库</span>
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // 02: CREATE DECISION MODAL
+  if (s === 'create') {
+    return `
+      ${renderTopbar('overview')}
+      <div class="app-body">
+        ${renderSidebar('overview')}
+        <div class="app-main" style="background:#EAECF2;">
+          <div class="sim-modal-bg">
+            <div class="sim-modal" style="width:760px;">
+              <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                  <div style="font-size:17px;font-weight:720;">创建知识库</div>
+                  <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">根据你的数据形态选择问数引擎</div>
+                </div>
+                <button class="ui-btn ghost sm" onclick="setScreen('list')" title="支持 Esc 关闭">✕</button>
+              </div>
+              <div style="margin:14px 24px 0;padding:9px 12px;border-radius:8px;background:var(--surface-sub);border-left:3px solid var(--warn-dot);font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:8px;">
+                <i class="dot-sm dot-warn"></i><span><b>重要：</b>问数方式决定底层语义编译与取数边界，<b>创建后不可切换</b>。不确定怎么选？明细多表选「普通问数」，月报/结果汇总表选「口径问数」。</span>
+              </div>
+              <div style="padding:16px 24px;display:flex;flex-direction:column;gap:14px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                  <div>
+                    <div style="font-size:12px;font-weight:650;color:var(--ink-2);margin-bottom:5px;">知识库名称 <span style="color:var(--danger)">*</span></div>
+                    <div class="ui-input">${isCal ? '视频业务口径-2026' : '电商销售分析-2026'}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:12px;font-weight:650;color:var(--ink-2);margin-bottom:5px;">业务说明（选填）</div>
+                    <div class="ui-input" style="color:var(--muted)">用于销售复盘与指标下钻分析…</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="font-size:12px;font-weight:650;color:var(--ink-2);margin-bottom:8px;">选择问数方式 <span style="color:var(--danger)">*</span></div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                    <!-- NORMAL card -->
+                    <div onclick="setMode('NORMAL')" style="cursor:pointer;border:${!isCal?'1.5px solid var(--indigo)':'1px solid var(--border-strong)'};background:${!isCal?'#F8F9FF':'#fff'};border-radius:12px;padding:15px;box-shadow:${!isCal?'inset 3.5px 0 0 var(--indigo)':'none'};">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <b style="font-size:14.5px;color:${!isCal?'var(--indigo)':'var(--ink)'}">☍ 普通问数（探索分析）</b>
+                        <span style="width:18px;height:18px;border-radius:50%;border:1.5px solid ${!isCal?'var(--indigo)':'var(--border-strong)'};background:${!isCal?'var(--indigo)':'transparent'};color:#fff;display:grid;place-items:center;font-size:11px;">${!isCal?'✓':''}</span>
+                      </div>
+                      <div style="margin:10px 0;padding:8px 10px;border-radius:8px;background:#fff;border:1px solid var(--border);font:500 11px/1.5 var(--mono);color:var(--indigo);display:flex;align-items:center;justify-content:space-between;">
+                        <span>订单 ── 客户 / 商品</span><span>→ 灵活 SQL</span>
+                      </div>
+                      <p style="margin:0 0 10px;font-size:12px;color:var(--ink-2);">适合<b>业务明细表</b>与多表关联探索，支持自由追问、下钻与复杂分析。</p>
+                      <div style="font-size:11.8px;color:var(--muted);line-height:1.85;border-top:1px solid var(--border);padding-top:8px;">
+                        ✓ 支持跨表 JOIN、窗口计算与自由追问<br>
+                        ✓ 主工作台：关系图 + 业务规则 + 问数优化<br>
+                        ✓ 发布门槛低，建模后即可快速试问
+                      </div>
+                    </div>
+                    <!-- CALIBER card -->
+                    <div onclick="setMode('CALIBER')" style="cursor:pointer;border:${isCal?'1.5px solid var(--teal)':'1px solid var(--border-strong)'};background:${isCal?'#F3FBFA':'#fff'};border-radius:12px;padding:15px;box-shadow:${isCal?'inset 3.5px 0 0 var(--teal)':'none'};">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <b style="font-size:14.5px;color:${isCal?'var(--teal)':'var(--ink)'}">☑ 口径问数（强管控）</b>
+                        <span style="width:18px;height:18px;border-radius:50%;border:1.5px solid ${isCal?'var(--teal)':'var(--border-strong)'};background:${isCal?'var(--teal)':'transparent'};color:#fff;display:grid;place-items:center;font-size:11px;">${isCal?'✓':''}</span>
+                      </div>
+                      <div style="margin:10px 0;padding:8px 10px;border-radius:8px;background:#fff;border:1px solid var(--border);font:500 11px/1.5 var(--mono);color:var(--teal);display:flex;align-items:center;justify-content:space-between;">
+                        <span>业务文档 → 口径清单</span><span>→ 认证 Cube</span>
+                      </div>
+                      <p style="margin:0 0 10px;font-size:12px;color:var(--ink-2);">适合<b>预聚合结果表 / 月报汇总表</b>，要求 100% 严守审批口径、拒绝随意拼凑 SQL。</p>
+                      <div style="font-size:11.8px;color:var(--muted);line-height:1.85;border-top:1px solid var(--border);padding-top:8px;">
+                        ✓ 问数仅走核查过的 Cube，杜绝口径算错<br>
+                        ✓ 主工作台：起草 → 逐条核对 → 无执行验证<br>
+                        ! 硬门禁：每张表口径全部通过验证才可发布
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="padding:14px 24px;background:var(--surface-sub);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:12.5px;color:var(--muted);">将以 <b style="color:var(--pri)">${isCal?'口径问数（强管控）':'普通问数（探索分析）'}</b> 模式创建</span>
+                <div style="display:flex;gap:8px;">
+                  <button class="ui-btn" onclick="setScreen('list')">取消</button>
+                  <button class="ui-btn pri" onclick="setScreen('empty')">创建并添加数据 →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // 03: OVERVIEW (Mode-Native!)
+  if (s === 'overview') {
+    const body = isCal ? `
+      <div class="health-strip">
+        <span style="display:inline-flex;align-items:center;gap:6px;"><i class="dot-sm dot-ok"></i><b>数据已就绪</b> · 2 张结果表</span>
+        <span class="health-sep"></span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><i class="dot-sm dot-warn"></i><b>口径未完成</b> · 1 张缺文档，1 张待核对</span>
+        <span class="health-sep"></span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><i class="dot-sm dot-danger"></i><b>尚未发布</b> · 问数待启用</span>
+        <button class="ui-btn pri sm" style="margin-left:auto" onclick="setScreen('caliber')">继续完成口径 →</button>
+      </div>
+      <div style="padding:0 24px 24px;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;flex:1;">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="ui-card">
+            <div class="ui-card-head"><h3>口径完成进度（2 张表）</h3><div class="r"><button class="ui-btn ghost sm" onclick="setScreen('caliber')">进入口径工坊 ›</button></div></div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+                <i class="dot-sm dot-pri"></i>
+                <div style="flex:1;"><b>视频</b> <span style="font-size:12px;color:var(--muted)">· 已绑定《视频口径手册.md》</span>
+                  <div style="font-size:11.5px;color:var(--teal);margin-top:2px;">起草完成 → 核对 3/8 → 验证 0/8</div>
+                </div>
+                <button class="ui-btn sm" onclick="setSub('caliber','review');setScreen('caliber')">去核对</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+                <i class="dot-sm dot-danger"></i>
+                <div style="flex:1;"><b>用户</b> <span style="font-size:12px;color:var(--danger)">· 缺业务文档（阻断发布）</span>
+                  <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">上传并绑定文档后，助手自动排队起草口径清单</div>
+                </div>
+                <button class="ui-btn sm" onclick="setScreen('prepare')">绑定文档</button>
+              </div>
+            </div>
+          </div>
+          <div class="ui-card">
+            <div class="ui-card-head"><h3>选表目录预览（业务 × 统计对象）</h3><div class="r"><span class="ui-pill">发布后生效</span></div></div>
+            <table class="spec-table" style="border:0;border-radius:0;box-shadow:none;">
+              <thead><tr><th>数据表</th><th>业务域</th><th>统计对象</th><th>默认指标</th><th>时间粒度</th></tr></thead>
+              <tbody>
+                <tr><td><b>视频</b></td><td>咪咕视频</td><td>内容播放表现</td><td>播放次数</td><td>按月</td></tr>
+                <tr><td><b>用户</b></td><td style="color:var(--faint)">待绑定文档</td><td style="color:var(--faint)">—</td><td style="color:var(--faint)">—</td><td style="color:var(--faint)">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="ui-card" style="padding:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <b style="font-size:13.5px;">发布门禁状态</b>
+              <span class="ui-pill danger">2 项阻断</span>
+            </div>
+            <div style="font-size:12.5px;color:var(--ink-2);line-height:1.7;">
+              口径问数要求全部表完成「起草 → 核对 → 验证」。当前还有 2 项阻断未解除。
+            </div>
+            <button class="ui-btn sm" style="margin-top:12px;width:100%;" onclick="setScreen('review')">打开统一发布检查台</button>
+          </div>
+          <div class="ui-card" style="padding:16px;">
+            <b style="font-size:13.5px;display:block;margin-bottom:8px;">知识库配置</b>
+            <div style="font-size:12px;color:var(--muted);line-height:2;">
+              问数引擎：<b style="color:var(--teal)">口径问数（Cube Only）</b><br>
+              业务文档：1 篇已绑定 · 1 表待绑<br>
+              成员与权限：bob（管理）· 共 3 人
+            </div>
+          </div>
+        </div>
+      </div>` : `
+      <div class="health-strip">
+        <span style="display:inline-flex;align-items:center;gap:6px;"><i class="dot-sm dot-ok"></i><b>数据已就绪</b> · 4 张表 / 27 字段</span>
+        <span class="health-sep"></span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><i class="dot-sm dot-pri"></i><b>语义草稿</b> · 5 处语义改动待审阅</span>
+        <span class="health-sep"></span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><i class="dot-sm dot-ok"></i><b>问数已启用</b> · 线上 v16</span>
+        <button class="ui-btn ghost sm" style="margin-left:auto" onclick="setScreen('review')">查看变更 ›</button>
+      </div>
+      <div style="padding:0 24px 24px;display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:16px;flex:1;">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="ui-card">
+            <div class="ui-card-head"><h3>数据集与语义覆盖（4）</h3><div class="r"><button class="ui-btn ghost sm" onclick="setScreen('empty')">查看全部 ›</button></div></div>
+            <table class="spec-table" style="border:0;border-radius:0;box-shadow:none;">
+              <thead><tr><th>数据表</th><th>表角色</th><th>字段</th><th>说明覆盖</th><th>关系</th></tr></thead>
+              <tbody>
+                <tr><td><b>订单</b></td><td><span class="ui-pill pri">事实表</span></td><td>6</td><td><span style="color:var(--ok)">6/6 已覆盖</span></td><td>2 条关联</td></tr>
+                <tr><td><b>订单明细</b></td><td><span class="ui-pill pri">事实表</span></td><td>7</td><td><span style="color:var(--ok)">7/7 已覆盖</span></td><td>2 条关联</td></tr>
+                <tr><td><b>客户</b></td><td><span class="ui-pill">维度表</span></td><td>7</td><td><span style="color:var(--ok)">7/7 已覆盖</span></td><td>1 条关联</td></tr>
+                <tr><td><b>商品</b></td><td><span class="ui-pill">维度表</span></td><td>7</td><td><span style="color:var(--warn)">5/7 缺 2 项</span></td><td>1 条关联</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="ui-card">
+            <div class="ui-card-head"><h3>最近语义动态（过滤底层 Git 噪音）</h3><div class="r"><span class="ui-pill pri">5 处未发布</span></div></div>
+            <div style="padding:6px 16px;">
+              <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
+                <i class="dot-sm dot-pri"></i><span style="flex:1"><b>关系提议</b>：订单明细.product_id → 商品.product_id（多对一）</span><span class="ui-pill warn">待确认</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
+                <i class="dot-sm dot-pri"></i><span style="flex:1"><b>业务规则</b>：新增「GMV / 客单价 / 复购率」3 条指标口径</span><span class="ui-pill pri">草稿</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:9px 0;font-size:12.5px;">
+                <i class="dot-sm dot-ok"></i><span style="flex:1"><b>线上发布</b>：v16 已发布（14 条问答示例生效中）</span><span style="color:var(--faint)">11月25日</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="ui-card" style="padding:16px;">
+            <b style="font-size:13.5px;">语义资产概览</b>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+              <div onclick="setScreen('rules')" style="cursor:pointer;padding:10px;border-radius:8px;background:var(--surface-sub);"><b style="font-size:18px;display:block">33</b><span style="font-size:11.5px;color:var(--muted)">业务规则</span></div>
+              <div onclick="setScreen('views')" style="cursor:pointer;padding:10px;border-radius:8px;background:var(--surface-sub);"><b style="font-size:18px;display:block">3</b><span style="font-size:11.5px;color:var(--muted)">公共视图</span></div>
+              <div onclick="setScreen('coach')" style="cursor:pointer;padding:10px;border-radius:8px;background:var(--surface-sub);"><b style="font-size:18px;display:block">14</b><span style="font-size:11.5px;color:var(--muted)">已验证问答</span></div>
+              <div onclick="setScreen('chat')" style="cursor:pointer;padding:10px;border-radius:8px;background:var(--warn-soft);"><b style="font-size:18px;display:block;color:var(--warn)">3</b><span style="font-size:11.5px;color:var(--warn)">待确认项</span></div>
+            </div>
+          </div>
+          <div class="ui-card" style="padding:16px;">
+            <b style="font-size:13.5px;display:block;margin-bottom:8px;">连接与协作</b>
+            <div style="font-size:12px;color:var(--muted);line-height:2;">
+              数据源：本地上传（4 张表）<br>
+              问数引擎：<b style="color:var(--indigo)">普通问数（SQL + 语义层）</b><br>
+              创建者：admin · 成员 3 人
+            </div>
+          </div>
+        </div>
+      </div>`;
+    return `${renderTopbar('overview')}<div class="app-body">${renderSidebar('overview')}<div class="app-main">
+      <div class="pg-head"><div><h1>概览</h1><p>${isCal?'按业务文档逐表核对并验证口径，全部通过后发布上线':'管理数据集、语义关系、业务规则与已发布版本'}</p></div>
+      <div class="pg-acts"><button class="ui-btn ghost sm">复制链接</button><button class="ui-btn sm" onclick="setScreen('review')">查看审阅单</button></div></div>
+      ${body}
+    </div></div>`;
+  }
+
+  // 04: EMPTY DATA INTAKE
+  if (s === 'empty') {
+    return `${renderTopbar('empty')}<div class="app-body">${renderSidebar('empty')}<div class="app-main">
+      <div class="pg-head"><div><h1>数据集</h1><p>共 0 个数据集 · 先接入业务数据，系统将自动识别字段与表角色</p></div>
+      <div class="pg-acts"><button class="ui-btn ghost sm">导入记录</button><button class="ui-btn sm">数据源管理</button></div></div>
+      <div class="health-strip" style="margin-bottom:16px;">
+        <i class="dot-sm dot-muted"></i><span><b>数据源连接</b> · 尚未关联外部数据库</span>
+        <span style="color:var(--muted);font-size:12px;margin-left:auto;">保留原始数据在库中，按需同步结构</span>
+        <button class="ui-btn sm">关联数据源</button>
+      </div>
+      <div style="padding:0 24px 24px;display:grid;grid-template-columns:1.25fr 1fr;gap:16px;flex:1;">
+        <div style="border:1.5px dashed var(--pri-line);border-radius:16px;background:linear-gradient(180deg,#fff,var(--surface-sub));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:30px;text-align:center;">
+          <div style="width:48px;height:48px;border-radius:14px;background:var(--pri-soft);color:var(--pri);display:grid;place-items:center;font-size:22px;">↑</div>
+          <b style="font-size:16px;">将 Excel 或 CSV 拖到这里</b>
+          <span style="font-size:12.5px;color:var(--muted);max-width:300px;">支持 .xlsx / .xls / .csv · 多工作表自动识别 · 单文件最大 50 MB</span>
+          <button class="ui-btn pri" onclick="setScreen('fields')">选择本地文件上传</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div class="ui-card" style="padding:18px;flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;"><b>关联已有数据库表</b><button class="ui-btn sm">去关联 ›</button></div>
+            <p style="margin:0;font-size:12.5px;color:var(--muted);">直连 MySQL / StarRocks / PostgreSQL，直接拉取表结构与采样，无需重复搬运数据。</p>
+          </div>
+          <div class="ui-card" style="padding:18px;flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;"><b>没有现成数据？用内置样板</b><button class="ui-btn sm" onclick="setScreen('fields')">载入电商样板</button></div>
+            <p style="margin:0;font-size:12.5px;color:var(--muted);">一键加载「订单 / 订单明细 / 商品 / 客户」4 张测试表，3 分钟走通全流程。</p>
+          </div>
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  // 05: SETUP STEP 1 - INLINE FIELD SCREENING (NO MODAL OVER WIZARD, NO FAKE CHAT!)
+  if (s === 'fields') {
+    const rows = [
+      { col: 'order_id', type: '整数 · 主键', role: '关联键', samples: ['10001','10002','+1498'], desc: '订单唯一编号' },
+      { col: 'customer_id', type: '整数 · 外键', role: '关联客户', samples: ['1','2','+198'], desc: '下单客户 ID，关联「客户」表' },
+      { col: 'order_date', type: '日期', role: '时间列', samples: ['2025-01-04','2025-08-19'], desc: '订单下单日期（按日粒度）' },
+      { col: 'status', type: '分类文本', role: '过滤维', samples: ['已完成','已取消','待付款'], desc: '订单履约状态，统计销售额默认排除已取消' },
+      { col: 'pay_method', type: '分类文本', role: '分析维', samples: ['微信','支付宝','银行卡'], desc: '支付渠道方式' },
+      { col: 'channel', type: '分类文本', role: '分析维', samples: ['线上商城','直播带货','+2'], desc: '订单成交渠道' },
+    ];
+    return `${renderTopbar('fields')}<div class="app-body" style="grid-template-columns:230px minmax(0,1fr)">
+      <aside class="app-sidebar" style="padding:20px 14px;gap:14px;">
+        <div style="font-size:13px;font-weight:720;padding:0 6px;">首次建模引导</div>
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:8px;border-radius:10px;background:var(--pri-soft);">
+          <span style="width:22px;height:22px;border-radius:50%;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:11.5px;font-weight:700;flex:none;">1</span>
+          <div><b style="font-size:12.5px;color:var(--pri)">整理建模字段</b><div style="font-size:11.5px;color:var(--muted)">内联勾选字段与业务含义</div></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:8px;opacity:.6;cursor:pointer" onclick="setScreen('prepare')">
+          <span style="width:22px;height:22px;border-radius:50%;background:var(--surface-hover);color:var(--muted);display:grid;place-items:center;font-size:11.5px;font-weight:700;flex:none;">2</span>
+          <div><b style="font-size:12.5px;">${isCal?'绑定业务文档':'准备时间范围与资料'}</b><div style="font-size:11.5px;color:var(--muted)">${isCal?'决定口径起草依据':'事实表查询边界'}</div></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:8px;opacity:.6;cursor:pointer" onclick="setScreen('chat')">
+          <span style="width:22px;height:22px;border-radius:50%;background:var(--surface-hover);color:var(--muted);display:grid;place-items:center;font-size:11.5px;font-weight:700;flex:none;">3</span>
+          <div><b style="font-size:12.5px;">AI 自动建模</b><div style="font-size:11.5px;color:var(--muted)">生成草稿并进入核对</div></div>
+        </div>
+        <div style="margin-top:auto;padding:12px;border-radius:10px;background:#fff;border:1px solid var(--border);font-size:12px;color:var(--ink-2);">
+          <b>设计改进：</b>砍掉弹窗套向导与底部禁用聊天框，字段整理直接在工作区一气呵成。
+        </div>
+      </aside>
+      <div class="app-main" style="padding:18px 24px;display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div><h1 style="margin:0;font-size:19px;font-weight:720;">确认建模字段</h1><p style="margin:3px 0 0;font-size:12.5px;color:var(--muted);">AI 已基于 200 行采样预填说明与推荐勾选项，点文字可直接改写</p></div>
+          <div style="display:flex;gap:8px;">
+            <button class="ui-btn sm">按 AI 建议全选</button>
+            <button class="ui-btn pri" onclick="setScreen('prepare')">确认全部 4 张表，下一步 →</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;flex:1;min-height:0;">
+          <div class="ui-card" style="padding:10px;display:flex;flex-direction:column;gap:4px;">
+            <div style="font-size:11px;font-weight:650;color:var(--faint);padding:4px 8px;">数据表（1 / 4 已核对）</div>
+            <div style="padding:9px 10px;border-radius:8px;background:var(--pri-soft);color:var(--pri);font-weight:650;font-size:12.5px;display:flex;justify-content:space-between;"><span>订单 · 事实表</span><span>6/6</span></div>
+            <div style="padding:9px 10px;border-radius:8px;font-size:12.5px;display:flex;justify-content:space-between;color:var(--ink-2);"><span>订单明细 · 事实</span><span style="color:var(--muted)">7/7</span></div>
+            <div style="padding:9px 10px;border-radius:8px;font-size:12.5px;display:flex;justify-content:space-between;color:var(--ink-2);"><span>商品 · 维度</span><span style="color:var(--muted)">7/7</span></div>
+            <div style="padding:9px 10px;border-radius:8px;font-size:12.5px;display:flex;justify-content:space-between;color:var(--ok);"><span>✓ 客户 · 维度</span><span>7/7</span></div>
+          </div>
+          <div class="ui-card" style="display:flex;flex-direction:column;overflow:hidden;">
+            <div class="ui-card-head"><h3>订单</h3><span class="ui-pill pri">事实表</span><span style="font-size:12px;color:var(--muted)">1,500 行 · 采样 200 行</span><div class="r"><span class="ui-pill ok">语义类型已转译</span></div></div>
+            <table class="spec-table" style="border:0;border-radius:0;box-shadow:none;">
+              <thead><tr><th style="width:36px"></th><th style="width:170px">字段与语义类型</th><th style="width:170px">样例值</th><th>业务说明（点开即改）</th></tr></thead>
+              <tbody>
+                ${rows.map(r => `
+                  <tr>
+                    <td><span style="display:inline-grid;place-items:center;width:16px;height:16px;border-radius:4px;background:var(--pri);color:#fff;font-size:10px;">✓</span></td>
+                    <td><b>${r.col}</b> <span class="ui-pill" style="height:18px;font-size:10px;">${r.role}</span><div style="font-size:11px;color:var(--faint)">${r.type}</div></td>
+                    <td>${r.samples.map(v=>`<span style="display:inline-block;padding:1px 6px;margin:0 3px 2px 0;border-radius:4px;background:var(--surface-sub);font-size:11px;">${v}</span>`).join('')}</td>
+                    <td style="color:var(--ink-2)">${r.desc}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // 06: SETUP STEP 2 - MODE-ADAPTIVE PREPARATION (Visual Doc-to-Table Binding!)
+  if (s === 'prepare') {
+    return `${renderTopbar('prepare')}<div class="app-body" style="grid-template-columns:230px minmax(0,1fr)">
+      <aside class="app-sidebar" style="padding:20px 14px;gap:14px;">
+        <div style="font-size:13px;font-weight:720;padding:0 6px;">首次建模引导</div>
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:8px;cursor:pointer" onclick="setScreen('fields')">
+          <span style="width:22px;height:22px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;font-size:11.5px;font-weight:700;flex:none;">✓</span>
+          <div><b style="font-size:12.5px;">整理建模字段</b><div style="font-size:11.5px;color:var(--ok)">已完成 · 27 个字段</div></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:8px;border-radius:10px;background:var(--pri-soft);">
+          <span style="width:22px;height:22px;border-radius:50%;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:11.5px;font-weight:700;flex:none;">2</span>
+          <div><b style="font-size:12.5px;color:var(--pri)">${isCal?'绑定业务文档':'准备时间范围与资料'}</b><div style="font-size:11.5px;color:var(--muted)">${isCal?'口径问数核心步骤':'事实表查询保护'}</div></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:8px;opacity:.6;">
+          <span style="width:22px;height:22px;border-radius:50%;background:var(--surface-hover);color:var(--muted);display:grid;place-items:center;font-size:11.5px;font-weight:700;flex:none;">3</span>
+          <div><b style="font-size:12.5px;">AI 自动建模</b><div style="font-size:11.5px;color:var(--muted)">${isCal?'生成模型并排队起草口径':'生成模型、关系与规则'}</div></div>
+        </div>
+      </aside>
+      <div class="app-main" style="padding:20px 26px;display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <h1 style="margin:0;font-size:19px;font-weight:720;">${isCal?'上传并绑定业务口径文档':'准备查询范围与业务资料'}</h1>
+            <p style="margin:3px 0 0;font-size:12.5px;color:var(--muted);">${isCal?'可视化选择每份文档对应的目标表，无需在文档里手写「适用模型：xx」':'核对事实表时间保护策略，业务文档可随时补充'}</p>
+          </div>
+          <button class="ui-btn pri" onclick="setScreen('chat')">✦ ${isCal?'开始建模并起草口径':'开始 AI 自动建模'}</button>
+        </div>
+
+        ${isCal ? `
+          <div class="ui-card" style="padding:18px;border-left:3.5px solid var(--teal);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div><b style="font-size:14px;">业务口径文档（口径问数核心依据）</b><div style="font-size:12px;color:var(--muted)">支持 .md / .docx / .pdf，上传后直接勾选关联的数据表</div></div>
+              <button class="ui-btn sm">＋ 上传新文档</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:12px;">
+                <span style="font-size:18px;">📄</span>
+                <div style="flex:1;">
+                  <b>视频口径手册.md</b> <span style="font-size:11.5px;color:var(--muted)">· 4.2 KB · 识别出 8 条指标口径</span>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+                    <span style="font-size:11.5px;color:var(--muted)">已绑定适用表：</span>
+                    <span class="ui-pill pri">☑ 视频 ×</span>
+                    <button class="ui-btn ghost sm" style="height:22px;font-size:11px;">＋ 绑定更多表</button>
+                  </div>
+                </div>
+                <span class="ui-pill ok">可自动起草</span>
+              </div>
+              <div style="padding:12px 14px;border:1px dashed var(--warn-dot);background:var(--warn-soft);border-radius:10px;display:flex;align-items:center;justify-content:space-between;">
+                <div style="font-size:12.5px;color:var(--warn);"><i class="dot-sm dot-warn" style="margin-right:6px;"></i><b>「用户」表尚未绑定业务文档</b> · 若现在开始，该表将暂缓起草，稍后可在口径工坊补传。</div>
+                <button class="ui-btn sm">上传用户口径文档</button>
+              </div>
+            </div>
+          </div>
+        ` : `
+          <div class="ui-card" style="padding:18px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div><b style="font-size:14px;">事实表查询时间范围保护</b><div style="font-size:12px;color:var(--muted)">防止大表全量扫描；小体量本地上传表默认「不限制」</div></div>
+              <span class="ui-pill ok">自动检测完成</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div style="padding:12px;border:1px solid var(--border);border-radius:10px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><b>订单 · 事实表</b><code style="font-size:11.5px;color:var(--indigo)">order_date</code></div>
+                <div style="display:flex;gap:5px;">
+                  <button class="ui-btn sm">7天</button><button class="ui-btn sm">31天</button><button class="ui-btn sm">90天</button>
+                  <button class="ui-btn sm pri">不限制</button>
+                </div>
+              </div>
+              <div style="padding:12px;border:1px solid var(--border);border-radius:10px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><b>订单明细 · 事实表</b><span style="font-size:11.5px;color:var(--faint)">随订单表时间关联</span></div>
+                <div style="font-size:12px;color:var(--muted)">共 4,339 行，无需额外时间限制。</div>
+              </div>
+            </div>
+          </div>
+          <div class="ui-card" style="padding:16px;display:flex;align-items:center;justify-content:space-between;">
+            <div><b style="font-size:13.5px;">业务规则文档（可选）</b><div style="font-size:12px;color:var(--muted);margin-top:2px;">已上传：<b>业务规则.md</b> · AI 建模时将自动提取 GMV、客单价、复购率等口径</div></div>
+            <button class="ui-btn sm">管理文档</button>
+          </div>
+        `}
+      </div>
+    </div>`;
+  }
+
+  // 07: MODELING CHAT - WORLD-CLASS AGENTIC UX (4 interactive sub-states!)
+  if (s === 'chat') {
+    const modeSub = state.sub.chat;
+    let streamHtml = '';
+    if (modeSub === 'running') {
+      streamHtml = `
+        <div class="ui-card" style="padding:16px;border-color:var(--pri-line);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <span style="font-size:13px;font-weight:680;color:var(--pri);">✦ 建模助手正在工作</span>
+            <span style="font:500 11.5px/1 var(--mono);color:var(--muted);">已用 18 秒 · 7 步 · <button class="ui-btn ghost sm" style="height:20px;color:var(--danger)">停止</button></span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+            <div style="padding:8px 10px;border-radius:8px;background:var(--ok-soft);color:var(--ok);font-size:12px;font-weight:600;">✓ 1. 读取采样</div>
+            <div style="padding:8px 10px;border-radius:8px;background:var(--pri-soft);color:var(--pri);font-size:12px;font-weight:650;border:1px solid var(--pri-line);">◌ 2. 推断表关系</div>
+            <div style="padding:8px 10px;border-radius:8px;background:var(--surface-sub);color:var(--faint);font-size:12px;">3. 提取规则与口径</div>
+            <div style="padding:8px 10px;border-radius:8px;background:var(--surface-sub);color:var(--faint);font-size:12px;">4. 干测校验</div>
+          </div>
+          <div style="padding:10px 12px;border-radius:9px;background:var(--surface-sub);font-size:12.5px;display:flex;align-items:center;gap:10px;">
+            <i class="dot-sm dot-pri"></i><span>正在探测 <code>订单明细.product_id</code> 与 <code>商品.product_id</code> 唯一性基数…</span>
+          </div>
+          <div style="margin-top:10px;font-size:11.5px;color:var(--faint);">▸ 已自动折叠 6 个内部读取步骤（隐藏技能挂载等底层细节，开发者可在设置中展开）</div>
+        </div>`;
+    } else if (modeSub === 'hitl') {
+      streamHtml = `
+        <div class="ui-card" style="padding:16px;">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">▸ 建模过程 · 14 步（读取 6 · 写入 5 · 校验 3 · 耗时 24 秒）</div>
+          <div style="font-size:13.5px;line-height:1.75;color:var(--ink);">
+            <b>草稿初版已就绪并校验通过。</b>我已理解 4 张业务表，并从《业务规则.md》提取了 <b>GMV、客单价、复购率</b> 3 条核心指标规则。以下 <b>3 组表关联关系</b>会直接影响跨表聚合结果，请确认：
+          </div>
+        </div>
+        <div class="ui-card" style="border-left:3.5px solid var(--pri);overflow:hidden;">
+          <div style="padding:12px 16px;background:var(--surface-sub);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+            <span class="ui-pill pri">需要你决定 · 1 / 3</span>
+            <b style="font-size:13.5px;">确认「订单明细」与「商品」的关联基数</b>
+            <span style="margin-left:auto;font-size:11.5px;color:var(--warn);">会影响销售额汇总去重</span>
+          </div>
+          <div style="padding:14px 16px;">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;background:var(--bg-canvas);border:1px solid var(--border);margin-bottom:12px;font-size:12.5px;">
+              <span class="ui-pill pri">事实 · 订单明细 (4,339 行)</span>
+              <code style="color:var(--pri);font-weight:700;">product_id ── N : 1 ── product_id</code>
+              <span class="ui-pill">维度 · 商品 (100 行)</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <label style="display:flex;gap:10px;padding:10px 12px;border-radius:9px;border:1.5px solid var(--pri);background:var(--pri-soft);cursor:pointer;">
+                <input type="radio" name="rel" checked>
+                <div><b style="font-size:13px;color:var(--pri)">多对一（推荐）</b><div style="font-size:12px;color:var(--ink-2)">多条订单明细对应同一商品，符合《业务规则.md》描述；汇总金额不会重复放大。</div></div>
+              </label>
+              <label style="display:flex;gap:10px;padding:10px 12px;border-radius:9px;border:1px solid var(--border);cursor:pointer;">
+                <input type="radio" name="rel">
+                <div><b style="font-size:13px;">多对多</b><div style="font-size:12px;color:var(--muted)">商品表存在重复 <code>product_id</code> 时选用，查询引擎将自动做去重保护。</div></div>
+              </label>
+              <label style="display:flex;gap:10px;padding:10px 12px;border-radius:9px;border:1px solid var(--border);cursor:pointer;">
+                <input type="radio" name="rel">
+                <div><b style="font-size:13px;">暂不建立关系</b><div style="font-size:12px;color:var(--muted)">两表保持独立，后续可在关系图画布手动连线。</div></div>
+              </label>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
+              <span style="font-size:11.5px;color:var(--faint);">快捷键：1-3 选择 · Enter 确认并看下一条（不再底部重复弹琥珀条）</span>
+              <div style="display:flex;gap:8px;">
+                <button class="ui-btn ghost sm">稍后决定</button>
+                <button class="ui-btn pri sm" onclick="setSub('chat','done')">确认并看第 2 项 →</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    } else if (modeSub === 'error') {
+      streamHtml = `
+        <div class="ui-card" style="padding:16px;border-left:3.5px solid var(--danger);">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;"><span class="ui-pill danger">模型服务额度不足 (402)</span><b style="font-size:14px;">本次自动建模被中断，草稿未受损</b></div>
+              <p style="margin:6px 0 0;font-size:12.5px;color:var(--ink-2);">上游大模型接口返回余额不足（<code>insufficient_balance</code>）。你之前的字段整理与历史草稿均已安全保存，充值或切换模型后可一键续跑。</p>
+            </div>
+            <button class="ui-btn pri sm" onclick="setSub('chat','running')">↻ 立即重试</button>
+          </div>
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);">
+            <span>▸ 查看脱敏技术日志（Request ID: a4737c52）</span>
+            <button class="ui-btn ghost sm">前往模型服务配置 ›</button>
+          </div>
+        </div>`;
+    } else {
+      streamHtml = `
+        <div class="ui-card" style="padding:16px;">
+          <div style="font-size:12px;color:var(--ok);font-weight:600;margin-bottom:6px;">✓ 建模完成 · 已写入 3 条关系与 3 条业务规则 · 校验通过</div>
+          <p style="margin:0 0 12px;font-size:13px;color:var(--ink-2);">所有确认项已落地至当前语义草稿，你可以直接在关系图画布中预览变更，或立即审阅发布。</p>
+          <div style="padding:12px 14px;border-radius:10px;background:var(--surface-sub);border:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+            <span style="width:32px;height:32px;border-radius:8px;background:var(--pri-soft);color:var(--pri);display:grid;place-items:center;font-weight:700;">☍</span>
+            <div style="flex:1;"><b style="font-size:13px;">本轮 AI 语义变更</b><div style="font-size:12px;color:var(--muted)">模型描述 4 · 关系 3 · 业务规则 3（已过滤工程脚手架）</div></div>
+            <button class="ui-btn sm" onclick="setScreen('graph')">在关系图高亮查看</button>
+            <button class="ui-btn pri sm" onclick="setScreen('review')">审阅并发布 v17</button>
+          </div>
+        </div>`;
+    }
+
+    return `${renderTopbar('chat')}<div class="app-body">${renderSidebar('graph')}<div class="app-main" style="background:var(--bg-canvas);">
+      <div style="max-width:820px;width:100%;margin:0 auto;padding:20px 24px;flex:1;display:flex;flex-direction:column;gap:14px;">
+        <!-- Intent Chip instead of raw prompt bubble! -->
+        <div style="align-self:flex-end;display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:12px;background:var(--pri-soft);border:1px solid var(--pri-line);color:var(--pri);font-size:12.5px;font-weight:600;">
+          <span>⚡ 平台意图</span><span>自动建模：分析 4 张表结构与《业务规则.md》</span>
+        </div>
+        ${streamHtml}
+      </div>
+      <div style="padding:12px 24px 16px;background:linear-gradient(180deg,transparent,var(--bg-canvas) 24%);">
+        <div style="max-width:820px;margin:0 auto;background:#fff;border:1px solid var(--border-strong);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;box-shadow:var(--sh-sm);">
+          <button class="ui-btn ghost sm" style="padding:0 6px;">✦ 快捷指令</button>
+          <span style="flex:1;font-size:13px;color:var(--faint);">告诉助手要调整的字段含义、关联关系或业务口径…</span>
+          <button class="ui-btn pri sm" style="width:30px;padding:0;border-radius:50%;">↑</button>
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  // 08: RELATIONSHIP GRAPH (Zero yellow box, Ghost Edges, Expanded Catalog)
+  if (s === 'graph') {
+    return `${renderTopbar('graph')}<div class="app-body">${renderSidebar('graph')}<div class="app-main">
+      <div style="display:grid;grid-template-columns:246px minmax(0,1fr);flex:1;min-height:0;">
+        <!-- Expanded Object Catalog -->
+        <div style="background:#fff;border-right:1px solid var(--border);padding:12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
+          <div class="ui-input" style="height:30px;color:var(--faint)">⌕ 搜索模型、字段或关系…</div>
+          <div style="font-size:11px;font-weight:680;color:var(--faint);padding:6px 4px 2px;">模型（4）</div>
+          <div style="padding:8px 10px;border-radius:8px;background:var(--pri-soft);font-size:12.5px;display:flex;align-items:center;justify-content:space-between;"><span><span class="ui-pill pri" style="height:18px;font-size:10px;margin-right:4px;">事</span><b>订单</b></span><span style="font-size:11px;color:var(--pri)">6 列</span></div>
+          <div style="padding:8px 10px;border-radius:8px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;"><span><span class="ui-pill pri" style="height:18px;font-size:10px;margin-right:4px;">事</span><b>订单明细</b></span><span style="font-size:11px;color:var(--muted)">7 列</span></div>
+          <div style="padding:8px 10px;border-radius:8px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;"><span><span class="ui-pill" style="height:18px;font-size:10px;margin-right:4px;">维</span>客户</span><span style="font-size:11px;color:var(--muted)">7 列</span></div>
+          <div style="padding:8px 10px;border-radius:8px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;"><span><span class="ui-pill" style="height:18px;font-size:10px;margin-right:4px;">维</span>商品</span><span style="font-size:11px;color:var(--muted)">7 列</span></div>
+
+          <div style="font-size:11px;font-weight:680;color:var(--faint);padding:8px 4px 2px;">AI 关联建议（3 · 幽灵预览中）</div>
+          <div style="padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--surface-sub);font-size:12px;">
+            <div style="font-weight:650;color:var(--ink);">订单明细 → 商品</div>
+            <div style="font-size:11px;color:var(--muted);margin:2px 0 8px;">product_id · 多对一</div>
+            <div style="display:flex;gap:6px;"><button class="ui-btn pri sm" style="flex:1;">✓ 采纳</button><button class="ui-btn sm">忽略</button></div>
+          </div>
+          <div style="padding:10px;border-radius:9px;border:1px solid var(--border);font-size:12px;">
+            <div style="font-weight:650;color:var(--ink);">订单明细 → 订单</div>
+            <div style="font-size:11px;color:var(--muted);">order_id · 多对一</div>
+          </div>
+          <div style="margin-top:auto;padding-top:10px;border-top:1px solid var(--border);">
+            <button class="ui-btn sm" style="width:100%;">＋ 手动新建关系</button>
+          </div>
+        </div>
+        <!-- Clean Dotted Canvas -->
+        <div class="dot-canvas" style="position:relative;overflow:hidden;">
+          <div style="position:absolute;left:18px;top:14px;display:flex;align-items:center;gap:10px;">
+            <b style="font-size:14px;">关系图</b>
+            <span style="font-size:12px;color:var(--muted);">4 个模型 · 1 条已确认 · 2 条幽灵建议（虚线）</span>
+          </div>
+          <!-- SVG Connectors including Ghost Edge -->
+          <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+            <path d="M 270 190 C 340 190, 360 190, 440 190" stroke="#5046E5" stroke-width="2" fill="none"/>
+            <path d="M 270 390 C 340 390, 360 220, 440 220" stroke="#5046E5" stroke-width="2" stroke-dasharray="6 5" fill="none" opacity="0.75"/>
+            <path d="M 270 430 C 340 430, 360 430, 440 430" stroke="#5046E5" stroke-width="2" stroke-dasharray="6 5" fill="none" opacity="0.75"/>
+          </svg>
+          <!-- Ghost Edge Inline Accept Pill -->
+          <div style="position:absolute;left:308px;top:414px;background:#fff;border:1px solid var(--indigo-line);border-radius:999px;padding:3px 9px;font-size:11px;box-shadow:var(--sh-md);display:flex;align-items:center;gap:6px;">
+            <span style="color:var(--indigo);font-weight:650;">N:1 建议</span>
+            <button style="border:0;background:var(--indigo);color:#fff;border-radius:999px;padding:1px 7px;font-size:10.5px;">✓</button>
+            <button style="border:0;background:var(--surface-sub);color:var(--muted);border-radius:999px;padding:1px 6px;font-size:10.5px;">✕</button>
+          </div>
+          <!-- 4 Clean Model Cards (NO yellow footer bars, NO raw VARCHAR(1024), Correct Fact/Dim badges!) -->
+          <div class="ui-card" style="position:absolute;left:70px;top:115px;width:200px;overflow:hidden;">
+            <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">
+              <span class="ui-pill pri" style="height:19px;font-size:10px;">事实</span><b style="font-size:13px;">订单</b>
+              <i class="dot-sm dot-ok" style="margin-left:auto" title="全部字段已关联"></i>
+            </div>
+            <div style="padding:8px 12px;font-size:11.5px;line-height:1.9;color:var(--ink-2);">
+              <div style="display:flex;justify-content:space-between;"><span>🔑 order_id</span><span style="color:var(--faint)">整数</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>→ customer_id</span><span style="color:var(--faint)">整数</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>◷ order_date</span><span style="color:var(--faint)">日期</span></div>
+            </div>
+          </div>
+          <div class="ui-card" style="position:absolute;left:440px;top:115px;width:200px;overflow:hidden;">
+            <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">
+              <span class="ui-pill" style="height:19px;font-size:10px;">维度</span><b style="font-size:13px;">客户</b>
+              <i class="dot-sm dot-ok" style="margin-left:auto"></i>
+            </div>
+            <div style="padding:8px 12px;font-size:11.5px;line-height:1.9;color:var(--ink-2);">
+              <div style="display:flex;justify-content:space-between;"><span>🔑 customer_id</span><span style="color:var(--faint)">整数</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>region</span><span style="color:var(--faint)">文本</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>member_level</span><span style="color:var(--faint)">分类</span></div>
+            </div>
+          </div>
+          <div class="ui-card" style="position:absolute;left:70px;top:330px;width:200px;overflow:hidden;border-color:var(--pri-line);">
+            <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">
+              <span class="ui-pill pri" style="height:19px;font-size:10px;">事实</span><b style="font-size:13px;">订单明细</b>
+              <i class="dot-sm dot-warn" style="margin-left:auto" title="2 条关系待确认"></i>
+            </div>
+            <div style="padding:8px 12px;font-size:11.5px;line-height:1.9;color:var(--ink-2);">
+              <div style="display:flex;justify-content:space-between;"><span>🔑 item_id</span><span style="color:var(--faint)">整数</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>→ order_id</span><span style="color:var(--faint)">整数</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>→ product_id</span><span style="color:var(--faint)">整数</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>∑ amount</span><span style="color:var(--faint)">金额</span></div>
+            </div>
+          </div>
+          <div class="ui-card" style="position:absolute;left:440px;top:330px;width:200px;overflow:hidden;">
+            <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">
+              <span class="ui-pill" style="height:19px;font-size:10px;">维度</span><b style="font-size:13px;">商品</b>
+              <i class="dot-sm dot-warn" style="margin-left:auto"></i>
+            </div>
+            <div style="padding:8px 12px;font-size:11.5px;line-height:1.9;color:var(--ink-2);">
+              <div style="display:flex;justify-content:space-between;"><span>🔑 product_id</span><span style="color:var(--faint)">整数</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>category</span><span style="color:var(--faint)">分类</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>¥ unit_cost</span><span style="color:var(--faint)">金额</span></div>
+            </div>
+          </div>
+          <!-- Compact Bottom Toolbar -->
+          <div style="position:absolute;right:18px;bottom:16px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:4px 8px;display:flex;align-items:center;gap:6px;box-shadow:var(--sh-sm);font-size:12px;">
+            <span class="ui-pill pri" style="cursor:pointer" onclick="setScreen('review')">5 处语义改动</span>
+            <span style="width:1px;height:14px;background:var(--border)"></span>
+            <button class="ui-btn ghost sm" style="padding:0 6px;">−</button>
+            <span>100%</span>
+            <button class="ui-btn ghost sm" style="padding:0 6px;">＋</button>
+            <button class="ui-btn ghost sm">适应</button>
+          </div>
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  // 09: BUSINESS RULES (Empty vs Populated)
+  if (s === 'rules') {
+    const isEmpty = state.sub.rules === 'empty';
+    const rules = [
+      { grp: '默认过滤', title: '统计「全国」时只取 province_name = 全国汇总行', full: '统计「全国」范围指标时，直接过滤 province_name = \'全国\'，不得对各省数据二次求和。', src: '业务规则.md', impact: '命中 4 张事实表 · 3 条已确认问答' },
+      { grp: '默认过滤', title: '销售类指标默认排除「已取消」订单', full: '统计销售总额（GMV）、订单数与客单价时，默认限定 订单.status != \'已取消\'，除非用户显式要求看取消单。', src: '业务规则.md', impact: '命中 订单 / 订单明细' },
+      { grp: '指标口径', title: '客单价 = 有效销售总额 / 有效去重订单数', full: '客单价按 SUM(订单明细.amount) / COUNT(DISTINCT 订单.order_id) 计算，保留两位小数。', src: '业务规则.md', impact: '已用于 2 条示例问答' },
+      { grp: '术语映射', title: '「悦看」等价于 cmread_video = 视频', full: '业务口语「悦看」「视频会员」统一映射到字段 cmread_video = \'视频\'。', src: '业务规则.md', impact: '命中 1 张表' },
+    ];
+    const sel = rules[state.selectedRule] || rules[0];
+    return `${renderTopbar('rules')}<div class="app-body">${renderSidebar('rules')}<div class="app-main">
+      <div class="pg-head">
+        <div><h1>业务规则</h1><p>${isEmpty?'0 条规则 · 用自然语言告诉问数助手口径边界、默认过滤与术语映射':'33 条规则 · 按 6 个语义小节分组管理'}</p></div>
+        <div class="pg-acts"><button class="ui-btn sm">从业务文档提取</button><button class="ui-btn pri sm">＋ 新增规则</button></div>
+      </div>
+      ${isEmpty ? `
+        <div style="padding:6px 24px 24px;display:flex;flex-direction:column;gap:14px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="ui-card" style="padding:16px;"><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><b>01 · 默认过滤</b><button class="ui-btn sm">按此新建</button></div><code style="font-size:12px;color:var(--indigo)">统计销售额时：默认排除 status = 已取消</code><p style="margin:6px 0 0;font-size:12px;color:var(--muted)">决定全局取数前提，最常用。</p></div>
+            <div class="ui-card" style="padding:16px;"><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><b>02 · 业务术语</b><button class="ui-btn sm">按此新建</button></div><code style="font-size:12px;color:var(--indigo)">「高价值客户」= member_level IN (金卡, 钻石)</code><p style="margin:6px 0 0;font-size:12px;color:var(--muted)">把业务黑话映射到真实字段枚举。</p></div>
+            <div class="ui-card" style="padding:16px;"><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><b>03 · 指标口径</b><button class="ui-btn sm">按此新建</button></div><code style="font-size:12px;color:var(--indigo)">客单价 = 销售总额 / 去重订单数</code><p style="margin:6px 0 0;font-size:12px;color:var(--muted)">明确多字段聚合计算方式。</p></div>
+            <div class="ui-card" style="padding:16px;"><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><b>04 · 指定取数表</b><button class="ui-btn sm">按此新建</button></div><code style="font-size:12px;color:var(--indigo)">查询「毛利」时：优先关联 订单明细 与 商品表</code><p style="margin:6px 0 0;font-size:12px;color:var(--muted)">多表同名指标时消除歧义。</p></div>
+          </div>
+          <div class="ui-card" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12.5px;color:var(--ink-2);">已有口径文档？上传后让助手自动抽取规则，比手写快 10 倍。</span>
+            <div style="display:flex;gap:8px;"><button class="ui-btn ghost sm">展开写法参考</button><button class="ui-btn sm" onclick="setScreen('prepare')">去资料页上传</button></div>
+          </div>
+        </div>
+      ` : `
+        <div style="padding:0 24px 10px;display:flex;align-items:center;gap:8px;">
+          <span class="ui-pill pri">默认过滤 11</span><span class="ui-pill">术语 15</span><span class="ui-pill">指定取数表 7</span><span class="ui-pill">指标口径 3</span>
+          <div class="ui-input" style="margin-left:auto;width:220px;height:28px;color:var(--faint)">⌕ 搜索规则或字段…</div>
+        </div>
+        <div style="padding:0 24px 20px;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;flex:1;min-height:0;">
+          <div class="ui-card" style="overflow:hidden;display:flex;flex-direction:column;">
+            ${rules.map((r, i) => `
+              <div onclick="state.selectedRule=${i};render()" style="cursor:pointer;padding:12px 16px;border-bottom:1px solid var(--border);background:${state.selectedRule===i?'var(--pri-soft)':'#fff'};display:flex;align-items:flex-start;gap:10px;">
+                <i class="dot-sm ${state.selectedRule===i?'dot-pri':'dot-muted'}" style="margin-top:6px;"></i>
+                <div style="min-width:0;flex:1;">
+                  <div style="font-size:13px;font-weight:620;color:var(--ink);">${r.title}</div>
+                  <div style="font-size:11.5px;color:var(--muted);margin-top:3px;">${r.grp} · 来源《${r.src}》</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="ui-card" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;"><b style="font-size:14px;">规则详情</b><button class="ui-btn sm">编辑</button></div>
+            <div style="padding:12px;border-radius:9px;background:var(--surface-sub);font-size:13px;line-height:1.75;color:var(--ink);">${sel.full}</div>
+            <div style="font-size:12px;color:var(--muted);">来源文档：<b style="color:var(--ink-2)">《${sel.src}》</b></div>
+            <div style="padding:12px;border-radius:9px;border:1px solid var(--border);font-size:12px;color:var(--ink-2);line-height:1.8;">
+              <b>影响范围</b><br>• ${sel.impact}<br>• 修改后随下次版本发布生效
+            </div>
+          </div>
+        </div>
+      `}
+    </div></div>`;
+  }
+
+  // 10: QUERY COACH (Full-height 2-col, zero duplicate library entry)
+  if (s === 'coach') {
+    return `${renderTopbar('coach')}<div class="app-body">${renderSidebar('coach')}<div class="app-main">
+      <div class="pg-head">
+        <div><h1>问数优化</h1><p>用真实业务高频问题持续训练模型，验证通过的问答会沉淀为可复用示例</p></div>
+        <div class="pg-acts"><span class="ui-pill warn">待处理 2</span><span class="ui-pill ok">示例库 14</span></div>
+      </div>
+      <div style="padding:0 24px 20px;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;flex:1;min-height:0;">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="ui-card" style="padding:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <b style="font-size:13.5px;">批量添加高频业务问题</b>
+              <span style="font-size:11.5px;color:var(--faint);">每行一道，最多 10 道 · 仅检查 SQL 计划，不扫描大表</span>
+            </div>
+            <div style="border:1px solid var(--border-strong);border-radius:9px;padding:10px 12px;min-height:74px;font-size:12.5px;color:var(--muted);">例如：2026年10月各省咪咕视频在订会员数排名前五？</div>
+            <div style="display:flex;justify-content:flex-end;margin-top:10px;"><button class="ui-btn pri sm">添加并由 AI 分析缺口</button></div>
+          </div>
+          <div class="ui-card" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+            <div class="ui-card-head"><h3>待处理队列（2）</h3><div class="r"><span style="font-size:11.5px;color:var(--muted)">按优先级自动排序</span></div></div>
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+              <i class="dot-sm dot-warn"></i>
+              <div style="flex:1;"><b style="font-size:13px;">悦看整体会员规模是多少？</b><div style="font-size:12px;color:var(--warn);">缺口：待确认「悦看」对应业务范围</div></div>
+              <button class="ui-btn sm" onclick="setScreen('chat')">去核对 ›</button>
+            </div>
+            <div style="padding:12px 16px;display:flex;align-items:center;gap:12px;">
+              <i class="dot-sm dot-pri"></i>
+              <div style="flex:1;"><b style="font-size:13px;">2026年8-10月全国考核付费用户数趋势？</b><div style="font-size:12px;color:var(--muted);">已生成 SQL（Dry-Plan 通过），待你确认保存</div></div>
+              <button class="ui-btn sm">核对 SQL ›</button>
+            </div>
+          </div>
+        </div>
+        <div class="ui-card" style="display:flex;flex-direction:column;overflow:hidden;">
+          <div class="ui-card-head"><h3>问答示例库（14）</h3><div class="r"><span class="ui-pill">统一入口</span></div></div>
+          <div style="padding:10px 14px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;">
+            <div style="padding:10px;border-radius:8px;background:var(--surface-sub);">
+              <div style="font-weight:620;color:var(--ink);">各省咪咕视频在订会员数排名前五？</div>
+              <div style="font-size:11px;color:var(--ok);margin-top:4px;">✓ 已发布 · 设为问数首页推荐</div>
+            </div>
+            <div style="padding:10px;border-radius:8px;border:1px solid var(--border);">
+              <div style="font-weight:600;color:var(--ink-2);">全渠道全支付天翼会员订购人数？</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;">已发布 · 来源于建模确认</div>
+            </div>
+            <div style="padding:10px;border-radius:8px;border:1px solid var(--border);">
+              <div style="font-weight:600;color:var(--ink-2);">咪咕游戏按一级业务类型付费用户数？</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;">已发布 · 来源于用户点赞</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  // 11: PUBLIC VIEWS + SCOPED CO-PILOT DRAWER (Zero Prompt Leakage!)
+  if (s === 'views') {
+    return `${renderTopbar('views')}<div class="app-body">${renderSidebar('views')}<div class="app-main">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 356px;flex:1;min-height:0;">
+        <div style="padding:18px 22px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);">
+            <span>公共视图 / 查询模板</span><code>video_vip_monthly_member</code><span class="ui-pill ok" style="margin-left:auto;">线上 v16</span>
+          </div>
+          <h1 style="margin:0;font-size:18px;font-weight:720;">按统计月份查看咪咕视频各会员口径的在订会员数</h1>
+          <div style="display:flex;gap:16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;">
+            <span style="padding:0 2px 8px;color:var(--pri);border-bottom:2px solid var(--pri);">用途与口径</span>
+            <span style="padding:0 2px 8px;color:var(--muted);">问题验证</span>
+            <span style="padding:0 2px 8px;color:var(--muted);">发布状态</span>
+          </div>
+          <div class="ui-card" style="padding:14px 16px;">
+            <b style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:6px;">业务用途</b>
+            <p style="margin:0;font-size:13px;line-height:1.7;color:var(--ink-2);">覆盖会员总体、钻石会员、体育会员、足球通等 11 个口径，供月度会员规模查询与逐月趋势使用。正文保持 ≥640px 宽度，避免长文本折行破碎。</p>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="ui-card" style="padding:12px 14px;"><b style="font-size:12px;color:var(--muted)">数据粒度</b><div style="font-size:12.5px;margin-top:4px;">一行 = 统计月份 × 会员口径</div></div>
+            <div class="ui-card" style="padding:12px 14px;"><b style="font-size:12px;color:var(--muted)">时间列</b><div style="font-size:12.5px;margin-top:4px;"><code>period_id</code>（yyyyMM）</div></div>
+          </div>
+          <div style="padding:12px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--warn-dot);font-size:12.5px;line-height:1.7;color:var(--ink-2);">
+            <b style="color:var(--warn)">使用限制</b><br>• 仅覆盖全国、全渠道、全支付汇总范围；拆省份请改查原模型。
+          </div>
+        </div>
+        <!-- Clean Scoped Co-pilot Drawer (356px) -->
+        <aside style="border-left:1px solid var(--border);background:#fff;display:flex;flex-direction:column;">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+            <b style="font-size:13.5px;color:var(--pri);">✦ 边聊边核对（独立上下文）</b>
+            <button class="ui-btn ghost sm">✕</button>
+          </div>
+          <div style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="ui-btn sm" style="font-size:11.5px;">能问什么？</button>
+            <button class="ui-btn sm" style="font-size:11.5px;">拆省份怎么办？</button>
+            <button class="ui-btn sm" style="font-size:11.5px;">加一条限制</button>
+          </div>
+          <div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
+            <div style="font-size:11.5px;text-align:center;color:var(--faint);">仅显示与本视图相关的核对记录（绝不混入全局原始 Prompt）</div>
+            <div style="align-self:flex-end;background:var(--pri-soft);color:var(--pri);padding:9px 12px;border-radius:10px;font-size:12.5px;max-width:88%;">核对这张视图能不能按省份拆维度？</div>
+            <div style="background:var(--surface-sub);padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.65;color:var(--ink-2);">
+              不能直接拆省份。本视图在内部聚合时已固定 <code>全国 / 全渠道 / 全支付</code>，拆省时问数助手会自动回退至原模型 <code>sync_hhweb_video_vip_more_dimension_m</code>。
+            </div>
+          </div>
+          <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
+            <div style="padding:6px 10px;border-radius:7px;background:var(--surface-sub);font-size:11.5px;color:var(--ink-2);display:flex;justify-content:space-between;">
+              <span>📎 公共视图 · video_vip_monthly_member</span><span style="color:var(--faint)">×</span>
+            </div>
+            <div style="border:1px solid var(--border-strong);border-radius:10px;padding:8px 10px;display:flex;align-items:center;gap:8px;">
+              <span style="flex:1;font-size:12.5px;color:var(--faint);">输入要核对或修改的内容…</span>
+              <button class="ui-btn pri sm" style="width:26px;padding:0;border-radius:50%;">↑</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div></div>`;
+  }
+
+  // 12: CALIBER WORKBENCH (3 Sub-views: Overview / Review+DocEvidence / Verify WHERE Diff)
+  if (s === 'caliber') {
+    const sub = state.sub.caliber;
+    if (sub === 'overview') {
+      return `${renderTopbar('caliber')}<div class="app-body">${renderSidebar('caliber')}<div class="app-main">
+        <div class="pg-head">
+          <div><h1>口径工坊</h1><p>每张结果表一份口径清单，依次完成「起草 → 核对 → 验证」，全部通过方可发布</p></div>
+          <div class="pg-acts">
+            <button class="ui-btn sm" onclick="setScreen('review')">发布检查 · 2 阻断</button>
+            <button class="ui-btn pri sm" onclick="setSub('caliber','review')">继续：核对 视频（3/8）→</button>
+          </div>
+        </div>
+        <div class="health-strip">
+          <span>待起草 <b>1</b></span><span class="health-sep"></span>
+          <span>待核对 <b style="color:var(--teal)">1</b></span><span class="health-sep"></span>
+          <span>待验证 <b>0</b></span><span class="health-sep"></span>
+          <span>已完成 <b>0</b></span>
+          <span style="margin-left:auto;font-size:12px;color:var(--muted);">已移除表名重复两行与内部 ds_ 前缀说明</span>
+        </div>
+        <div style="padding:0 24px 20px;display:flex;flex-direction:column;gap:12px;">
+          <div class="ui-card" style="padding:16px;border-left:3.5px solid var(--teal);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <b style="font-size:15px;">视频</b>
+              <span class="ui-pill pri">核对中 3/8</span>
+              <span style="font-size:12px;color:var(--muted);">绑定文档：《视频口径手册.md》 · 按月</span>
+              <button class="ui-btn sm" style="margin-left:auto;" onclick="setSub('caliber','review')">打开核对队列 ›</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+              <div style="padding:9px 12px;border-radius:8px;background:var(--ok-soft);color:var(--ok);font-size:12px;"><b>✓ 起草</b><div style="font-size:11px;">8 条口径</div></div>
+              <div style="padding:9px 12px;border-radius:8px;background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal-line);font-size:12px;"><b>● 核对</b><div style="font-size:11px;">3 / 8 已核对</div></div>
+              <div style="padding:9px 12px;border-radius:8px;background:var(--surface-sub);color:var(--muted);font-size:12px;"><b>验证</b><div style="font-size:11px;">0 / 8 符合</div></div>
+              <div style="padding:9px 12px;border-radius:8px;background:var(--surface-sub);color:var(--faint);font-size:12px;"><b>发布</b><div style="font-size:11px;">待验证完成</div></div>
+            </div>
+          </div>
+          <div class="ui-card" style="padding:16px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <b style="font-size:15px;">用户</b>
+              <span class="ui-pill warn">缺业务文档</span>
+              <span style="font-size:12px;color:var(--muted);">尚未绑定口径文档</span>
+              <button class="ui-btn sm" style="margin-left:auto;" onclick="setScreen('prepare')">上传并绑定文档 ›</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+              <div style="padding:9px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:12px;"><b>● 起草</b><div style="font-size:11px;">请先绑定文档</div></div>
+              <div style="padding:9px 12px;border-radius:8px;background:var(--surface-sub);color:var(--faint);font-size:12px;"><b>核对</b><div style="font-size:11px;">—</div></div>
+              <div style="padding:9px 12px;border-radius:8px;background:var(--surface-sub);color:var(--faint);font-size:12px;"><b>验证</b><div style="font-size:11px;">—</div></div>
+              <div style="padding:9px 12px;border-radius:8px;background:var(--surface-sub);color:var(--faint);font-size:12px;"><b>发布</b><div style="font-size:11px;">未就绪</div></div>
+            </div>
+          </div>
+        </div>
+      </div></div>`;
+    }
+    if (sub === 'review') {
+      const items = [
+        { n: '表说明（选表目录）', s: 'done' },
+        { n: '全部视频', s: 'done' },
+        { n: '电影类视频', s: 'now' },
+        { n: '电视剧', s: 'todo' },
+        { n: '月播放次数', s: 'conflict' },
+        { n: '完播率', s: 'todo' },
+      ];
+      return `${renderTopbar('caliber')}<div class="app-body">${renderSidebar('caliber')}<div class="app-main">
+        <div style="padding:11px 18px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+          <button class="ui-btn ghost sm" onclick="setSub('caliber','overview')">← 口径总览</button>
+          <b style="font-size:14px;">视频</b>
+          <span class="ui-pill ok">起草 ✓</span><span class="ui-pill pri">核对 3/8</span><span class="ui-pill">验证 0/8</span>
+          <div style="margin-left:auto;display:flex;gap:8px;">
+            <button class="ui-btn sm" onclick="state.docEvidenceOpen=!state.docEvidenceOpen;render()">${state.docEvidenceOpen?'收起':'展开'}原文溯源</button>
+            <button class="ui-btn sm" onclick="setSub('caliber','verify')">去验证 ›</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:220px minmax(0,1fr) ${state.docEvidenceOpen?'286px':'0px'};flex:1;min-height:0;">
+          <div style="background:#fff;border-right:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:4px;">
+            <div style="display:flex;gap:4px;margin-bottom:6px;"><span class="ui-pill pri">待核 5</span><span class="ui-pill danger">冲突 1</span><span class="ui-pill">全 8</span></div>
+            ${items.map((it, idx) => `
+              <div style="padding:8px 10px;border-radius:8px;font-size:12.5px;display:flex;align-items:center;gap:7px;background:${it.s==='now'?'var(--teal-soft)':'transparent'};color:${it.s==='now'?'var(--teal)':'var(--ink-2)'};font-weight:${it.s==='now'?650:500};">
+                <i class="dot-sm ${it.s==='done'?'dot-ok':it.s==='conflict'?'dot-danger':it.s==='now'?'dot-pri':'dot-warn'}"></i>
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${it.n}</span>
+                ${it.s==='conflict'?'<span class="ui-pill danger" style="height:18px;font-size:10px;">冲突</span>':''}
+              </div>
+            `).join('')}
+          </div>
+          <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
+            <div style="display:flex;align-items:center;gap:8px;"><h2 style="margin:0;font-size:18px;">电影类视频</h2><span class="ui-pill warn">待核对</span><span class="ui-pill">第 3 / 8 项</span></div>
+            <div style="font-size:12px;color:var(--muted);">同义说法：电影、院线片 · 来源：《视频口径手册.md》第 3.2 节</div>
+            <div class="ui-card" style="padding:14px 16px;">
+              <b style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:10px;">结构化取数条件</b>
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:12.5px;align-items:center;">
+                <code>category</code><span class="ui-pill pri">= 电影</span>
+                <code>region_scope</code><span class="ui-pill">= 全国汇总</span>
+                <code>channel</code><span style="color:var(--muted)">不限（默认全渠道）</span>
+              </div>
+            </div>
+            <div style="padding:10px 12px;border-radius:9px;background:var(--warn-soft);border-left:3px solid var(--warn-dot);font-size:12px;color:var(--warn);">
+              <b>取值校验提示（不阻断）：</b>采样 200 行中已命中 <code>category = 电影</code>（42 行）；<code>region_scope = 全国汇总</code> 采样未见，以文档为准。
+            </div>
+            <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+              <span style="font-size:11.5px;color:var(--faint);">快捷键：<code>K</code> 上条 · <code>J</code> 下条 · <code>A</code> 通过</span>
+              <button class="ui-btn ghost sm" style="margin-left:auto;">编辑</button>
+              <button class="ui-btn sm" onclick="setScreen('chat')">让助手改这条</button>
+              <button class="ui-btn pri sm" onclick="setSub('caliber','verify')">✓ 核对通过，下一个</button>
+            </div>
+          </div>
+          ${state.docEvidenceOpen ? `
+            <aside style="border-left:1px solid var(--border);background:#FAFBFD;padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;">
+              <div style="font-size:12px;font-weight:700;color:var(--teal);">📄 原文高亮溯源</div>
+              <div style="font-size:11.5px;color:var(--muted);">《视频口径手册.md》 · 第 24–31 行</div>
+              <div style="padding:12px;border-radius:10px;background:#fff;border:1px solid var(--border);font-size:12px;line-height:1.8;color:var(--muted);">
+                <div>## 3. 常用内容分类口径</div>
+                <div>3.1 电视剧：取 category = 电视剧…</div>
+                <div style="margin:6px -6px;padding:6px;border-radius:6px;background:var(--teal-soft);color:var(--ink);border-left:2.5px solid var(--teal);">
+                  <b>3.2 电影类视频（又称院线片）：</b>按 <code>category = '电影'</code> 过滤，默认统计全国汇总范围、全渠道播放次数与完播率，各分类口径独立成行不累加。
+                </div>
+                <div>3.3 综艺：取 category = 综艺…</div>
+              </div>
+              <div style="font-size:11.5px;color:var(--muted);">业务人员无需切换页面，2 秒内即可对照原文确认口径无误。</div>
+            </aside>
+          ` : ''}
+        </div>
+      </div></div>`;
+    }
+    // VERIFY SUB-VIEW
+    return `${renderTopbar('caliber')}<div class="app-body">${renderSidebar('caliber')}<div class="app-main">
+      <div style="padding:11px 18px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+        <button class="ui-btn ghost sm" onclick="setSub('caliber','overview')">← 口径总览</button>
+        <b style="font-size:14px;">视频 · 无执行语义验证</b>
+        <span class="ui-pill ok">起草 ✓</span><span class="ui-pill ok">核对 ✓</span><span class="ui-pill pri">验证 2/8</span>
+        <span class="ui-pill" style="margin-left:auto;">🛡 仅编译校验，不扫描业务数据</span>
+      </div>
+      <div style="display:grid;grid-template-columns:230px minmax(0,1fr);flex:1;min-height:0;">
+        <div style="background:#fff;border-right:1px solid var(--border);padding:12px;display:flex;flex-direction:column;gap:8px;">
+          <div style="font-size:12px;font-weight:680;">验证进度 · 2 / 8</div>
+          <div style="height:6px;border-radius:999px;background:var(--surface-sub);overflow:hidden;"><div style="width:25%;height:100%;background:var(--teal);"></div></div>
+          <div style="font-size:11.5px;color:var(--muted);">符合 2 · 不符合 0 · 待判定 6</div>
+          <div style="padding:8px 10px;border-radius:8px;font-size:12px;color:var(--ok);">✓ 全部视频 · 符合</div>
+          <div style="padding:8px 10px;border-radius:8px;font-size:12px;color:var(--ok);">✓ 电视剧 · 符合</div>
+          <div style="padding:8px 10px;border-radius:8px;font-size:12px;background:var(--teal-soft);color:var(--teal);font-weight:650;">● 电影类视频 · 待判定</div>
+        </div>
+        <div style="padding:18px 22px;display:flex;flex-direction:column;gap:14px;">
+          <div>
+            <span class="ui-pill pri">第 3 题 · 电影类视频</span>
+            <h2 style="margin:6px 0 0;font-size:17px;">2026 年 10 月全国，电影类视频的播放次数是多少？</h2>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="ui-card" style="padding:14px;">
+              <b style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:8px;">你的口径要求</b>
+              <div style="font-size:12.5px;line-height:2;">
+                <code>category</code> = <b>电影</b><br>
+                <code>region_scope</code> = <b>全国汇总</b><br>
+                <code>period_id</code> = <b>202610</b>
+              </div>
+            </div>
+            <div class="ui-card" style="padding:14px;border-color:var(--teal-line);">
+              <b style="font-size:12.5px;color:var(--teal);display:block;margin-bottom:8px;">平台编译 WHERE 过滤条件（已过滤标签列噪音）</b>
+              <pre style="margin:0;font-size:12px;line-height:1.7;color:var(--ink);background:var(--surface-sub);padding:10px;border-radius:8px;">WHERE category = '电影'
+  AND region_scope = '全国汇总'
+  AND period_id = '202610'</pre>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);">▸ 展开完整编译 SQL 与 Cube 计划</div>
+          <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;color:var(--muted);">「不符合」将自动退回核对页并定位到此口径</span>
+            <div style="display:flex;gap:8px;">
+              <button class="ui-btn danger sm">✕ 不符合，退回核对</button>
+              <button class="ui-btn pri sm">✓ 符合，下一题 →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  // 13: UNIFIED SEMANTIC RELEASE SHEET (NO .gitkeep, NO double-modal in CALIBER!)
+  if (s === 'review') {
+    return `${renderTopbar('review')}<div class="app-body">${renderSidebar('overview')}<div class="app-main" style="background:#EAECF2;">
+      <div class="sim-modal-bg">
+        <div class="sim-modal" style="width:820px;">
+          <div style="padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:16px;font-weight:720;">${isCal?'统一发布检查与审阅台 · 口径管控':'语义变更与发布审阅台'}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">${isCal?'口径门禁与语义变更合一，不再弹窗跳抽屉':'相对线上 v16 的语义改动 · 已自动归并底层工程脚手架'}</div>
+            </div>
+            <button class="ui-btn ghost sm" onclick="setScreen('overview')">✕</button>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 264px;min-height:360px;">
+            <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px;">
+              ${isCal ? `
+                <div style="font-size:12px;font-weight:700;color:var(--danger);display:flex;align-items:center;gap:6px;"><i class="dot-sm dot-danger"></i>阻断发布（2 项必处理）</div>
+                <div style="padding:11px 13px;border-radius:10px;background:var(--danger-soft);border-left:3px solid var(--danger);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                  <div><b style="font-size:13px;">用户 · 缺少业务口径文档</b><div style="font-size:12px;color:var(--ink-2)">上传并绑定业务文档后即可自动起草口径清单</div></div>
+                  <button class="ui-btn sm" onclick="setScreen('prepare')">去绑定 ›</button>
+                </div>
+                <div style="padding:11px 13px;border-radius:10px;background:var(--danger-soft);border-left:3px solid var(--danger);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                  <div><b style="font-size:13px;">视频 · 还有 5 条口径待核对、8 条待验证</b><div style="font-size:12px;color:var(--ink-2)">全部核对并判定「符合」后解除阻断</div></div>
+                  <button class="ui-btn sm" onclick="setSub('caliber','review');setScreen('caliber')">去核对 ›</button>
+                </div>
+                <div style="margin-top:auto;padding:10px 12px;border-radius:8px;background:var(--surface-sub);font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;">
+                  <span>▸ 底层工程与脚手架文件（7 个，含 .gitkeep / wren_project.yml）</span><span>不计入业务徽标</span>
+                </div>
+              ` : `
+                <div style="display:flex;gap:14px;border-bottom:1px solid var(--border);padding-bottom:8px;font-size:12.5px;font-weight:650;">
+                  <span style="color:var(--indigo);">语义变更 <b>5</b></span>
+                  <span style="color:var(--muted);">待办提醒 <b>2</b></span>
+                  <span style="margin-left:auto;font-weight:500;color:var(--muted);">新增 3 · 修改 2 · 删除 0</span>
+                </div>
+                <div style="padding:10px 12px;border:1px solid var(--border);border-radius:9px;display:flex;align-items:center;gap:10px;font-size:12.5px;">
+                  <span class="ui-pill pri">关系</span><span style="flex:1"><b>订单明细 → 商品 / 订单</b>（新增 3 条多对一关系）</span><button class="ui-btn ghost sm">看差异</button>
+                </div>
+                <div style="padding:10px 12px;border:1px solid var(--border);border-radius:9px;display:flex;align-items:center;gap:10px;font-size:12.5px;">
+                  <span class="ui-pill pri">规则</span><span style="flex:1"><b>GMV、客单价、复购率</b>（来自《业务规则.md》）</span><button class="ui-btn ghost sm">看差异</button>
+                </div>
+                <div style="padding:10px 12px;border:1px solid var(--border);border-radius:9px;display:flex;align-items:center;gap:10px;font-size:12.5px;">
+                  <span class="ui-pill">模型</span><span style="flex:1"><b>商品 · 客户 · 订单</b>（补充字段中文说明）</span><button class="ui-btn ghost sm">看差异</button>
+                </div>
+                <div style="margin-top:auto;padding:9px 12px;border-radius:8px;background:var(--surface-sub);font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;">
+                  <span>▸ 已自动折叠底层脚手架（.gitignore、AGENTS.md、5 个 .gitkeep）</span><button class="ui-btn ghost sm" style="height:20px;font-size:11px;">在工程页查看</button>
+                </div>
+              `}
+            </div>
+            <aside style="background:#FAFBFD;border-left:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;">
+              <b style="font-size:13px;">🛡 发布前检查</b>
+              <div style="font-size:12px;line-height:1.9;color:var(--ink-2);">
+                <div>模型结构校验：<b style="color:var(--ok)">通过</b></div>
+                <div>${isCal?'口径完成度':'问答示例确认'}：<b>${isCal?'0 / 2 张表就绪':'14 / 14 已确认'}</b></div>
+                <div>硬阻断项：<b style="color:${isCal?'var(--danger)':'var(--ok)'}">${isCal?'2 项':'0 项'}</b></div>
+              </div>
+              <div style="padding:10px;border-radius:8px;background:#fff;border:1px solid var(--border);font-size:11.5px;color:var(--muted);line-height:1.6;">
+                ${isCal?'发布后问数引擎严格按审核通过的 Cube 取数，不会执行自由 SQL。':'发布后线上问数立即升级至 v17；2 条待复核问答将暂缓生效，不阻塞发布。'}
+              </div>
+            </aside>
+          </div>
+          <div style="padding:12px 20px;background:var(--surface-sub);border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+            <button class="ui-btn ghost sm">放弃全部草稿</button>
+            <span style="margin-left:auto;font-size:12px;color:${isCal?'var(--danger)':'var(--warn)'};">
+              ${isCal?'请先解除 2 项口径阻断':'2 条待复核问答将暂缓进入 v17'}
+            </span>
+            ${isCal
+              ? `<button class="ui-btn dis sm" disabled>发布 v1</button>`
+              : `<button class="ui-btn pri sm" onclick="setScreen('ask')">检查并发布 v17</button>`}
+          </div>
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  // 14: END-USER ASK-DATA CLOSED LOOP
+  return `
+    <div class="app-body" style="grid-template-columns:210px minmax(0,1fr)">
+      <aside class="app-sidebar" style="background:#F5F6FA;">
+        <div style="padding:4px 8px 14px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;">
+          <span style="width:24px;height:24px;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;">红</span>红海 DataAgent
+        </div>
+        <button class="ui-btn" style="width:100%;justify-content:flex-start;margin-bottom:10px;">✎ 新建对话</button>
+        <button class="sb-item" onclick="setScreen('list')">‹ 返回知识库工作台</button>
+        <div class="sb-group"><span>当前已选知识库</span></div>
+        <div style="padding:9px 10px;border-radius:9px;background:var(--pri-soft);color:var(--pri);font-size:12px;font-weight:650;">
+          ${kbName()}<div style="font-size:10.5px;opacity:.8;margin-top:2px;">${isCal?'口径管控 · Cube v1':'探索分析 · SQL v16'}</div>
+        </div>
+        <div class="sb-group"><span>本库推荐问题（已锁定本库）</span></div>
+        <div style="font-size:12px;color:var(--ink-2);padding:6px 8px;line-height:1.6;cursor:pointer;">• ${isCal?'2026年10月电影类视频播放次数':'2026年各品类销售额与毛利排名'}</div>
+        <div style="font-size:12px;color:var(--ink-2);padding:6px 8px;line-height:1.6;cursor:pointer;">• ${isCal?'电视剧 vs 电影完播率对比':'高价值金卡客户的复购趋势'}</div>
+      </aside>
+      <div class="app-main" style="padding:20px 32px;display:flex;flex-direction:column;gap:14px;background:#fff;">
+        <div style="max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:14px;flex:1;">
+          <div style="align-self:flex-end;background:var(--pri-soft);color:var(--pri);padding:10px 14px;border-radius:14px;font-size:13.5px;font-weight:600;">
+            ${isCal?'2026年10月全国，电影类视频和电视剧的播放次数分别是多少？':'2026年5月到10月每月的净销售额与客单价趋势？'}
+          </div>
+          <!-- Fixed Execution Trace Order (Preamble ABOVE tool steps, clean status) -->
+          <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--surface-sub);font-size:12px;">
+            <div style="display:flex;align-items:center;gap:8px;color:var(--ink-2);font-weight:600;">
+              <i class="dot-sm dot-ok"></i><span>已完成查询与图表生成 · 3 步 · 2.4 秒</span>
+              <span style="margin-left:auto;color:var(--faint);">已隐藏内部自动重试噪音</span>
+            </div>
+            <div style="margin-top:8px;color:var(--muted);">前言（正确排在工具之上）：先匹配已发布语义口径与规则，再执行安全聚合查询。</div>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+              <span class="ui-pill ok">✓ ${isCal?'匹配口径清单':'读取业务规则'}</span>
+              <span class="ui-pill ok">✓ ${isCal?'Cube 认证查询':'语义 SQL 执行'}</span>
+              <span class="ui-pill ok">✓ 生成趋势图表</span>
+            </div>
+          </div>
+
+          <div style="font-size:14px;line-height:1.75;color:var(--ink);">
+            ${isCal
+              ? '2026 年 10 月全国汇总口径下：<b>电影类视频</b>播放次数为 <b>1,842.6 万次</b>（完播率 41.2%），<b>电视剧</b>播放次数为 <b>3,215.0 万次</b>（完播率 54.8%）。各口径独立统计，不直接相加。'
+              : '2026 年 5 月至 10 月累计净销售额 <b>¥202,014.50</b>，月均客单价 <b>¥386.40</b>。10 月因大促峰值拉动环比增长 <b>+24.6%</b>。'}
+          </div>
+
+          <!-- Clean Mini Chart Mock -->
+          <div class="ui-card" style="padding:14px 18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <b style="font-size:13px;">${isCal?'2026年10月视频分类播放次数对比':'2026年5月–10月月度净销售额趋势'}</b>
+              <button class="ui-btn ghost sm">↓ 下载数据 (CSV)</button>
+            </div>
+            <svg viewBox="0 0 600 105" style="width:100%;height:96px;display:block;">
+              <line x1="20" y1="88" x2="580" y2="88" stroke="#E2E8F0"/>
+              <path d="M 30 72 L 135 58 L 240 65 L 345 48 L 450 52 L 560 18" fill="none" stroke="${isCal?'#0D7A74':'#5046E5'}" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="560" cy="18" r="4.5" fill="${isCal?'#0D7A74':'#5046E5'}"/>
+              <text x="515" y="14" font-size="11" fill="#0F172A" font-weight="600">峰值 +24.6%</text>
+            </svg>
+          </div>
+
+          <!-- Semantic Provenance & Governance Loop Strip -->
+          <div style="padding:10px 14px;border-radius:10px;background:var(--pri-soft);border:1px solid var(--pri-line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;">
+            <span style="font-weight:700;color:var(--pri);">🛡 可信溯源</span>
+            <span style="color:var(--ink-2);">${isCal?'命中已验证口径「电影类视频 / 电视剧」· 《视频口径手册.md》· Cube 引擎':'命中规则「排除已取消订单」「客单价」· 线上 v16 · SQL 语义层'}</span>
+            <button class="ui-btn sm" style="margin-left:auto;" onclick="setScreen('${isCal?'caliber':'coach'}')">✦ 管理员：${isCal?'修正此口径':'加入问数优化'} →</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// =========================================================
+// RELEASE STATE MACHINE DATA (8 STATES)
+// =========================================================
+const SM_STATES = [
+  { mode: 'NORMAL', name: '① 普通 · 无草稿（已同步线上）', dot: 'dot-ok', topCta: '不显示主按钮（顶栏仅显示「线上 v16」）', sheetCta: '—', hint: '干净无打扰，直接点击「去问数」即可。', click: '无发布动作，主焦点让位给「去问数」' },
+  { mode: 'NORMAL', name: '② 普通 · 工程校验 FAILED', dot: 'dot-danger', topCta: '审阅草稿 · 5 项（红点）', sheetCta: '禁用 + 「3 处结构错误 → 去修复」', hint: '修复原 DraftBar.blocked 未读取 workflow.blockers 的缺陷。', click: '打开审阅台并直接定位到失败模型/文件' },
+  { mode: 'NORMAL', name: '③ 普通 · 草稿未校验', dot: 'dot-warn', topCta: '审阅草稿 · 5 项', sheetCta: '检查并发布 v17（实心紫）', hint: '自动在发布前串行执行完整校验，不让用户多点一次检查。', click: '运行校验 → 通过即原子发布 v17' },
+  { mode: 'NORMAL', name: '④ 普通 · 校验已通过', dot: 'dot-ok', topCta: '审阅草稿 · 5 项', sheetCta: '发布 v17（实心紫）', hint: '无阻断、无待确认，一步完成上线。', click: '立即发布 v17 并刷新问数引擎' },
+  { mode: 'NORMAL', name: '⑤ 普通 · 仅口径/问答待复核', dot: 'dot-warn', topCta: '审阅草稿 · 5 项', sheetCta: '发布 v17 + 琥珀提示「2 条暂缓」', hint: '明确区分软提醒与硬阻断，不再误标「阻止发布」。', click: '轻量二次确认：去处理 / 跳过并发布 v17' },
+  { mode: 'CALIBER', name: '⑥ 口径 · 清单未完成（有阻断）', dot: 'dot-danger', topCta: '发布检查 · 2 阻断（矿石青）', sheetCta: '禁用 + 阻断清单（直达缺文档/待核对表）', hint: '合并为单一发布台，消灭「概览→审阅单→口径抽屉」双重跳。', click: '打开统一口径发布台，点击条目直达目标表步骤' },
+  { mode: 'CALIBER', name: '⑦ 口径 · 全部验证通过 Ready', dot: 'dot-ok', topCta: '发布 v1（矿石青）', sheetCta: '发布口径版本 v1（实心青）', hint: '每张表起草/核对/验证全绿，选表目录就绪。', click: '发布认证 Cube，问数正式启用' },
+  { mode: 'NORMAL', name: '⑧ 双模式 · 助手正在修改草稿', dot: 'dot-pri', topCta: '✦ 助手建模中…（脉动点）', sheetCta: '禁用 + 「助手修改完成后可发布」', hint: '防止并发写入与发布冲突，可点进度条回建模对话。', click: '跳转至建模对话实时进度轨' },
+];
+
+function renderStateMachine() {
+  const list = document.getElementById('smList');
+  list.innerHTML = SM_STATES.map((st, idx) => `
+    <button type="button" class="sm-opt ${state.smIndex===idx?'active':''}" data-m="${st.mode}" onclick="state.smIndex=${idx};renderStateMachine()">
+      <i class="dot-sm ${st.dot}"></i>
+      <span style="flex:1">${st.name}</span>
+      <span style="font:600 10px/1 var(--mono);opacity:.65">${st.mode}</span>
+    </button>
+  `).join('');
+
+  const cur = SM_STATES[state.smIndex];
+  const accent = cur.mode === 'CALIBER' ? 'var(--teal)' : 'var(--indigo)';
+  const accentSoft = cur.mode === 'CALIBER' ? 'var(--teal-soft)' : 'var(--indigo-soft)';
+  document.getElementById('smPreview').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--border);">
+      <div>
+        <span class="ui-pill" style="background:${accentSoft};color:${accent};margin-bottom:6px;">${cur.mode === 'CALIBER' ? '口径问数 CALIBER' : '普通问数 NORMAL'}</span>
+        <h3 style="margin:0;font-size:17px;">${cur.name}</h3>
+      </div>
+      <i class="dot-sm ${cur.dot}" style="width:10px;height:10px;"></i>
+    </div>
+    <div style="padding:14px 16px;border-radius:12px;background:var(--surface-sub);border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <span style="font-size:12.5px;color:var(--muted);">顶栏实时呈现效果：</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="ui-btn sm">✦ 建模对话</span>
+        <span class="ui-btn sm" style="background:${cur.topCta.includes('不显示')?'var(--ok-soft)':accent};color:${cur.topCta.includes('不显示')?'var(--ok)':'#fff'};border-color:transparent;font-weight:650;">${cur.topCta}</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="padding:12px 14px;border-radius:10px;border:1px solid var(--border);">
+        <div style="font-size:11.5px;color:var(--faint);font-weight:650;margin-bottom:4px;">审阅台主发布按钮</div>
+        <div style="font-size:13px;font-weight:650;color:var(--ink);">${cur.sheetCta}</div>
+      </div>
+      <div style="padding:12px 14px;border-radius:10px;border:1px solid var(--border);">
+        <div style="font-size:11.5px;color:var(--faint);font-weight:650;margin-bottom:4px;">点击后确定性行为</div>
+        <div style="font-size:13px;color:var(--ink-2);">${cur.click}</div>
+      </div>
+    </div>
+    <div style="padding:12px 14px;border-radius:10px;background:${accentSoft};color:${accent};font-size:12.5px;line-height:1.6;">
+      <b>架构要点：</b>${cur.hint}
+    </div>
+  `;
+}
+
+function render() {
+  // Strip
+  document.getElementById('screenStrip').innerHTML = SCREENS.map(sc => `
+    <button type="button" class="scr-btn ${state.screen===sc.id?'active':''}" onclick="setScreen('${sc.id}')">
+      <span class="s-idx">${sc.no}</span>${sc.name}
+    </button>
+  `).join('');
+
+  // URL & Note
+  const curSc = SCREENS.find(x => x.id === state.screen);
+  document.getElementById('studioUrl').textContent = 'localhost:5173' + curSc.url.replace('{id}', state.mode === 'CALIBER' ? 'caliber-video' : 'ecom-sales');
+  document.getElementById('studioNoteText').innerHTML = `<b>${curSc.no} ${curSc.name}：</b>${NOTES[state.screen]}`;
+
+  // Sub-state toggles
+  const subs = SUB_CONFIG[state.screen] || [];
+  document.getElementById('subToggles').innerHTML = subs.map(sb => `
+    <button type="button" class="sub-pill ${state.sub[state.screen]===sb.k?'active':''}" onclick="setSub('${state.screen}','${sb.k}')">${sb.label}</button>
+  `).join('');
+
+  // Main Viewport
+  document.getElementById('appVp').innerHTML = renderScreen();
+}
+
+render();
+renderStateMachine();
+</script>
+</body>
+</html>
