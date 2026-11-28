@@ -777,11 +777,7 @@ public class CaliberService {
             args.add(filter);
         }
         args.add("--dimensions");
-        args.add("caliber");
-        if (list.scenario().time() != null) {
-            args.add("--time-dimension");
-            args.add("period:" + list.scenario().time().grain());
-        }
+        args.add(list.scenario().time() == null ? "caliber" : "caliber," + CaliberCompiler.PERIOD);
         args.add("--filter");
         args.add("caliber:in:" + c.name());
         return args;

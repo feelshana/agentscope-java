@@ -32,6 +32,7 @@ public final class CaliberCompiler {
                     "caliber_group",
                     "caliber_condition",
                     "caliber_note",
+                    "caliber_period",
                     "period_date");
     private static final ObjectMapper READER = new ObjectMapper(new YAMLFactory());
     private static final ObjectMapper WRITER =
@@ -148,8 +149,10 @@ public final class CaliberCompiler {
         sql.append(literal(c.group() == null ? "" : c.group())).append(" AS caliber_group, ");
         sql.append(literal(condition(list, c))).append(" AS caliber_condition, ");
         sql.append(literal(note(c))).append(" AS caliber_note");
+        // 2026-11-28: the period column is passed through unchanged; a converted date would wrap
+        // the column in casts and the database could no longer use its index.
         if (s.time() != null)
-            sql.append(", ").append(timeExpression(s.time())).append(" AS period_date");
+            sql.append(", ").append(quote(s.time().column())).append(" AS ").append(PERIOD_COLUMN);
         for (CaliberList.Scope d : s.scope())
             sql.append(", ").append(quote(d.column())).append(" AS ").append(quote(d.column()));
         // A caliber whose document adds several values (combine: sum) is summed here, so the View
@@ -181,7 +184,7 @@ public final class CaliberCompiler {
         if (!where.isEmpty()) sql.append("\nWHERE ").append(String.join("\n  AND ", where));
         if (combined) {
             List<String> keys = new ArrayList<>();
-            if (s.time() != null) keys.add(timeExpression(s.time()));
+            if (s.time() != null) keys.add(quote(s.time().column()));
             for (CaliberList.Scope d : s.scope()) keys.add(quote(d.column()));
             if (!keys.isEmpty()) sql.append("\nGROUP BY ").append(String.join(", ", keys));
         }
@@ -214,26 +217,100 @@ public final class CaliberCompiler {
         return String.join("；", parts);
     }
 
-    private static String timeExpression(CaliberList.Time t) {
-        String column = quote(t.column());
-        String text = "CAST(" + column + " AS VARCHAR)";
+    /** The Cube dimension and View column of the period; filtered by the source's raw values. */
+    public static final String PERIOD = "period";
+
+    static final String PERIOD_COLUMN = "caliber_period";
+
+    /** A period value as the source column stores it, e.g. 202610, 20261001 or 2026-10-01. */
+    static String periodValue(CaliberList.Time t, java.time.LocalDate day) {
         return switch (t.format()) {
-            case "yyyymm" ->
-                    "CAST(CONCAT(SUBSTR("
-                            + text
-                            + ", 1, 4), '-', SUBSTR("
-                            + text
-                            + ", 5, 2), '-01') AS DATE)";
+            case "yyyymm" -> String.format("%04d%02d", day.getYear(), day.getMonthValue());
             case "yyyymmdd" ->
-                    "CAST(CONCAT(SUBSTR("
-                            + text
-                            + ", 1, 4), '-', SUBSTR("
-                            + text
-                            + ", 5, 2), '-', SUBSTR("
-                            + text
-                            + ", 7, 2)) AS DATE)";
-            default -> "CAST(" + column + " AS DATE)";
+                    String.format(
+                            "%04d%02d%02d",
+                            day.getYear(), day.getMonthValue(), day.getDayOfMonth());
+            default -> ("month".equals(t.grain()) ? day.withDayOfMonth(1) : day).toString();
         };
+    }
+
+    /** Whether a filter value is written the way the source column stores periods. */
+    static boolean periodValueMatches(CaliberList.Time t, String value) {
+        return switch (t.format()) {
+            case "yyyymm" -> value.matches("\\d{6}");
+            case "yyyymmdd" -> value.matches("\\d{8}");
+            default -> value.matches("\\d{4}-\\d{2}-\\d{2}");
+        };
+    }
+
+    private static String periodType(CaliberList.Time t, ModelColumns columns) {
+        if ("date".equals(t.format())) return "DATE";
+        String type =
+                columns.types()
+                        .getOrDefault(t.column().toLowerCase(Locale.ROOT), "")
+                        .toUpperCase(Locale.ROOT);
+        return type.contains("INT") ? "BIGINT" : "VARCHAR";
+    }
+
+    private static final java.time.LocalDate SAMPLE = java.time.LocalDate.of(2026, 10, 1);
+
+    /** "period:eq:202610" style filters selecting one period, as the description shows them. */
+    static String periodFilterExample(CaliberList.Time t) {
+        return PERIOD + ":eq:" + periodValue(t, SAMPLE);
+    }
+
+    private static String monthToDateFilters(CaliberList.Time t) {
+        return PERIOD
+                + ":gte:"
+                + periodValue(t, SAMPLE)
+                + " 与 "
+                + PERIOD
+                + ":lte:"
+                + periodValue(t, SAMPLE.withDayOfMonth(SAMPLE.lengthOfMonth()));
+    }
+
+    private static String periodDescription(CaliberList.Time t) {
+        boolean month = "month".equals(t.grain());
+        String one = periodValue(t, SAMPLE);
+        String unit = month ? "月" : "日";
+        String many =
+                month
+                        ? PERIOD
+                                + ":in:"
+                                + periodValue(t, SAMPLE.minusMonths(2))
+                                + ","
+                                + periodValue(t, SAMPLE.minusMonths(1))
+                                + ","
+                                + one
+                        : PERIOD
+                                + ":gte:"
+                                + one
+                                + " 与 "
+                                + PERIOD
+                                + ":lte:"
+                                + periodValue(t, SAMPLE.plusDays(6));
+        return (month ? "账期月份" : "统计日期")
+                + "，按来源列 "
+                + t.column()
+                + " 的原值筛选，取值形如 "
+                + one
+                + "（"
+                + (month ? "2026 年 10 月" : "2026-10-01")
+                + "），不是日期区间，不用 time_dimension。查一个"
+                + unit
+                + "在 filters 中写 "
+                + PERIOD
+                + ":eq:"
+                + one
+                + "；查多个"
+                + unit
+                + "写 "
+                + many
+                + "，并在 dimensions 中加入 period 逐"
+                + unit
+                + "列出，不能把多"
+                + unit
+                + "的值相加。";
     }
 
     private static Map<String, Object> cube(
@@ -256,10 +333,13 @@ public final class CaliberCompiler {
                                     + (m.isDefault() ? "。默认指标：用户只说统计对象、没说具体指标时用它" : "")
                                     + (m.unit() == null ? "" : "。单位：" + m.unit())
                                     + (CaliberList.Measure.MONTH_TO_DATE.equals(m.period())
-                                            ? "。月累计值：按月问时按日查询该月（period:day:月初,下月初），取返回的最后一天的值；最后一天不是月末时注明截至该日，不要相加"
+                                            ? "。月累计值：按月问时按日查询该月（filters 写 "
+                                                    + monthToDateFilters(s.time())
+                                                    + "，dimensions 加入"
+                                                    + " period），取返回的最后一天的值；最后一天不是月末时注明截至该日，不要相加"
                                             : "")
-                                    + "。统计结果已预先算好，每个结果只取一行：必须按 caliber 筛选单个口径或按 caliber"
-                                    + " 分组，时间按表的粒度分组，不能把多个口径、多天或多月相加；对应多行时返回空。"));
+                                    + "。统计结果已预先算好，每个结果只取一行：必须按 caliber 筛选单个口径或按 caliber 分组，时间用"
+                                    + " period 筛选单个周期或按 period 分组，不能把多个口径、多天或多月相加；对应多行时返回空。"));
         }
         List<Map<String, Object>> dimensions = new ArrayList<>();
         dimensions.add(
@@ -288,27 +368,16 @@ public final class CaliberCompiler {
         out.put("base_object", list.viewName());
         out.put("measures", measures);
         out.put("dimensions", dimensions);
-        if (s.time() != null) {
-            out.put(
-                    "time_dimensions",
-                    List.of(
-                            member(
-                                    "period",
-                                    "period_date",
-                                    "DATE",
-                                    ("month".equals(s.time().grain())
-                                                    ? "账期月份（当月 1 日），只能按 month 粒度使用"
-                                                    : "统计日期，只能按 day 粒度使用（多天就按天列出，不能按周、月相加）")
-                                            + "；来源列 "
-                                            + s.time().column()
-                                            + "。时间范围左闭右开，结束日期不包含"
-                                            + ("month".equals(s.time().grain())
-                                                    ? "：查 2026 年 10 月写"
-                                                            + " period:month:2026-10-01,2026-11-01。"
-                                                    : "：查 2026-10-01 一天写"
-                                                          + " period:day:2026-10-01,2026-10-02。"))));
-            out.put("hierarchies", Map.of("time", List.of("period")));
-        }
+        // 2026-11-28: the period is a plain dimension over the source column's own values, not a
+        // time dimension. A caliber table is never rolled up to a coarser grain, and filtering
+        // the raw value lets the database use the column's index.
+        if (s.time() != null)
+            dimensions.add(
+                    member(
+                            PERIOD,
+                            PERIOD_COLUMN,
+                            periodType(s.time(), columns),
+                            periodDescription(s.time())));
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("description", cubeDescription(list));
         props.put("non_additive_dimension", "caliber");
@@ -618,8 +687,9 @@ public final class CaliberCompiler {
                             + " 分组，不同口径之间可能互相包含，不能相加；用户的说法可能对应多个口径或对不上任何口径名时，先向用户确认是哪个口径，不要自行选择。用户要求把几个口径加起来（合计、一共）时，分别列出各口径的数值并说明不能相加，不给出合计。\n")
                 .append("- 范围：上表“范围”列出的每个维度都要写进 filters（用户没说时用所列默认值），或按它分组；汇总值与明细值同时存在，不能相加。\n")
                 .append(
-                        "- 时间：每行是预先算好的统计结果，time_dimension 的粒度必须等于上表“时间”列（日表用 day，月表用"
-                            + " month）。问一段时间（如最近一周）就按该粒度逐天或逐月列出，不能把多天、多月的值相加或平均；表里没有周、月去重数时如实说明，不把每天的值相加当作周活、月活。\n")
+                        "- 时间：每行是预先算好的统计结果，时间是普通维度 period，按表里的原值筛选（取值格式见各指标的 period 说明，如月表"
+                            + " 202610、日表 20261001），不用 time_dimension。问一段时间（如最近一周）就在 dimensions 中加入"
+                            + " period 逐天或逐月列出，不能把多天、多月的值相加或平均；表里没有周、月去重数时如实说明，不把每天的值相加当作周活、月活。\n")
                 .append("- 以上指标覆盖的问题只用 query_cube 取数，不要自己拼取数条件，也不要对这些指标的原表或生成的口径视图（")
                 .append(String.join("、", models))
                 .append(

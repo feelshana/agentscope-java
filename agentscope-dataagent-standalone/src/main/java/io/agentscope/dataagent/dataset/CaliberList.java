@@ -303,6 +303,7 @@ public record CaliberList(
                     "caliber_group",
                     "caliber_condition",
                     "caliber_note",
+                    "caliber_period",
                     "period",
                     "period_date");
 

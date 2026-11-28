@@ -327,26 +327,53 @@ class CaliberSelectionTest {
     void finishedStatisticsAreReadOneRowPerResultAtTheTableGrain() throws Exception {
         write("calibers/active.yml", ACTIVE);
         CaliberCompiler.sync(root);
-        java.util.function.Function<Object, Map<String, Object>> query =
-                time -> {
+        java.util.function.BiFunction<List<String>, List<String>, Map<String, Object>> query =
+                (periods, dimensions) -> {
                     Map<String, Object> a = new java.util.LinkedHashMap<>();
                     a.put("cube", "active_metrics");
                     a.put("measures", List.of("dau_total"));
-                    a.put("filters", List.of("caliber:in:全部用户"));
-                    if (time != null) a.put("time_dimension", time);
+                    a.put("filters", concat("caliber:in:全部用户", periods));
+                    a.put("dimensions", dimensions);
                     return a;
                 };
-        assertThat(CaliberQueryGate.check(root, query.apply(null)))
-                .contains("必须写 time_dimension", "period:day:2026-10-01,2026-10-02");
-        assertThat(CaliberQueryGate.check(root, query.apply("period:month:2026-10-01,2026-11-01")))
-                .contains("只能写 period:day", "多日的值相加", "文档没定义时先问用户");
-        assertThat(CaliberQueryGate.check(root, query.apply("period:week:2026-10-01,2026-10-08")))
-                .contains("只能写 period:day");
+        // 2026-11-28: the period is filtered by the column's raw value (index-friendly).
+        assertThat(CaliberQueryGate.check(root, query.apply(List.of(), List.of())))
+                .contains("必须在 filters 中指定 period", "period:eq:20261001");
+        Map<String, Object> old = query.apply(List.of(), List.of());
+        old.put("time_dimension", "period:day:2026-10-01,2026-10-02");
+        assertThat(CaliberQueryGate.check(root, old))
+                .contains("没有 time_dimension", "period:eq:20261001");
+        assertThat(
+                        CaliberQueryGate.check(
+                                root, query.apply(List.of("period:eq:2026-10-01"), List.of())))
+                .contains("取值形如 20261001", "不能写「2026-10-01」");
+        assertThat(
+                        CaliberQueryGate.check(
+                                root, query.apply(List.of("period:contains:202610"), List.of())))
+                .contains("只能用 eq、in 或 gte/gt/lte/lt");
+        assertThat(
+                        CaliberQueryGate.check(
+                                root,
+                                query.apply(
+                                        List.of("period:gte:20261001", "period:lte:20261007"),
+                                        List.of())))
+                .contains("dimensions 中加入 period", "多日的值相加", "文档没定义时先问用户");
+        assertThat(
+                        CaliberQueryGate.check(
+                                root, query.apply(List.of("period:eq:20261001"), List.of())))
+                .isNull();
         // A week asked for is listed day by day: seven results, each one row.
-        assertThat(CaliberQueryGate.check(root, query.apply("period:day:2026-10-01,2026-10-08")))
+        assertThat(
+                        CaliberQueryGate.check(
+                                root,
+                                query.apply(
+                                        List.of("period:gte:20261001", "period:lte:20261007"),
+                                        List.of("period"))))
                 .isNull();
 
-        Map<String, Object> week = query.apply("period:day:2026-10-01,2026-10-08");
+        Map<String, Object> week =
+                query.apply(
+                        List.of("period:gte:20261001", "period:lte:20261007"), List.of("period"));
         assertThat(
                         CaliberQueryGate.checkResult(
                                 root,
@@ -376,7 +403,7 @@ class CaliberSelectionTest {
                                 root, other, "{\"columns\":[\"dau_total\"],\"rows\":[[null]]}"))
                 .isNull();
         assertThat(CaliberCompiler.rules(root))
-                .contains("time_dimension 的粒度必须等于上表“时间”列", "不把每天的值相加当作周活、月活");
+                .contains("时间是普通维度 period，按表里的原值筛选", "不把每天的值相加当作周活、月活");
     }
 
     @Test
@@ -385,6 +412,8 @@ class CaliberSelectionTest {
         CaliberList.Caliber basketball = list.calibers().get(0);
         assertThat(CaliberService.query(list, basketball))
                 .containsSubsequence("--measures", "members")
+                .containsSubsequence("--dimensions", "caliber,period")
+                .doesNotContain("--time-dimension")
                 .containsSubsequence("--filter", "province:eq:全国")
                 .containsSubsequence("--filter", "channel:eq:全部")
                 .containsSubsequence("--filter", "caliber:in:篮球通");
@@ -474,11 +503,9 @@ class CaliberSelectionTest {
                 "measures",
                 List.of("members"),
                 "filters",
-                filters,
+                concat("period:eq:202610", filters),
                 "dimensions",
-                dimensions,
-                "time_dimension",
-                "period:month:2026-10-01,2026-11-01");
+                dimensions);
     }
 
     private void write(String relative, String content) throws Exception {

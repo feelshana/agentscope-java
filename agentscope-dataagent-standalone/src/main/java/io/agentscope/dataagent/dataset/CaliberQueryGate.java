@@ -40,7 +40,7 @@ public final class CaliberQueryGate {
         if (dimension == null) dimension = "caliber";
         CaliberList list = list(published, listPath);
         if (list == null) return null;
-        String time = time(cube, list, args.get("time_dimension"));
+        String time = time(cube, list, args);
         if (time != null) return time;
 
         boolean grouped = CaliberList.texts(args.get("dimensions")).contains(dimension);
@@ -163,48 +163,88 @@ public final class CaliberQueryGate {
                 + "。";
     }
 
+    private static final Set<String> PERIOD_OPERATORS =
+            Set.of("eq", "in", "gte", "gt", "lte", "lt");
+
     /**
-     * spec149 P7: each row is a finished statistic of one day or one month, so the time dimension
-     * is required and grouped at the table's own grain; a coarser grain would add the rows of a
-     * week or month (daily active users summed into a month counts a user once per day).
+     * spec149 P7: each row is a finished statistic of one day or one month. 2026-11-28: the
+     * period is a plain dimension over the source column's raw values (so the database can use
+     * its index), filtered to one period or grouped by period; there is no time dimension to
+     * roll up, and values must be written the way the column stores them.
      */
-    private static String time(String cube, CaliberList list, Object value) {
+    private static String time(String cube, CaliberList list, Map<String, Object> args) {
         CaliberList.Time t = list.scenario().time();
         if (t == null) return null;
-        String grain = t.grain();
-        String unit = "month".equals(grain) ? "月" : "日";
-        String example =
-                "month".equals(grain)
-                        ? "period:month:2026-10-01,2026-11-01"
-                        : "period:day:2026-10-01,2026-10-02";
-        String spec = value instanceof String s ? s.strip() : null;
-        if (spec == null || spec.isEmpty())
+        String unit = "month".equals(t.grain()) ? "月" : "日";
+        String example = CaliberCompiler.periodFilterExample(t);
+        String sample = example.substring(example.lastIndexOf(':') + 1);
+        String spec = args.get("time_dimension") instanceof String s ? s.strip() : "";
+        if (!spec.isEmpty())
+            return "指标 "
+                    + cube
+                    + " 没有 time_dimension：时间是普通维度 period，按表里的原值筛选，例如 filters 中写 "
+                    + example
+                    + "；问多个"
+                    + unit
+                    + "时在 dimensions 中加入 period 逐"
+                    + unit
+                    + "列出。";
+        boolean grouped =
+                CaliberList.texts(args.get("dimensions")).contains(CaliberCompiler.PERIOD);
+        boolean filtered = false;
+        boolean several = false;
+        for (String filter : CaliberList.texts(args.get("filters"))) {
+            String[] parts = filter.split(":", 3);
+            if (parts.length < 2 || !parts[0].strip().equals(CaliberCompiler.PERIOD)) continue;
+            String op = parts[1].strip().toLowerCase(java.util.Locale.ROOT);
+            if (!PERIOD_OPERATORS.contains(op) || parts.length < 3)
+                return "指标 "
+                        + cube
+                        + " 的 period 只能用 eq、in 或 gte/gt/lte/lt 按原值筛选，例如 "
+                        + example
+                        + "。";
+            List<String> values = new ArrayList<>();
+            for (String v : parts[2].split(",")) if (!v.isBlank()) values.add(v.strip());
+            for (String v : values)
+                if (!CaliberCompiler.periodValueMatches(t, v))
+                    return "指标 "
+                            + cube
+                            + " 的 period 按来源列 "
+                            + t.column()
+                            + " 的原值筛选，取值形如 "
+                            + sample
+                            + "，不能写「"
+                            + v
+                            + "」；例如 "
+                            + example
+                            + "。";
+            filtered = true;
+            if (!"eq".equals(op) && !("in".equals(op) && values.size() == 1)) several = true;
+        }
+        if (!filtered && !grouped)
             return "指标 "
                     + cube
                     + " 的每行是某一"
                     + unit
-                    + "预先算好的统计结果，必须写 time_dimension 并按 "
-                    + grain
-                    + " 粒度分组，例如 "
+                    + "预先算好的统计结果，必须在 filters 中指定 period，例如 "
                     + example
-                    + "（结束日期不包含）；不写时间会把所有"
+                    + "，或在 dimensions 中加入 period 逐"
+                    + unit
+                    + "列出；不指定时间会把所有"
                     + unit
                     + "的值相加。";
-        String[] parts = spec.split(":", 3);
-        String granularity =
-                parts.length > 1 ? parts[1].strip().toLowerCase(java.util.Locale.ROOT) : "";
-        if (!parts[0].strip().equals("period") || !granularity.equals(grain))
+        if (several && !grouped)
             return "指标 "
                     + cube
                     + " 的每行是某一"
                     + unit
-                    + "预先算好的统计结果，time_dimension 只能写 period:"
-                    + grain
-                    + ":开始,结束（例如 "
-                    + example
-                    + "）；按更粗的粒度会把多"
+                    + "预先算好的统计结果，筛选了多个"
                     + unit
-                    + "的值相加，结果错误。问一段时间就按"
+                    + "时必须在 dimensions 中加入 period 逐"
+                    + unit
+                    + "列出，不能把多"
+                    + unit
+                    + "的值相加。问一段时间就按"
                     + unit
                     + "逐个列出；问月活等跨周期的数，读文档定义的那一"
                     + unit
@@ -282,8 +322,8 @@ public final class CaliberQueryGate {
                     + cube
                     + " 有 "
                     + empty
-                    + " 个结果为空：每个结果只能对应一行统计数据，为空说明对应了多行（有维度没定下来：口径、每个范围维度都要筛选单值或分组，时间按表的粒度分组），或该行本身没有值。请检查后重新查询，不要把空值当作"
-                    + " 0，也不要改用相加的方式。";
+                    + " 个结果为空：每个结果只能对应一行统计数据，为空说明对应了多行（有维度没定下来：口径、每个范围维度和 period"
+                    + " 都要筛选单值或分组），或该行本身没有值。请检查后重新查询，不要把空值当作 0，也不要改用相加的方式。";
         } catch (IOException | RuntimeException e) {
             return null;
         }

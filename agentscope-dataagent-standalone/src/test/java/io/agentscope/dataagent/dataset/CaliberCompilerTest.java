@@ -73,7 +73,10 @@ class CaliberCompilerTest {
                 .contains("channel_type = '公网'")
                 .contains("待业务确认：钻石与黄金的合并方式")
                 .contains("数值为 vip_type_3 取 钻石会员、黄金会员 各行相加")
-                .contains("SUBSTR(CAST(period_id AS VARCHAR), 5, 2)")
+                // 2026-11-28: the period column is passed through, never converted, so a filter on
+                // it can use the column's index.
+                .contains("period_id AS caliber_period")
+                .doesNotContain("SUBSTR(", "CAST(", "period_date")
                 .contains("UNION ALL")
                 .contains("generated_by: calibers/vip_m.yml");
         assertThat(view.split("channel_type = '全部'", -1)).hasSize(2);
@@ -85,7 +88,7 @@ class CaliberCompilerTest {
                         combined.indexOf("UNION ALL") < 0
                                 ? combined.length()
                                 : combined.indexOf("UNION ALL"));
-        assertThat(combined).contains("SUM(cnt_zd) AS cnt_zd", "GROUP BY CAST(CONCAT(SUBSTR(");
+        assertThat(combined).contains("SUM(cnt_zd) AS cnt_zd", "GROUP BY period_id");
         assertThat(view.split("GROUP BY", -1)).hasSize(2);
         assertThat(compiled.cube())
                 .contains("base_object: vip_scale_caliber")
@@ -94,7 +97,11 @@ class CaliberCompilerTest {
                 .doesNotContain("expression: SUM(")
                 .contains("non_additive_dimension: caliber")
                 .contains("足球通会员 指 足球通")
-                .contains("不适用：收入");
+                .contains("不适用：收入")
+                // The period is a plain dimension filtered by raw values; there is no time
+                // dimension.
+                .contains("name: period", "expression: caliber_period", "period:eq:202610")
+                .doesNotContain("time_dimensions", "hierarchies", "period:month:");
     }
 
     @Test
@@ -115,9 +122,7 @@ class CaliberCompilerTest {
                                         "caliber_system", "caliber_group", "VARCHAR", ""),
                                 new MdlWorkspaceReader.WorkspaceMember(
                                         "caliber_rule", "caliber_condition", "VARCHAR", "")),
-                        java.util.List.of(
-                                new MdlWorkspaceReader.WorkspaceMember(
-                                        "period", "period_date", "DATE", "")),
+                        java.util.List.of(),
                         compiled.cubePath());
         assertThat(MdlBuildChecks.selfReferences(cube)).isEmpty();
         assertThat(compiled.cube()).contains("name: caliber_system", "expression: caliber_group");
