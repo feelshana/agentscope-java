@@ -939,6 +939,14 @@ Codex 实施对象「更多」单条移除与目录「批量处理」。目录�
 
 在 develop-2.0 增加源列等值筛选，验证 `city_name=全省` 与不含该列的目标 DDL、首次同步、同日补跑和定时刷新。隔离 MySQL 5.7.44→8.4.5 共 23 项通过，包含既有无条件任务。Playwright 用隔离响应验证向导、试查及旧预览失效。Java 17 完整构建通过，后端 1257 项中 23 项按环境条件跳过，前端三个前缀各 157 项通过。生产源表和 66 部署由用户现场验证。
 
+## 2026-11-27 Asia/Shanghai · BI 入口等待画面本地联调
+
+本地模拟 BI 使用正式路径前缀、隔离 H2 后端和真实账号免登接口。Chromium 在主 JS 和 CSS 均未返回时已绘出标志和转圈，登录与会话校验完成后显示新对话。缺账号、配置加载失败后重试、减弱动画也已验证。现场截图在本机 `output/playwright/bi-opening-20261127/`。此改动尚未部署到 66。
+
+## 2026-11-28 Asia/Shanghai · DataAgent 视觉评审检查点
+
+安装 finesse-ui 与 finesse-term，校验术语库 142 条。按曜境零售样例生成两张静态视觉稿，复核季度汇总、六根零基线柱、四张表与三条关联，并检查适用于静态稿的 anti-cheap 与 preflight 项。`DocsConsistencyTest` 通过。运行时联动、键盘、移动端和减弱动态效果待交互原型实测。
+
 ## 2026-11-28 Asia/Shanghai · 口径账期按原值筛选
 
 用户发现会员表 `period_id` 被生成视图转成日期，问数筛选用不上索引。改为视图原样输出账期列、Cube `period` 作普通维度按原值筛选，`CaliberQueryGate` 相应改写时间检查，验证查询按 `caliber,period` 分组。用 Wren `cube query --sql-only` 与 `dry-plan` 展开、本机 MySQL 8.4 临时库加索引对比执行计划：旧写法全表扫描，新写法 `Index lookup using idx_period`。口径相关 66 项测试通过。用户重新发布后实测问数一次调用 `period:eq:202610`，结果 187,657,138，查询 301ms。

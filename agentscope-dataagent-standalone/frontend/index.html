@@ -18,10 +18,30 @@
       html { scroll-behavior: smooth; }
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f7f7f8; color: #18181b; min-height: 100dvh; }
       #root { min-height: 100dvh; }
+      /* Keep the same first paint until React mounts the page or an actionable error. */
+      #root:empty { display: none; }
+      #root:not(:empty) + .app-opening { display: none; }
+      .app-opening {
+        min-height: 100dvh; display: grid; place-content: center; justify-items: center;
+        gap: 18px; background: #fff; font: 15px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+      .app-opening p { display: flex; align-items: center; gap: 9px; color: #576074; }
+      .app-opening strong { font-weight: 600; color: #172032; }
+      .app-opening p::before {
+        content: ""; width: 16px; height: 16px; border-radius: 50%;
+        border: 2px solid #e8e5f5; border-top-color: #6954db; border-right-color: #6954db;
+        animation: app-opening-spin .9s linear infinite;
+      }
+      @keyframes app-opening-spin { to { transform: rotate(1turn); } }
+      @media (prefers-reduced-motion: reduce) { .app-opening p::before { animation: none; } }
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <main class="app-opening" role="status">
+      <img src="/src/assets/brand-mark.svg?inline" width="42" height="50" alt="">
+      <p><span>正在打开<strong>红海 DataAgent</strong> …</span></p>
+    </main>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

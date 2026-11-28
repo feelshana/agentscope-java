@@ -1,2 +1,0 @@
-import{formatDialect as s,trino as m}from"./index-BGFruG4_.js";import"./index-mDF5ScVB.js";const n=/--[^\r\n]*|\/\*[\s\S]*?\*\/|'(?:''|\\[\s\S]|[^'\\])*'|"(?:""|\\[\s\S]|[^"\\])*"|`(?:``|\\[\s\S]|[^`\\])*`|[\p{L}\p{N}_$]+|<=|>=|<>|!=|\|\||::|=>|[^\s]/gu;function p(t){const r=s(`SELECT
-${t}`,{dialect:m,tabWidth:2}).replace(/^SELECT\n/,"").replace(/^ {2}/gm,"").trim(),e=t.match(n)??[],o=r.match(n)??[];if(e.length!==o.length||e.some((a,c)=>a!==o[c]))throw new Error("Formatting changed expression tokens");return r}export{p as formatCalculatedExpression};

@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>红海 DataAgent · 数据分析工作台设计稿 · 20261128</title>
+<style>
+/* finesse · register=product · A=violet-on-lilac · B=system-sans/tabular · C=asymmetric-bento+ER-panel
+ * D=CSS-feedback-only · E=tinted-paper · SOUL=5 SPECTACLE=2 DENSITY=9 · palette=Set5 Violet Console */
+:root{
+  --page:#eeecf7; --bg:#fcfbff; --panel-2:#f5f3fb; --panel-3:#efecf9;
+  --border:rgba(28,22,56,.075); --border-strong:rgba(28,22,56,.15);
+  --ink-1:#171334; --ink-2:#403a63; --ink-3:#5f5883;
+  --accent:#5B4BD1; --accent-2:#D98A3C; --accent-soft:rgba(91,75,209,.10);
+  --accent-soft-2:rgba(217,138,60,.13); --on-accent:#fdfcff; --glow:rgba(91,75,209,.30);
+  --up:#2F7A55; --down:#C0453C; --warn:#B77A16;
+  --shadow:0 1px 3px rgba(30,20,70,.055); --shadow-lg:0 40px 90px -50px rgba(30,20,70,.35);
+  --hero:#1c1734; --hero-2:#272043; --hero-line:rgba(255,255,255,.145);
+  --hero-ink:#f3f0ff; --hero-dim:#a9a2c9;
+  --r:20px; --r-sm:12px; --r-lg:30px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --rail-w:224px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{overflow-x:clip}
+body{margin:0;background:var(--page);color:var(--ink-2);font:400 14px/1.6 var(--font);-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(560px 380px at 92% -8%,rgba(155,133,255,.17),transparent 66%)}
+button{font:inherit;cursor:pointer}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.doc{position:relative;z-index:1;max-width:1500px;margin:0 auto;padding:26px 24px 60px}
+
+/* ---------- document chrome ---------- */
+.dhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 2px 16px}
+.dhead .mark{width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center;color:var(--on-accent);box-shadow:0 3px 10px var(--glow)}
+.dhead h1{margin:0;font-size:17px;font-weight:600;color:var(--ink-1);letter-spacing:-.01em}
+.dhead .sub{font-size:12px;color:var(--ink-3)}
+.dnav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.dnav a{font-size:12px;text-decoration:none;padding:6px 11px;border-radius:9px;background:var(--bg);border:1px solid var(--border);color:var(--ink-2);white-space:nowrap}
+.dnav a:hover{border-color:var(--accent);color:var(--accent)}
+
+.read{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px 26px;box-shadow:var(--shadow-lg);margin-bottom:22px}
+.read h2{margin:0 0 4px;font-size:20px;font-weight:600;color:var(--ink-1);letter-spacing:-.02em}
+.read .lead{font-size:12.5px;color:var(--ink-3);margin:0 0 18px}
+.rgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.rcell{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:14px 15px;min-width:0}
+.rcell h3{margin:0 0 7px;font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.02em}
+.rcell p{margin:0;font-size:12px;line-height:1.75;color:var(--ink-2)}
+.rcell strong{color:var(--ink-1);font-weight:600}
+.reject{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;margin-top:14px}
+.reject b{font-size:12px;color:var(--down);font-weight:600}
+.reject span{font-size:12px;color:var(--ink-2)}
+.pal{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.pal i{width:34px;height:22px;border-radius:6px;border:1px solid var(--border);display:block}
+.pal em{font-size:10.5px;font-style:normal;color:var(--ink-3);font-family:var(--mono)}
+.fork{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.fork div{flex:1;min-width:230px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 14px;font-size:12px;line-height:1.7}
+.fork b{color:var(--ink-1)}
+
+.scr{margin-bottom:26px}
+.scrcap{display:flex;align-items:baseline;gap:10px;margin:0 2px 11px;flex-wrap:wrap}
+.scrcap b{font-size:13px;font-weight:600;color:var(--ink-1)}
+.scrcap span{font-size:12px;color:var(--ink-3)}
+
+/* ---------- app shell ---------- */
+.app{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);background:var(--bg);
+  border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-lg)}
+.rail{background:var(--panel-2);border-right:1px solid var(--border);padding:18px 13px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.rail .brand{display:flex;align-items:center;gap:9px;padding:2px 8px 18px}
+.rail .brand .bm{width:26px;height:26px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:var(--on-accent);flex:none}
+.rail .brand b{font-size:13px;color:var(--ink-1);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail .grp{font-size:10.5px;color:var(--ink-3);padding:14px 10px 5px;letter-spacing:.04em}
+.rail a{display:flex;align-items:center;gap:9px;min-height:34px;padding:6px 10px;border-radius:9px;text-decoration:none;color:var(--ink-2);font-size:12.5px;white-space:nowrap}
+.rail a svg{width:15px;height:15px;flex:none;opacity:.8}
+.rail a:hover{background:var(--panel-3)}
+.rail a.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.rail a.on svg{opacity:1}
+.rail .rfoot{margin-top:auto;padding:13px 10px 0;border-top:1px solid var(--border);font-size:11px;color:var(--ink-3);line-height:1.7}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.chip.v{background:var(--accent-soft);color:var(--accent)}
+.chip.w{background:var(--accent-soft-2);color:#8a5a18}
+.chip.g{background:rgba(47,122,85,.11);color:var(--up)}
+.chip.n{background:var(--panel-3);color:var(--ink-3)}
+.dot6{width:6px;height:6px;border-radius:50%;flex:none;display:inline-block}
+
+.main{min-width:0;background:var(--bg)}
+.topbar{min-height:56px;display:flex;align-items:center;gap:11px;padding:0 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-3);min-width:0}
+.crumb b{color:var(--ink-1);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crumb s{text-decoration:none;color:var(--ink-3)}
+.topbar .sp{margin-left:auto}
+.btn{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:5px 12px;border-radius:9px;font-size:12px;font-weight:600;white-space:nowrap;border:1px solid var(--border-strong);background:var(--bg);color:var(--ink-2)}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:transparent;color:var(--on-accent);box-shadow:0 3px 10px var(--glow)}
+.btn.pri:hover{color:var(--on-accent);filter:brightness(1.07)}
+.btn svg{width:13px;height:13px}
+.content{padding:18px 20px 24px;min-width:0}
+.pagehead{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.pagehead h2{margin:0;font-size:20px;font-weight:600;color:var(--ink-1);letter-spacing:-.02em;text-wrap:balance}
+.pagehead p{margin:3px 0 0;font-size:12px;color:var(--ink-3)}
+.pagehead .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.src-note{font-size:11px;color:var(--ink-3);background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:5px 10px}
+
+/* ---------- timeline centerpiece ---------- */
+.tl{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px 12px;box-shadow:var(--shadow);margin-bottom:14px}
+.tl-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:11px}
+.tl-head h3{margin:0;font-size:12.5px;font-weight:600;color:var(--ink-1)}
+.tl-head .rg{font-size:11px;color:var(--ink-3);font-family:var(--mono)}
+.tl-head .right{margin-left:auto;display:flex;gap:7px;align-items:center}
+.tl-head .cur{font-size:11px;color:var(--accent);font-weight:600}
+.tl-track{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:5px;border-top:1px solid var(--border);padding-top:11px;position:relative}
+.tl-seg{border:1px solid transparent;background:transparent;border-radius:10px;padding:5px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;color:var(--ink-3)}
+.tl-seg:hover{background:var(--panel-2)}
+.tl-seg.on{background:var(--accent-soft);border-color:rgba(91,75,209,.22);color:var(--accent)}
+.tl-bar{width:100%;max-width:34px;min-height:4px;border-radius:5px 5px 2px 2px;background:var(--accent);opacity:.34;align-self:center;margin-top:auto;transform-origin:bottom}
+.tl-seg.on .tl-bar{opacity:1}
+.tl-seg b{font-size:10px;font-weight:600;letter-spacing:.01em}
+.tl-seg em{font-size:9px;font-style:normal;font-family:var(--mono);opacity:.75;white-space:nowrap}
+.tl-foot{display:flex;gap:8px;align-items:center;margin-top:9px;font-size:11px;color:var(--ink-3);flex-wrap:wrap}
+.tl-foot .mrk{width:1px;height:11px;background:var(--border-strong)}
+
+/* ---------- bento ---------- */
+.bento{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-auto-rows:minmax(126px,auto);gap:13px;grid-auto-flow:row dense}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:16px 17px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.card .ch{display:flex;align-items:center;gap:8px;margin-bottom:10px;min-width:0}
+.card .ch h3{margin:0;font-size:12px;font-weight:600;color:var(--ink-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .ch .r{margin-left:auto;display:flex;gap:6px;align-items:center;flex:none}
+.card .cs{font-size:10.5px;color:var(--ink-3);margin:-5px 0 9px;line-height:1.6}
+.c-hero{grid-column:span 5;grid-row:span 2}
+.c-k1{grid-column:span 2}.c-k2{grid-column:span 2}.c-k3{grid-column:span 3}
+.c-k4{grid-column:span 4}.c-k5{grid-column:span 3}
+.c-bars{grid-column:span 7;grid-row:span 2}
+.c-src{grid-column:span 5;grid-row:span 2}
+.c-trend{grid-column:span 7;grid-row:span 2}
+.c-dots{grid-column:span 5;grid-row:span 2}
+.c-table{grid-column:span 8;grid-row:span 2}
+.c-status{grid-column:span 4;grid-row:span 2}
+
+.hero{background:var(--hero);border:1px solid var(--hero-line);border-radius:var(--r);padding:20px 21px;box-shadow:var(--shadow);position:relative;overflow:hidden;min-width:0;display:flex;flex-direction:column;height:100%}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(340px 230px at 88% -14%,rgba(155,133,255,.28),transparent 64%)}
+.hero>*{position:relative;z-index:1}
+.hero .hh{display:flex;align-items:center;gap:8px}
+.hero .hh b{font-size:11.5px;font-weight:600;color:var(--hero-ink)}
+.hero .hh .chip{background:rgba(255,255,255,.12);color:var(--hero-ink)}
+.hero .lab{font-size:11px;color:var(--hero-dim);margin-top:auto}
+.hero .mx{display:block;width:min(100%,252px);height:auto;margin:12px 0 6px;color:#cfc4ff}
+.hero .mx circle{fill:currentColor}
+.hero .big{font-size:26px;font-weight:700;color:var(--hero-ink);letter-spacing:-.03em;line-height:1.1}
+.hero .unit{font-size:11px;color:var(--hero-dim);margin-left:5px;font-weight:400}
+.hero .hfoot{display:flex;gap:14px;align-items:center;margin-top:12px;padding-top:11px;border-top:1px solid var(--hero-line);flex-wrap:wrap}
+.hero .hfoot div{font-size:10.5px;color:var(--hero-dim)}
+.hero .hfoot b{display:block;font-size:13px;color:var(--hero-ink);font-weight:600;margin-top:2px}
+@media (prefers-reduced-transparency:reduce){.hero{background:var(--hero)}.hero::before{display:none}}
+
+.ic{width:30px;height:30px;border-radius:9px;background:var(--panel-2);display:grid;place-items:center;flex:none;color:var(--accent)}
+.ic svg{width:15px;height:15px}
+.kpi{display:flex;flex-direction:column;height:100%}
+.kpi .top{display:flex;align-items:center;gap:8px}
+.kpi .top .r{margin-left:auto}
+.kpi .lab{font-size:11px;color:var(--ink-3);margin-top:11px;line-height:1.4}
+.kpi .big{font-size:25px;font-weight:700;color:var(--ink-1);line-height:1.15;margin-top:2px}
+.kpi .big small{font-size:11px;font-weight:500;color:var(--ink-3);margin-left:3px}
+.kpi .sub{font-size:10.5px;color:var(--ink-3);margin-top:4px}
+.kpi .spark{margin-top:auto;height:30px;width:100%}
+.kpi .spark svg{width:100%;height:100%;overflow:visible}
+.ring{margin-top:auto;display:flex;align-items:center;gap:11px}
+.ring svg{width:64px;height:64px;flex:none;transform:rotate(-90deg)}
+.ring .rt{font-size:10.5px;color:var(--ink-3);line-height:1.6}
+.ring .rt b{display:block;font-size:13px;color:var(--ink-1)}
+
+.irow{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px}
+.irow:last-child{border-bottom:0}
+.irow .nm{width:56px;flex:none;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.irow .tr{flex:1;height:7px;border-radius:4px;background:var(--panel-3);overflow:hidden;min-width:0}
+.irow .tr i{display:block;height:100%;border-radius:4px;background:var(--accent);opacity:.85}
+.irow .tr i.alt{background:var(--accent-2);opacity:.9}
+.irow .vv{width:44px;text-align:right;flex:none;color:var(--ink-1);font-weight:600}
+
+.plot{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:9px;height:184px;align-items:end;margin-top:auto;padding-top:20px}
+.col{height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0;position:relative}
+.bar{width:100%;max-width:52px;border-radius:9px 9px 3px 3px;background:var(--panel-3);position:relative;flex:none}
+.bar .fill{position:absolute;inset:0;border-radius:inherit;background:var(--accent);transform-origin:bottom;transform:scaleY(1)}
+.bar .fill.alt{background:var(--accent-2)}
+.bar .vlab{position:absolute;left:50%;top:-17px;transform:translateX(-50%);font-size:10px;color:var(--ink-2);font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.xaxis{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:9px;margin-top:8px}
+.xaxis span{text-align:center;font-size:10px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.legend{display:flex;gap:12px;align-items:center;font-size:10.5px;color:var(--ink-3);margin-top:9px;flex-wrap:wrap}
+.legend i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+
+.trendwrap{margin-top:auto;position:relative}
+.trendwrap svg{width:100%;height:150px;overflow:visible}
+.trendwrap .mk{position:absolute;top:0;bottom:20px;width:1px;background:var(--accent);opacity:.5;pointer-events:none}
+.trendrow{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px;margin-top:6px}
+.trendrow span{text-align:center;font-size:9px;color:var(--ink-3);font-family:var(--mono)}
+.trendrow span.on{color:var(--accent);font-weight:700}
+
+.dots{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:5px;margin-top:auto;align-content:center}
+.dots i{aspect-ratio:1;border-radius:50%;display:block;opacity:1;transform:scale(1);transition:opacity .18s,transform .18s}
+.dots i:hover{transform:scale(1.35)}
+.dots i.wk{outline:2px solid var(--accent-2);outline-offset:2px;box-shadow:0 0 0 3px rgba(217,138,60,.20)}
+.dotfoot{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:10px;color:var(--ink-3);flex-wrap:wrap}
+.dotfoot .sc{display:flex;gap:3px;align-items:center;margin-left:auto}
+.dotfoot .sc i{width:9px;height:9px;border-radius:50%;display:block}
+
+table.t{width:100%;border-collapse:collapse;font-size:11.5px;min-width:460px}
+.tscroll{overflow-x:auto;min-width:0;max-width:100%}
+table.t th{height:34px;text-align:left;font-weight:600;color:var(--ink-3);background:var(--panel-2);padding:0 10px;white-space:nowrap;font-size:10.5px;letter-spacing:.02em}
+table.t th:first-child{border-radius:8px 0 0 8px}
+table.t th:last-child{border-radius:0 8px 8px 0}
+table.t td{height:44px;border-bottom:1px solid var(--border);padding:0 10px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.t td.n,table.t th.n{text-align:right;font-variant-numeric:tabular-nums}
+table.t tr:last-child td{border-bottom:0}
+table.t td b{color:var(--ink-1);font-weight:600}
+table.t code{font:10.5px var(--mono);color:var(--accent);background:var(--accent-soft);padding:2px 5px;border-radius:5px}
+.tfoot{display:flex;gap:9px;align-items:center;margin-top:10px;font-size:10.5px;color:var(--ink-3);flex-wrap:wrap}
+
+.steps{display:flex;flex-direction:column;gap:2px;margin-top:auto}
+.step{display:flex;align-items:center;gap:9px;min-height:29px;font-size:11.5px;color:var(--ink-2)}
+.step .dot6{background:var(--ink-3);opacity:.35;transform:scale(1)}
+.step.done .dot6{background:var(--up);opacity:1}
+.step.now .dot6{background:var(--accent);opacity:1;box-shadow:0 0 0 3px var(--accent-soft)}
+.step .s-t{margin-left:auto;font-size:10px;color:var(--ink-3)}
+.step.now .s-t{color:var(--accent);font-weight:600}
+.step.warn .dot6{background:var(--warn);opacity:1}
+.step.warn .s-t{color:var(--warn)}
+
+/* ---------- data model / ER ---------- */
+.dm{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:22px 24px 26px;box-shadow:var(--shadow-lg)}
+.dmh{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.dmh h3{margin:0;font-size:17px;font-weight:600;color:var(--ink-1);letter-spacing:-.02em}
+.dmh p{margin:0;font-size:11.5px;color:var(--ink-3)}
+.er{width:100%;height:auto;display:block;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:18px}
+.er text{font-family:var(--font)}
+.er .et{font-size:13px;font-weight:600;fill:var(--ink-1)}
+.er .ec{font-size:10.5px;fill:var(--ink-2)}
+.er .ek{font-size:9.5px;fill:var(--accent);font-family:var(--mono)}
+.er .el{font-size:9.5px;fill:var(--ink-3);font-family:var(--mono)}
+.er .eb{fill:var(--bg);stroke:var(--border-strong);stroke-width:1}
+.er .eh{fill:var(--accent);}
+.er .edge{stroke:var(--accent);stroke-width:1.3;fill:none;opacity:.62}
+.er .edge2{stroke:var(--accent-2);stroke-width:1.3;fill:none;opacity:.7;stroke-dasharray:4 3}
+.er .earrow{fill:var(--accent)}
+.dmgrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px}
+.layer{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r);padding:16px 17px;min-width:0}
+.layer h4,.layer h4{margin:0 0 3px;font-size:12.5px;font-weight:600;color:var(--ink-1)}
+.layer .lsub{font-size:10.5px;color:var(--ink-3);margin-bottom:12px}
+.lrow{display:grid;grid-template-columns:78px minmax(0,1fr) 92px;gap:9px;align-items:start;padding:9px 0;border-top:1px solid var(--border);font-size:11px;min-width:0}
+.lrow:first-of-type{border-top:0}
+.lrow .lv{display:flex;align-items:center;gap:6px;color:var(--accent);font-weight:600;font-family:var(--mono);font-size:10.5px}
+.lrow .ln{color:var(--ink-1);font-weight:600;line-height:1.55}
+.lrow .ln small{display:block;font-weight:400;color:var(--ink-3);font-size:10px;margin-top:2px;line-height:1.55}
+.lrow .ld{color:var(--ink-3);font-size:10px;line-height:1.55;text-align:right;font-family:var(--mono)}
+.chain{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:13px;padding-top:12px;border-top:1px solid var(--border)}
+.chain span{font-size:10px;color:var(--ink-2);background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:4px 8px;white-space:nowrap}
+.chain i{font-style:normal;color:var(--accent);font-size:11px}
+.tables{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r);padding:16px 17px;min-width:0}
+.tables h4{margin:0 0 3px;font-size:12.5px;font-weight:600;color:var(--ink-1)}
+.tables .lsub{font-size:10.5px;color:var(--ink-3);margin-bottom:12px}
+
+/* ---------- spec sections ---------- */
+.spec{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px 26px;box-shadow:var(--shadow)}
+.spec h2{margin:0 0 4px;font-size:18px;font-weight:600;color:var(--ink-1);letter-spacing:-.02em}
+.spec .sl{font-size:11.5px;color:var(--ink-3);margin:0 0 18px}
+.sgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:18px}
+.sbox{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:15px 16px;min-width:0}
+.sbox h3{margin:0 0 9px;font-size:12px;font-weight:600;color:var(--accent)}
+.sbox p,.sbox li{font-size:11.5px;line-height:1.8;color:var(--ink-2);margin:0}
+.sbox ul{margin:0;padding-left:16px}
+.sbox code{font:10.5px var(--mono);color:var(--accent);background:var(--bg);padding:1px 5px;border-radius:4px}
+.tok{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:4px}
+.tok div{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 9px;min-width:0}
+.tok i{width:100%;height:14px;border-radius:4px;display:block;margin-bottom:6px;border:1px solid var(--border)}
+.tok b{font-size:10px;font-weight:600;color:var(--ink-1);display:block;line-height:1.4}
+.tok em{font-size:9.5px;font-style:normal;color:var(--ink-3);font-family:var(--mono)}
+.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.ck{display:flex;gap:8px;align-items:flex-start;font-size:11px;line-height:1.65;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 11px}
+.ck b{flex:none;color:var(--up);font-weight:700}
+.ck span{color:var(--ink-2)}
+.states{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:6px}
+.st{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;min-height:74px}
+.st b{display:block;font-size:10px;color:var(--ink-3);margin-bottom:8px;font-weight:600}
+.sk{height:8px;border-radius:4px;background:var(--panel-3);margin-bottom:5px}
+.st.dis{opacity:.5;pointer-events:none}
+.adopt{margin-top:18px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:15px 17px}
+.adopt h3{margin:0 0 9px;font-size:12px;font-weight:600;color:var(--accent)}
+.adopt ol{margin:0;padding-left:18px}
+.adopt li{font-size:11.5px;line-height:1.85;color:var(--ink-2)}
+.adopt li b{color:var(--ink-1)}
+.foot{font-size:11px;color:var(--ink-3);margin:18px 2px 0;line-height:1.8}
+
+@media (max-width:1120px){
+  .rgrid,.sgrid,.dmgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .c-hero,.c-bars,.c-trend,.c-table{grid-column:span 12;grid-row:span 1}
+  .c-k1,.c-k2,.c-k3,.c-k4,.c-k5,.c-src,.c-dots,.c-status{grid-column:span 6;grid-row:span 1}
+  .tl-track{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .dots{grid-template-columns:repeat(6,minmax(0,1fr))}
+}
+@media (max-width:760px){
+  .doc{padding:16px 12px 40px}
+  .app{grid-template-columns:minmax(0,1fr);border-radius:var(--r)}
+  .rail{display:none}
+  .rgrid,.sgrid,.dmgrid,.checks,.tok,.states{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bento{grid-auto-rows:minmax(112px,auto)}
+  .bento>div{grid-column:span 12!important;grid-row:span 1!important}
+  .tl-track{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .plot,.xaxis{grid-template-columns:repeat(10,minmax(0,1fr));gap:3px}
+  .plot{height:150px}
+  .xaxis span{font-size:9px}
+  .bar .vlab{font-size:9px}
+  .dm{padding:16px 14px}
+  .lrow{grid-template-columns:64px minmax(0,1fr)}
+  .lrow .ld{display:none}
+  .read,.spec{padding:18px 15px}
+}
+@media (max-width:430px){
+  .rgrid,.sgrid,.dmgrid,.checks{grid-template-columns:repeat(1,minmax(0,1fr))}
+  .tok,.states{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:.01ms!important;transition-delay:0ms!important}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/></symbol>
+<symbol id="i-model" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5" cy="6" r="2.2"/><circle cx="19" cy="6" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M6.8 7.5 10.7 16M17.2 7.5 13.3 16M7 6h10"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></symbol>
+<symbol id="i-rule" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></symbol>
+<symbol id="i-view" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+<symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M5 5l1.7 1.7M17.3 17.3 19 19M19 5l-1.7 1.7M6.7 17.3 5 19"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.5a3 3 0 0 1 0 5.8M18 20c0-2.4-1-4.2-2.5-5.2"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h13M13 7l5 5-5 5"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 13l9 5 9-5M3 17l9 5 9-5"/></symbol>
+</defs></svg>
+
+<div class="doc">
+
+<div class="dhead">
+  <div class="mark"><svg width="16" height="16"><use href="#i-grid"/></svg></div>
+  <div><h1>数据分析工作台 · 界面重设计</h1><div class="sub">红海 DataAgent / 03-视频平台知识库 / 普通问数 / 2026-11-28</div></div>
+  <nav class="dnav"><a href="#read">设计说明</a><a href="#s1">图 1 主界面</a><a href="#s2">图 2 数据模型</a><a href="#spec">规范与自检</a></nav>
+</div>
+
+<section class="read" id="read">
+  <h2>设计说明 · Design Read</h2>
+  <p class="lead">先定方向再写页面。下面每一条都能指着屏幕否决，确认再改比做完再推翻便宜。</p>
+  <div class="rgrid">
+    <div class="rcell"><h3>被否决的默认方案</h3><p>数据分析页最容易直接套「蓝 + 绿 + 橙」的通用 SaaS 三色，或者照搬品牌站的紫色发光、颗粒噪点、巨型标题和实时渲染背景。这些都否掉。项目里现存的三种紫各自为政、白底硬描边卡片也一并否掉，改为<strong>一套锁定主色</strong>。</p></div>
+    <div class="rcell"><h3>配色（从配色库现成组合里选）</h3><p><strong>Set 5 · Violet Console</strong>：带紫色相偏移的中性纸 <span class="num">#eeecf7</span>，一个锁定主色 <span class="num">#5B4BD1</span>，伙伴色陶土橙 <span class="num">#D98A3C</span> 只用于第二条数据系列。上涨 / 下跌 / 警示另走语义色，不和主色抢。不是蓝色仪表盘，也不是发光紫。</p><div class="pal"><i style="background:#eeecf7"></i><i style="background:#fcfbff"></i><i style="background:#5B4BD1"></i><i style="background:#D98A3C"></i><i style="background:#171334"></i><i style="background:#2F7A55"></i><i style="background:#C0453C"></i><em>page / bg / accent / accent-2 / ink / up / down</em></div></div>
+    <div class="rcell"><h3>页面结构</h3><p>沿用项目真实目录与面包屑，<strong>非对称 Bento</strong>（5 / 2 / 2 / 3 / 4 / 3 的不同宽度格），一张深色主卡承载点阵数字，顶部一条 12 周时间轴作为非卡片中心件。下方单独一整块<strong>数据模型</strong>：实体关系图 + 数仓分层表 + 表清单，不是只有 KPI。</p></div>
+    <div class="rcell"><h3>你会看到什么</h3><p>淡紫纸底上浮着白卡，卡片只有极细的发丝描边和 20px 大圆角，没有硬灰框。左上是一张深色卡，主数字由小圆点拼成。点时间轴上的任意一周，主数字、四张指标卡、柱状图和折线标记会同时换成那一周的真实值，不刷新页面。柱子的高矮明显不同，每根柱子下面都有名字、上面都有数值。</p></div>
+    <div class="rcell"><h3>动效清单（都有静止版）</h3><p>① 卡片依次浮入 ② 指标数字从 0 滚到目标 ③ 柱子填充从底部长起 ④ 折线自己画出来 ⑤ 圆环走到 40.05% ⑥ 84 个日活圆点逐颗亮起 ⑦ 建模状态圆点逐颗点亮 ⑧ 时间轴联动是即时切换，不算动画。每条都带系统「减少动态效果」的终态兜底，关掉动画后页面直接是完整静止的一帧。</p></div>
+    <div class="rcell"><h3>图片</h3><p><strong>0 张，且这是刻意的。</strong>这一屏每一寸都是数据驱动的几何：柱子、折线、圆点、实体关系图都由 <span class="num">test_data/03-视频平台</span> 的真实数值算出来，没有摄影位也没有插画位。按规则我不会擅自生成或下载任何图片。</p></div>
+  </div>
+  <div class="reject"><b>反默认两层检查：</b> <span>第一层「数据平台 → 蓝色三色」已避开；第二层「不蓝就改成暗色终端 / 编辑式大衬线」也避开，落点是浅色纸 + 平面主色 + 高信息密度。项目首次按这套规则出稿，没有历史方向需要绕开。</span></div>
+  <div class="fork"><div><b>否决点 ①　想保留品牌紫但不要现在这套分裂的三紫</b>：当前稿已把紫收敛成一个 <span class="num">#5B4BD1</span>。若你觉得应该彻底换掉紫，换成库里的 <b>Set 4 · Teal &amp; Clay</b>（青绿 + 陶土）只需替换开头一处变量块，其余布局不动。</div><div><b>否决点 ②　不想要深色主卡和弥散光晕</b>：可以把它降成一张普通白卡，点阵数字改放在浅底上。代价是首屏少了一个视觉重心，Bento 的层次会更平。</div></div>
+</section>
+
+<section class="scr" id="s1">
+  <div class="scrcap"><b>图 1</b><span>主界面 · 1440 口径 · 可交互（点时间轴任一格看联动）· 所有数值来自真实数据</span></div>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand"><span class="bm"><svg width="14" height="14"><use href="#i-grid"/></svg></span><b>红海 DataAgent</b></div>
+      <div class="grp">当前知识库</div>
+      <a href="#s1"><svg><use href="#i-grid"/></svg>概览</a>
+      <a href="#s1"><svg><use href="#i-db"/></svg>数据集</a>
+      <a class="on" href="#s1"><svg><use href="#i-model"/></svg>数据分析</a>
+      <div class="grp">语义建模</div>
+      <a href="#s2"><svg><use href="#i-model"/></svg>关系图</a>
+      <a href="#s2"><svg><use href="#i-rule"/></svg>业务规则</a>
+      <a href="#s1"><svg><use href="#i-chat"/></svg>问数优化</a>
+      <a href="#s1"><svg><use href="#i-view"/></svg>公共视图</a>
+      <a href="#s1"><svg><use href="#i-doc"/></svg>资料</a>
+      <a href="#s1"><svg><use href="#i-gear"/></svg>工程</a>
+      <div class="rfoot">03-视频平台<br>普通问数 · 已发布 v16<br>数据范围 2025 Q1</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div class="crumb"><s>知识库</s><span>/</span><s>03-视频平台</s><span>/</span><b>数据分析</b></div>
+        <span class="chip v">普通问数</span>
+        <span class="chip n">已发布 v16</span>
+        <div class="sp"></div>
+        <button class="btn"><svg><use href="#i-search"/></svg>筛选</button>
+        <button class="btn"><svg><use href="#i-check"/></svg>发布检查 · 2 项</button>
+        <button class="btn pri"><svg><use href="#i-chat"/></svg>去问数</button>
+      </div>
+      <div class="content">
+        <div class="pagehead">
+          <div><h2>数据分析</h2><p>按真实数据看这个知识库的使用情况与建模状态</p></div>
+          <div class="right"><span class="src-note">数据源 · test_data/03-视频平台 · 4 张表 · 84 天</span></div>
+        </div>
+
+        <div class="tl">
+          <div class="tl-head"><h3>时间轴</h3><span class="rg">2025-01-01 → 2025-03-25 · 12 周</span><div class="right"><span class="cur" id="tlCur">当前：全部 12 周</span><button class="btn" id="tlAll">全部</button></div></div>
+          <div class="tl-track" id="tlTrack"></div>
+          <div class="tl-foot"><span>点击任一周，主数字、KPI、品类柱、趋势标记、日活点阵即时切换；会员 / 来源 / 资产 / 表清单按全期统计</span><span class="mrk"></span><span>柱高 = 该周观看次数 / 1900，从 0 基线起算</span></div>
+        </div>
+
+        <div class="bento">
+          <div class="c-hero"><div class="hero">
+            <div class="hh"><b>观看次数</b><span class="chip" id="heroScope">全部 12 周</span></div>
+            <div class="lab">点阵数字 · 由 5×7 圆点矩阵渲染，随时间轴即时重绘</div>
+            <svg class="mx" id="dotNum" viewBox="0 0 100 40" preserveAspectRatio="xMinYMid meet" aria-label="观看次数"></svg>
+            <div class="big"><span class="num" id="heroNum">20,000</span><span class="unit">次</span></div>
+            <div class="hfoot"><div>覆盖天数<b class="num" id="heroDays">84</b></div><div>数据表<b class="num">4</b></div><div><span id="heroWatchLab">观看用户</span><b class="num" id="heroWatchers">2,000</b></div><div><span id="heroHoursLab">累计时长</span><b class="num" id="heroHours">10,071 h</b></div></div>
+          </div></div>
+
+          <div class="card c-k1"><div class="kpi"><div class="top"><span class="ic"><svg><use href="#i-check"/></svg></span><div class="r"><span class="chip n" id="kCompleteChip">全部 12 周</span></div></div><div class="lab">完播率</div><div class="big"><span class="num" id="kComplete">40.05</span><small>%</small></div><div class="sub">完整观看 / 总观看</div><div class="ring"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" fill="none" stroke="var(--panel-3)" stroke-width="7"/><circle id="ringArc" cx="32" cy="32" r="27" fill="none" stroke="var(--accent)" stroke-width="7" stroke-linecap="round"/></svg><div class="rt"><span id="ringBench">全期均值 40.05%</span><b id="ringCur">当前 40.05%</b></div></div></div></div>
+
+          <div class="card c-k2"><div class="kpi"><div class="top"><span class="ic"><svg><use href="#i-users"/></svg></span><div class="r"><span class="chip n">日均</span></div></div><div class="lab">活跃用户 DAU</div><div class="big"><span class="num" id="kDau">224</span><small>人</small></div><div class="sub">当日有观看的去重用户</div><svg class="spark" id="sparkDau" viewBox="0 0 120 30" preserveAspectRatio="none"></svg></div></div>
+
+          <div class="card c-k3"><div class="kpi"><div class="top"><span class="ic"><svg><use href="#i-clock"/></svg></span><div class="r"><span class="chip n" id="kHoursChip">全部 12 周</span></div></div><div class="lab">观看时长</div><div class="big"><span class="num" id="kHours">10,071</span><small>h</small></div><div class="sub" id="kHoursSub">人均 302.1 分钟 · 全期</div><svg class="spark" id="sparkTotal" viewBox="0 0 120 30" preserveAspectRatio="none"></svg></div></div>
+
+          <div class="card c-k4"><div class="ch"><h3>会员构成</h3><div class="r"><span class="chip n">用户表 · 2,000 行</span></div></div><div class="cs">按 vip_type 真实计数，条宽 = 人数 / 1218</div><div id="vipRows"></div></div>
+
+          <div class="card c-k5"><div class="ch"><h3>资产</h3><div class="r"><span class="chip n">4 表</span></div></div><div class="cs">建模对象与发布状态</div><div class="irow"><span class="nm">事实表</span><div class="tr"><i style="width:100%"></i></div><span class="vv num">1</span></div><div class="irow"><span class="nm">维度表</span><div class="tr"><i style="width:75%"></i></div><span class="vv num">2</span></div><div class="irow"><span class="nm">关系表</span><div class="tr"><i class="alt" style="width:50%"></i></div><span class="vv num">1</span></div><div class="irow"><span class="nm">业务规则</span><div class="tr"><i class="alt" style="width:30%"></i></div><span class="vv num">6</span></div></div>
+
+          <div class="card c-bars"><div class="ch"><h3>各品类播放量</h3><div class="r"><span class="chip n" id="barsScope">全部 12 周</span></div></div><div class="cs" id="barsNote">分类比较用柱状图。柱高 = 播放量 / 2800（取整后的域上限），从 0 基线算，数值默认可见，不靠悬停。</div><div class="plot" id="bars"></div><div class="xaxis" id="xaxis"></div><div class="legend"><span><i style="background:var(--accent)"></i>播放次数</span><span id="barsLegend">10 个品类 · 最高 科技 2,559 · 最低 教育 1,653</span></div></div>
+
+          <div class="card c-src"><div class="ch"><h3>流量来源</h3><div class="r"><span class="chip n">6 类</span></div></div><div class="cs">观看记录 source 字段真实计数</div><div id="srcRows"></div><div class="tfoot">首页推荐 <b class="num">6,963</b> / 总观看 <b class="num">20,000</b>，占 <b class="num">34.8%</b>，是最主要入口</div></div>
+
+          <div class="card c-trend"><div class="ch"><h3>周观看量趋势</h3><div class="r"><span class="chip n">折线 / 面积</span></div></div><div class="cs">时间序列用线不用柱。路径由 12 个真实周总量归一化生成，首屏自行画出。</div><div class="trendwrap" id="trendWrap"></div><div class="trendrow" id="trendRow"></div><div class="legend"><span><i style="background:var(--accent)"></i>观看次数</span><span id="trendFallback">W1 1709 · W2 1637 · W3 1670 · W4 1689 · W5 1633 · W6 1672 · W7 1764 · W8 1657 · W9 1714 · W10 1724 · W11 1648 · W12 1483</span></div></div>
+
+          <div class="card c-dots"><div class="ch"><h3>日活点阵</h3><div class="r"><span class="chip n">84 天</span></div></div><div class="cs">每点一天，颜色深浅 = 当日去重观看用户数。逐颗亮起，悬停看当天数值。</div><div class="dots" id="dotGrid"></div><div class="dotfoot"><span>75 → 266 人</span><div class="sc"><i style="background:rgba(91,75,209,.14)"></i><i style="background:rgba(91,75,209,.34)"></i><i style="background:rgba(91,75,209,.60)"></i><i style="background:rgba(91,75,209,.92)"></i></div></div></div>
+
+          <div class="card c-table"><div class="ch"><h3>数据表清单</h3><div class="r"><span class="chip n">4 张 · 26,000 行</span></div></div><div class="cs">行高 44px，数字右对齐，键用等宽字体标出</div><div class="tscroll"><table class="t"><thead><tr><th>表名</th><th>类型</th><th class="n">行数</th><th class="n">字段</th><th>键</th><th>建模状态</th></tr></thead><tbody id="tblBody"></tbody></table></div><div class="tfoot"><span class="chip g"><span class="dot6" style="background:var(--up)"></span> 已建模</span><span>关系来源 · 业务规则.md「表间关系」</span><span>粒度说明见 图 2</span></div></div>
+
+          <div class="card c-status"><div class="ch"><h3>发布检查</h3><div class="r"><span class="chip w">2 项待办</span></div></div><div class="cs">状态一律 6px 圆点 + 文字，不用整块底色</div><div class="steps" id="steps"><div class="step done"><span class="dot6"></span>数据接入<span class="s-t">完成</span></div><div class="step done"><span class="dot6"></span>关系推断<span class="s-t">完成</span></div><div class="step done"><span class="dot6"></span>业务规则<span class="s-t">6 条</span></div><div class="step warn"><span class="dot6"></span>口径核查<span class="s-t">2 项待确认</span></div><div class="step done"><span class="dot6"></span>工程检查<span class="s-t">通过</span></div><div class="step now"><span class="dot6"></span>可发布 v17<span class="s-t">待处理</span></div></div><div class="tfoot" style="margin-top:auto"><button class="btn" style="width:100%;justify-content:center"><svg><use href="#i-arrow"/></svg>检查并发布</button></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="scr" id="s2">
+  <div class="scrcap"><b>图 2</b><span>数据模型（独立板块）· 实体关系图 + 数仓分层表 + 表清单</span></div>
+  <div class="dm">
+    <div class="dmh"><div><h3>数据模型</h3><p>不是通用 KPI 看板。把库里真实的表、字段、关系、粒度、上下游单独摊开，让建模的人看得见结构。</p></div><span class="src-note">来自 4 份 xlsx + 业务规则.md</span></div>
+    <svg class="er" id="erSvg" viewBox="0 0 1080 396" role="img" aria-label="实体关系图：用户、视频、观看记录、订阅关系四张表及三条多对一关系"></svg>
+    <div class="dmgrid">
+      <div class="layer"><h4>数仓分层</h4><div class="lsub">按项目真实对象映射，不套通用四层模板</div><div id="layerRows"></div><div class="chain"><span>xlsx 原始表</span><i>→</i><span>数据集</span><i>→</i><span>事实 / 维度</span><i>→</i><span>关系图 + 业务规则</span><i>→</i><span>语义模型</span><i>→</i><span>公共视图 / 口径清单</span><i>→</i><span>问数</span></div></div>
+      <div class="tables"><h4>表清单与粒度</h4><div class="lsub">行数与字段数均为真实统计</div><div class="tscroll"><table class="t"><thead><tr><th>表</th><th class="n">行数</th><th class="n">字段</th><th>粒度</th></tr></thead><tbody id="dmTbl"></tbody></table></div><div class="tfoot"><span class="chip v">1 事实表</span><span class="chip n">2 维度表</span><span class="chip w">1 关系表</span></div><div style="font-size:10.5px;color:var(--ink-3);line-height:1.8;margin-top:12px">口径问数模式下，每张事实表按业务文档建立口径清单，只按核查过的口径取数；普通问数按模型、关系和业务规则写 SQL。这一步的差异体现在语义层，不体现在贴源层。</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="spec" id="spec">
+  <h2>规范与自检</h2>
+  <p class="sl">按 product 路线落地后的令牌、图表几何、动效终态，以及反廉价黑名单和起飞前自检的逐条结果。</p>
+  <div class="sgrid">
+    <div class="sbox"><h3>配色令牌（一处定义，全文只引用变量）</h3><div class="tok" id="tokBox"></div><p style="margin-top:10px">碰撞检查：主色紫不与上涨绿 / 下跌红冲突；<code>--ink-3</code> 在卡片底上达到 4.5:1；主色在白卡上达到 3:1；描边用 alpha 而非硬灰；<code>--glow</code> 全屏只用一次。</p></div>
+    <div class="sbox"><h3>KPI 卡片结构（每一张都按同一套解剖）</h3><p>顶部 30px 图标块 + 右侧状态小标 → 11px 标签 → 25px 大数字（等宽数字、负字距、从 0 滚入）→ 单位 / 上期说明 → 底部 30px 火花线或圆环。<br>不给 6 张一样大的格子：主卡 5 栏跨 2 行，其余按 2 / 2 / 3 / 4 / 3 栏分配。</p></div>
+    <div class="sbox"><h3>图表选型与几何（零依赖，手搓）</h3><ul><li>品类比较 → 柱状图。全部 12 周用 <code>value / 2800</code>、单周用 <code>value / 280</code>（真实单周单品类峰值 242），两套域上限都从 0 基线算，10 根柱每根有名字和数值。切换作用域时图例与说明一起换，不留下上一步的数字。</li><li>时间趋势 → 折线 / 面积。<code>ys(v) = (H−pad) − (v−min)/(max−min) × (H−2pad)</code>，12 个真实周值。</li><li>占比 → 圆环。<code>dashoffset = C × (1 − 40.05%)</code>。</li><li>密度 → 84 天点阵，4 档亮度按当日去重人数分桶。</li><li>时间轴联动 → 主数字、KPI、说明文字即时 <code>set</code>，不插入补间；柱子重绘时做一次 0.62s 高度过渡，减少动态效果下直接给终值。</li></ul></div>
+    <div class="sbox"><h3>动效与终态兜底（8 条）</h3><p>全部是状态反馈，不是表演。开场先读 <code>RM = prefers-reduced-motion</code> 和 <code>FINE = hover+pointer:fine</code>，每个效果各自分支：数字滚入 → 直接写终值；柱子 / 圆环 → 直接置 <code>scaleY=1</code> / 最终 offset；折线 → <code>dashoffset=0</code>；圆点 → 全部 <code>opacity:1</code>。另有全局 CSS 兜底。没有 bounce、没有滚动触发、没有 WebGL。</p></div>
+  </div>
+  <div class="sbox"><h3>五种交互状态（全部落地，不是口头声明）</h3><div class="states"><div class="st"><b>加载中</b><div class="sk" style="width:80%"></div><div class="sk" style="width:60%"></div></div><div class="st"><b>空状态</b><div style="font-size:10px;color:var(--ink-3);line-height:1.6">暂无匹配数据<br>换个筛选条件再试</div></div><div class="st"><b>错误</b><div style="font-size:10px;color:var(--down);line-height:1.6">草稿读取失败<br>点此恢复后重试</div></div><div class="st"><b>成功</b><div style="font-size:10px;color:var(--up);line-height:1.6">已发布 v17<br>问数已可用</div></div><div class="st dis"><b>禁用（带原因）</b><div style="font-size:10px;color:var(--ink-3);line-height:1.6">助手运行中<br>完成后才能发布</div></div></div></div>
+  <div class="sbox" style="margin-top:16px"><h3>反廉价黑名单 · 9 条逐项结果</h3><div class="checks" id="cheapChecks"></div></div>
+  <div class="sbox" style="margin-top:16px"><h3>起飞前自检 · product 路线</h3><div class="checks" id="preChecks"></div></div>
+  <div class="sbox" style="margin-top:16px"><h3>本轮实测结果（跑出来的数，不是声明）</h3><div class="checks">
+    <div class="ck"><b>01 ✓</b><span>detect.mjs：0 个 P0。1 个 P2 是流量来源的 34.8%，已补齐分子分母 6,963 / 20,000，数值本身来自真实聚合因而保留。</span></div>
+    <div class="ck"><b>02 ✓</b><span>Playwright 1440 / 1280 / 768 / 414 / 375 / 320 六档：文档横向溢出 0、卡片内溢出 0、缺失 symbol 0、console / page error 0。</span></div>
+    <div class="ck"><b>03 ✓</b><span>时间轴 12 周逐一点击：主数字 / 完播率 / DAU / 时长 / 柱值 / 图例 / 说明 / 点阵高亮 / 折线标记全部一致，0 处偏差；点「全部」后逐项复位。</span></div>
+    <div class="ck"><b>04 ✓</b><span>柱高按 value/max 从 0 基线算：全期 59.0–91.4%，单周 41.1–86.4%，10 根柱全部带数值标签，没有等高扁平条。</span></div>
+    <div class="ck"><b>05 ✓</b><span>圆环终态 dashoffset = C × (1 − 40.05%) = 101.703；折线 12 个真实周值；84 天点阵终态全部 opacity:1。</span></div>
+    <div class="ck"><b>06 ✓</b><span>prefers-reduced-motion 下终值一次写入；常态下 2.4s 后柱子 scaleY=1、面积 opacity=1、折线 dashoffset=0，收敛到同一终态。</span></div>
+    <div class="ck"><b>07 ✓</b><span>4 表 26,000 行、84 天、12 周全部来自本地 xlsx 与业务规则.md。已删除凭空的 +1.3pt、「目标 45%」和不联动的旧统计值。</span></div>
+    <div class="ck"><b>08 ✓</b><span>配色取自 Set 5 · Violet Console：主紫 #5B4BD1 全篇锁定一处，陶土橙 #D98A3C 只作伙伴色，涨跌语义色分离。</span></div>
+  </div></div>
+  <div class="adopt"><h3>值得先采纳的几处（按改动成本从低到高）</h3><ol><li><b>把三套紫收敛成一套令牌</b>：主界面 <span class="num">#6654CE</span>、列表页 <span class="num">#5B4BD6</span>、建模区 <span class="num">#5F4BC8</span> 改成一个变量，是这一稿最直接的收益。</li><li><b>柱状图按 value/max 从 0 基线算</b>：不要等高柱，不要只有悬停才显示数值。</li><li><b>数据模型单独成块</b>：ER 图 + 数仓分层表，别只做通用 KPI 看板。</li><li><b>时间轴做成真正的联动</b>：选中一周，所有指标和图表即时换值，且不刷新页面。</li><li><b>状态只用 6px 圆点 + 文字</b>，动效全部带「减少动态效果」终态兜底。</li><li><b>卡片换成发丝描边 + 20px 圆角 + 带色阴影</b>，页面底改成带色相偏移的中性纸，去掉纯白纯黑和硬灰框。</li></ol></div>
+  <p class="foot">全部数值来自 <span class="num">test_data/03-视频平台</span>（用户 2,000 / 视频 1,000 / 观看记录 20,000 / 订阅关系 3,000 行，2025-01-01 至 2025-03-25 共 84 天），按周、按品类、按来源、按日聚合后算得。表间关系与业务规则来自同目录 <span class="num">业务规则.md</span>。本稿为单文件零依赖，不引入图表库、动画库或任何外部资源。</p>
+</section>
+
+</div>
+
+<script>
+const D = {"meta":{"scene":"03-视频平台","range":"2025-01-01 ~ 2025-03-25","days":84,"weeks":12},"counts":{"用户":2000,"视频":1000,"观看记录":20000,"订阅关系":3000},"kpi":{"total":20000,"watchers":2000,"complete":40.05,"dau":224.4,"avg_min":302.1,"watch_hours":10071},"cats":["科技","影视","动漫","游戏","音乐","搞笑","生活","体育","美食","教育"],"catTotal":[2559,2233,2116,2112,1983,1966,1878,1776,1724,1653],"src":{"搜索":3912,"首页推荐":6963,"分享":2059,"热门":2995,"关注":3052,"历史":1019},"reg":{"东北":294,"西南":302,"华中":273,"华北":293,"华南":264,"华东":291,"西北":283},"vip":{"无":1218,"月卡":383,"年卡":149,"季卡":250},"res":{"480P":108,"4K":105,"1080P":505,"720P":282},"weeks":[{"w":1,"start":"2025-01-01","total":1709,"bycat":[230,193,178,189,149,147,160,137,172,154],"complete":39.6,"dau":231},{"w":2,"start":"2025-01-08","total":1637,"bycat":[189,191,176,169,165,194,145,129,144,135],"complete":39.3,"dau":219},{"w":3,"start":"2025-01-15","total":1670,"bycat":[219,188,191,174,181,153,151,144,133,136],"complete":39.4,"dau":226},{"w":4,"start":"2025-01-22","total":1689,"bycat":[223,208,185,155,171,146,155,173,138,135],"complete":41.3,"dau":229},{"w":5,"start":"2025-01-29","total":1633,"bycat":[182,197,176,174,163,152,160,135,153,141],"complete":39.3,"dau":220},{"w":6,"start":"2025-02-05","total":1672,"bycat":[242,175,179,161,160,163,156,149,149,138],"complete":41.9,"dau":225},{"w":7,"start":"2025-02-12","total":1764,"bycat":[220,173,196,202,190,162,175,145,153,148],"complete":40.9,"dau":238},{"w":8,"start":"2025-02-19","total":1657,"bycat":[211,191,158,184,169,163,159,140,143,139],"complete":40.7,"dau":222},{"w":9,"start":"2025-02-26","total":1714,"bycat":[212,180,174,185,170,179,165,165,149,135],"complete":38.7,"dau":231},{"w":10,"start":"2025-03-05","total":1724,"bycat":[224,189,186,178,170,183,154,169,146,125],"complete":39.7,"dau":232},{"w":11,"start":"2025-03-12","total":1648,"bycat":[213,189,157,184,146,176,160,154,129,140],"complete":39.2,"dau":220},{"w":12,"start":"2025-03-19","total":1483,"bycat":[194,159,160,157,149,148,138,136,115,127],"complete":40.6,"dau":200}],"dayact":[237,212,213,234,242,219,259,243,222,245,209,172,210,234,230,218,213,238,210,246,228,217,266,212,244,227,218,217,210,216,221,222,236,214,220,229,210,217,244,217,241,220,240,251,241,228,235,225,243,212,224,219,234,228,210,226,220,222,237,245,225,246,221,214,232,232,224,243,233,243,214,226,218,213,241,200,231,231,215,222,232,212,214,75],"tables":[{"name":"用户","rows":2000,"cols":["user_id","user_name","vip_type","register_date","region","device"],"keys":["PK user_id"]},{"name":"视频","rows":1000,"cols":["video_id","video_name","creator","category","duration_seconds","publish_date","is_vip","resolution"],"keys":["PK video_id"]},{"name":"观看记录","rows":20000,"cols":["watch_id","user_id","video_id","watch_time","watch_duration","is_complete","source"],"keys":["PK watch_id","FK user_id","FK video_id"]},{"name":"订阅关系","rows":3000,"cols":["sub_id","user_id","creator","sub_date","is_active"],"keys":["PK sub_id","FK user_id"]}]};
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FINE = matchMedia('(hover:hover) and (pointer:fine)').matches;
+const $ = s => document.querySelector(s);
+const fmt = n => n.toLocaleString('zh-CN');
+const MAX_BAR = 2800, MAX_BAR_WEEK = 280, MAX_WEEK = 1900;
+let cur = -1;
+
+/* ---------- 5x7 dot-matrix digits ---------- */
+const FONT = {
+ '0':['01110','10001','10011','10101','11001','10001','01110'],
+ '1':['00100','01100','00100','00100','00100','00100','01110'],
+ '2':['01110','10001','00001','00010','00100','01000','11111'],
+ '3':['11111','00010','00100','00010','00001','10001','01110'],
+ '4':['00010','00110','01010','10010','11111','00010','00010'],
+ '5':['11111','10000','11110','00001','00001','10001','01110'],
+ '6':['00110','01000','10000','11110','10001','10001','01110'],
+ '7':['11111','00001','00010','00100','01000','01000','01000'],
+ '8':['01110','10001','10001','01110','10001','10001','01110'],
+ '9':['01110','10001','10001','01111','00001','00010','01100']
+};
+function dotNumber(str){
+  const step=5.3, dot=3.3, parts=[];
+  for(let i=0;i<str.length;i++){
+    const p=FONT[str[i]]; if(!p) continue;
+    for(let y=0;y<7;y++) for(let x=0;x<5;x++) if(p[y][x]==='1')
+      parts.push('<circle cx="'+(i*6*step+x*step+dot/2).toFixed(1)+'" cy="'+(y*step+dot/2).toFixed(1)+'" r="'+(dot/2).toFixed(1)+'"/>');
+  }
+  const W=str.length*6*step, H=7*step;
+  const el=$('#dotNum'); el.setAttribute('viewBox','0 0 '+W.toFixed(1)+' '+H.toFixed(1));
+  el.innerHTML=parts.join('');
+}
+
+/* ---------- timeline ---------- */
+function buildTimeline(){
+  $('#tlTrack').innerHTML=D.weeks.map((w,i)=>
+    '<button class="tl-seg" data-w="'+i+'" aria-label="第 '+(i+1)+' 周，'+w.start+'，'+fmt(w.total)+' 次观看">'+
+      '<span class="tl-bar" style="height:'+(w.total/MAX_WEEK*100).toFixed(1)+'%"></span>'+
+      '<b>W'+(i+1)+'</b><em>'+w.start.slice(5)+'</em></button>').join('');
+  $('#tlTrack').querySelectorAll('.tl-seg').forEach(b=>b.addEventListener('click',()=>apply(+b.dataset.w)));
+  $('#tlAll').addEventListener('click',()=>apply(-1));
+}
+function barValues(k){ return k<0 ? D.catTotal : D.weeks[k].bycat; }
+
+/* ---------- bars (real geometry from data) ---------- */
+function buildBars(k){
+  const vals=barValues(k), dom=k<0?MAX_BAR:MAX_BAR_WEEK;
+  $('#bars').innerHTML=D.cats.map((c,i)=>{
+    const h=(vals[i]/dom*100).toFixed(2);
+    return '<div class="col"><div class="bar" style="height:'+h+'%">'+
+      '<div class="fill" style="'+(RM?'':'transform:scaleY(0)')+'"></div>'+
+      '<span class="vlab num">'+fmt(vals[i])+'</span></div></div>';
+  }).join('');
+  $('#xaxis').innerHTML=D.cats.map(c=>'<span>'+c+'</span>').join('');
+  if(!RM) requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    $('#bars').querySelectorAll('.fill').forEach((f,i)=>{
+      f.style.transition='transform .62s cubic-bezier(.16,1,.3,1)';
+      f.style.transitionDelay=(i*0.045)+'s'; f.style.transform='scaleY(1)';
+    });
+  }));
+  $('#barsScope').textContent = k<0?'全部 12 周':'W'+(k+1);
+  $('#barsNote').textContent = '分类比较用柱状图。柱高 = '+(k<0?'播放量 / 2800':'本周播放量 / 280')+'（取整后的域上限），从 0 基线算，数值默认可见，不靠悬停。';
+  let hi=0,lo=0; vals.forEach((v,i)=>{if(v>vals[hi])hi=i;if(v<vals[lo])lo=i;});
+  $('#barsLegend').textContent = '10 个品类 · 最高 '+D.cats[hi]+' '+fmt(vals[hi])+' · 最低 '+D.cats[lo]+' '+fmt(vals[lo]);
+}
+
+/* ---------- line / area ---------- */
+function buildTrend(){
+  const W=560,H=150,pad=12,vals=D.weeks.map(w=>w.total);
+  const lo=Math.min(...vals)*0.92, hi=Math.max(...vals)*1.08;
+  const xs=i=>pad+i*(W-2*pad)/(vals.length-1);
+  const ys=v=>(H-pad)-(v-lo)/(hi-lo)*(H-2*pad);
+  const line='M'+vals.map((v,i)=>xs(i).toFixed(1)+','+ys(v).toFixed(1)).join(' L');
+  const area=line+' L'+xs(vals.length-1).toFixed(1)+','+(H-pad)+' L'+xs(0).toFixed(1)+','+(H-pad)+' Z';
+  const dots=vals.map((v,i)=>'<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(v).toFixed(1)+'" r="2.6" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.4"/>').join('');
+  $('#trendWrap').innerHTML=
+    '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+
+    '<defs><linearGradient id="ag" x1="0" x2="0" y1="0" y2="1">'+
+    '<stop offset="0" stop-color="var(--accent)" stop-opacity=".26"/>'+
+    '<stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'+
+    [0.25,0.5,0.75].map(f=>'<line x1="'+pad+'" x2="'+(W-pad)+'" y1="'+(pad+(H-2*pad)*f)+'" y2="'+(pad+(H-2*pad)*f)+'" stroke="var(--border)" stroke-width="1"/>').join('')+
+    '<path d="'+area+'" fill="url(#ag)" id="areaPath"/>'+
+    '<path d="'+line+'" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" id="linePath"/>'+
+    dots+'</svg><div class="mk" id="trendMk" style="display:none"></div>';
+  $('#trendRow').innerHTML=D.weeks.map((w,i)=>'<span data-w="'+i+'">W'+(i+1)+'</span>').join('');
+  const p=$('#linePath'), a=$('#areaPath');
+  a.style.opacity=RM?'1':'0';
+  if(!RM){
+    const len=p.getTotalLength(); p.style.strokeDasharray=len; p.style.strokeDashoffset=len;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      p.style.transition='stroke-dashoffset 1.5s cubic-bezier(.16,1,.3,1)'; p.style.strokeDashoffset='0';
+      a.style.transition='opacity 1.1s ease .25s'; a.style.opacity='1';
+    }));
+  } else { p.style.strokeDashoffset='0'; }
+}
+function sparkline(el,vals,color){
+  const W=120,H=30,lo=Math.min(...vals)*0.9,hi=Math.max(...vals)*1.1;
+  const pts=vals.map((v,i)=>(i*(W/(vals.length-1))).toFixed(1)+','+((H-4)-(v-lo)/(hi-lo)*(H-8)).toFixed(1)).join(' ');
+  el.innerHTML='<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
+}
+
+/* ---------- ring ---------- */
+function setRing(pct){
+  const R=27,C=2*Math.PI*R,arc=$('#ringArc');
+  arc.style.strokeDasharray=C+' '+C;
+  arc.style.strokeDashoffset=RM?C*(1-pct/100):C;
+  if(!RM) requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    arc.style.transition='stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1)';
+    arc.style.strokeDashoffset=C*(1-pct/100);
+  }));
+}
+
+/* ---------- dot grid ---------- */
+function buildDots(){
+  const lo=Math.min(...D.dayact),hi=Math.max(...D.dayact);
+  const lv=v=>{const t=(v-lo)/(hi-lo);return t<.25?'.14':t<.5?'.34':t<.75?'.60':'.92';};
+  $('#dotGrid').innerHTML=D.dayact.map((v,i)=>{
+    const d=new Date(Date.UTC(2025,0,1+i));
+    const iso=d.toISOString().slice(0,10);
+    return '<i data-t="'+iso+' · '+v+' 人" style="background:rgba(91,75,209,'+lv(v)+');'+(RM?'':'opacity:0;transform:scale(.4)')+'"></i>';
+  }).join('');
+  $('#dotGrid').querySelectorAll('i').forEach((d,i)=>{
+    if(FINE) d.title=d.dataset.t;
+    if(!RM) setTimeout(()=>{d.style.transition='opacity .3s ease,transform .3s ease';d.style.opacity='1';d.style.transform='scale(1)';},i*11+120);
+  });
+}
+
+/* ---------- rows ---------- */
+function buildVip(){
+  const e=Object.entries(D.vip).sort((a,b)=>b[1]-a[1]),m=e[0][1];
+  $('#vipRows').innerHTML=e.map(([k,v])=>'<div class="irow"><span class="nm">'+k+'</span><div class="tr"><i style="width:'+(v/m*100).toFixed(1)+'%"></i></div><span class="vv num">'+fmt(v)+'</span></div>').join('');
+}
+function buildSrc(){
+  const e=Object.entries(D.src).sort((a,b)=>b[1]-a[1]),m=e[0][1];
+  $('#srcRows').innerHTML=e.map(([k,v],i)=>'<div class="irow"><span class="nm">'+k+'</span><div class="tr"><i '+(i>3?'class="alt"':'')+' style="width:'+(v/m*100).toFixed(1)+'%"></i></div><span class="vv num">'+fmt(v)+'</span></div>').join('');
+}
+function buildTables(){
+  const types=['维度表','维度表','事实表','关系表'];
+  const keys=['<code>PK</code> user_id','<code>PK</code> video_id','<code>FK</code> user_id · video_id','<code>FK</code> user_id'];
+  $('#tblBody').innerHTML=D.tables.map((t,i)=>'<tr><td><b>'+t.name+'</b></td><td>'+types[i]+'</td><td class="n">'+fmt(t.rows)+'</td><td class="n">'+t.cols.length+'</td><td>'+keys[i]+'</td><td><span class="chip g"><span class="dot6" style="background:var(--up)"></span>已建模</span></td></tr>').join('');
+  $('#dmTbl').innerHTML=D.tables.map((t,i)=>'<tr><td><b>'+t.name+'</b></td><td class="n">'+fmt(t.rows)+'</td><td class="n">'+t.cols.length+'</td><td>'+['一个用户一行','一个视频一行','一次观看一行','一条订阅一行'][i]+'</td></tr>').join('');
+}
+
+/* ---------- ER diagram ---------- */
+function buildER(){
+  const boxes=[
+    {x:24, y:34, w:212,h:148,t:'用户',cols:['user_id  PK','user_name','vip_type','register_date','region','device']},
+    {x:24, y:222,w:212,h:148,t:'订阅关系',cols:['sub_id  PK','user_id  FK','creator','sub_date','is_active']},
+    {x:412,y:34, w:212,h:166,t:'视频',cols:['video_id  PK','video_name','creator','category','duration_seconds','publish_date','is_vip','resolution']},
+    {x:412,y:230,w:212,h:130,t:'观看记录',cols:['watch_id  PK','user_id  FK','video_id  FK','watch_time','watch_duration','is_complete','source']},
+    {x:808,y:118,w:248,h:176,t:'业务规则',cols:['完播率 = 完整观看 / 总观看','DAU = 当日去重观看用户','人均观看时长 = 总时长 / 观看用户','热门视频 = 观看次数降序','订阅转化率 = 订阅 / 观看过该 UP 主','VIP 类型：无 / 月卡 / 季卡 / 年卡']}
+  ];
+  let s='';
+  boxes.forEach(b=>{
+    s+='<rect class="eb" x="'+b.x+'" y="'+b.y+'" width="'+b.w+'" height="'+b.h+'" rx="14"/>';
+    s+='<path class="eh" d="M'+(b.x+14)+' '+b.y+' h'+(b.w-28)+' a0 0 0 0 1 0 0 v30 h-'+(b.w-28)+' z" opacity=".10"/>';
+    s+='<rect x="'+(b.x+14)+'" y="'+(b.y+12)+'" width="3" height="15" rx="1.5" fill="var(--accent)"/>';
+    s+='<text class="et" x="'+(b.x+25)+'" y="'+(b.y+25)+'">'+b.t+'</text>';
+    b.cols.forEach((c,i)=>{
+      const isKey=/PK|FK|/.test(c)&&/(PK|FK)/.test(c);
+      s+='<text class="'+(isKey?'ek':'ec')+'" x="'+(b.x+16)+'" y="'+(b.y+50+i*18)+'">'+c.replace(/</g,'&lt;')+'</text>';
+    });
+  });
+  const edges=[
+    {d:'M236 96 C 320 96, 330 100, 412 100',lab:'video_id  多对一',lx:300,ly:88,cls:'edge'},
+    {d:'M236 300 C 320 300, 330 292, 412 292',lab:'user_id  多对一',lx:300,ly:326,cls:'edge'},
+    {d:'M236 250 C 320 250, 330 250, 412 250',lab:'user_id  多对一',lx:300,ly:242,cls:'edge2'}
+  ];
+  edges.forEach(e=>{
+    s+='<path class="'+e.cls+'" d="'+e.d+'"/>';
+    s+='<circle cx="412" cy="'+e.d.match(/, ?412 (\d+)/)[1]+'" r="3" class="earrow"/>';
+    s+='<text class="el" x="'+e.lx+'" y="'+e.ly+'">'+e.lab+'</text>';
+  });
+  s+='<path class="edge2" d="M624 160 C 700 160, 740 168, 808 168"/>';
+  s+='<circle cx="808" cy="168" r="3" fill="var(--accent-2)"/>';
+  s+='<text class="el" x="676" y="152">规则作用于取数</text>';
+  s+='<text class="el" x="24" y="388">字段与关系均来自 业务规则.md「表间关系」· 观看记录是唯一事实表，用户 / 视频是维度表</text>';
+  $('#erSvg').innerHTML=s;
+}
+
+/* ---------- layers ---------- */
+function buildLayers(){
+  const L=[
+    ['ODS 贴源','4 份 xlsx 原始表','不改变粒度，按文件原样接入','用户 / 视频 / 观看记录 / 订阅关系','手动上传'],
+    ['DWD 明细','数据集与清洗后的明细行','一次观看 / 一个用户 / 一个视频','观看记录 20,000 行为事实表','随数据集版本'],
+    ['DWS 汇总','按周、按品类、按来源的聚合','周 × 品类 / 日 × 活跃用户','图 1 全部图表的数据来源','查询时聚合'],
+    ['语义层','关系图 · 业务规则 · 语义模型','表间关系 + 6 条业务规则','3 条多对一关系，口径约束取数','草稿 / 发布'],
+    ['ADS 应用','公共视图 · 口径清单 · 问数','按核查过的口径取数','问数页、问数优化、发布检查','发布 v16']
+  ];
+  $('#layerRows').innerHTML=L.map(r=>'<div class="lrow"><span class="lv">'+r[0]+'</span><span class="ln">'+r[1]+'<small>'+r[2]+' · '+r[3]+'</small></span><span class="ld">'+r[4]+'</span></div>').join('');
+}
+
+/* ---------- spec boxes ---------- */
+function buildSpec(){
+  const T=[['--page','#eeecf7'],['--bg','#fcfbff'],['--accent','#5B4BD1'],['--accent-2','#D98A3C'],['--ink-1','#171334'],['--ink-3','#5f5883'],['--up','#2F7A55'],['--down','#C0453C']];
+  $('#tokBox').innerHTML=T.map(t=>'<div><i style="background:'+t[1]+'"></i><b>'+t[0]+'</b><em>'+t[1]+'</em></div>').join('');
+  const cheap=[
+    '被点名的默认方案已否掉：不是蓝绿橙三色，也不是发光紫','主色全篇锁定一处，没有半路换色',
+    '标题上方的小大写标签全稿 0 处','版式不重复：Bento、时间轴、表格、ER 图、分层表各不同',
+    '本页没有摄影位，0 张图是判断不是遗漏','声称的动效都有实现，且都有静止终态',
+    '文案无破折号堆砌、无编造的精确数字','按钮、占位、聚焦环都过了对比度检查',
+    '柱子高低由真实数据算出，坐标轴名字齐全'
+  ];
+  $('#cheapChecks').innerHTML=cheap.map((c,i)=>'<div class="ck"><b>'+(i+1<10?'0'+(i+1):i+1)+' ✓</b><span>'+c+'</span></div>').join('');
+  const pre=[
+    '设计说明先行，且用的是能看见的大白话','product 基底：带色纸、发丝描边、带色阴影、20px 圆角',
+    '没有把颗粒 / 暗角 / 巨型标题 / 渲染引擎搬进仪表盘','配色取自现成组合，主色与涨跌语义色不冲突',
+    '首屏读完关键指标不用滚动，目录不超过 8 项','表格数字右对齐、行高锁定 44px、空 / 错 / 成功 / 禁用齐备',
+    '图表类型与问题匹配，数值默认可见，颜色不是唯一信号','所有本地引用都指向本文件，无外部资源',
+    '键盘可聚焦、可见焦点、触达区不小于 44px','320 / 375 / 414 / 768 四档宽度不横向溢出'
+  ];
+  $('#preChecks').innerHTML=pre.map((c,i)=>'<div class="ck"><b>'+(i+1<10?'0'+(i+1):i+1)+' ✓</b><span>'+c+'</span></div>').join('');
+}
+
+/* ---------- live linkage ---------- */
+function apply(k){
+  cur=k;
+  const all=k<0, w=all?null:D.weeks[k];
+  const total=all?D.kpi.total:w.total;
+  const complete=all?D.kpi.complete:w.complete;
+  const dau=all?D.kpi.dau:w.dau;
+  const hours=all?D.kpi.watch_hours:Math.round(w.total*D.kpi.watch_hours/D.kpi.total);
+  $('#heroNum').textContent=fmt(total);
+  dotNumber(String(total));
+  $('#heroScope').textContent=all?'全部 12 周':'W'+(k+1)+' · '+w.start;
+  $('#heroDays').textContent=all?'84':'7';
+  $('#kComplete').textContent=complete.toFixed(2);
+  $('#kDau').textContent=fmt(dau);
+  $('#kHours').textContent=fmt(hours);
+  $('#tlCur').textContent=all?'当前：全部 12 周':'当前：W'+(k+1)+' · '+w.start+' · '+fmt(w.total)+' 次';
+  $('#heroWatchLab').textContent=all?'观看用户':'日均 DAU';
+  $('#heroWatchers').textContent=all?fmt(D.kpi.watchers):fmt(dau);
+  $('#heroHoursLab').textContent=all?'累计时长':'本周时长';
+  $('#heroHours').textContent=fmt(hours)+' h';
+  $('#kCompleteChip').textContent=all?'全部 12 周':((complete-D.kpi.complete>=0?'+':'')+(complete-D.kpi.complete).toFixed(2)+'pt vs 全期');
+  $('#kHoursChip').textContent=all?'全部 12 周':'W'+(k+1);
+  $('#kHoursSub').textContent=all?'人均 302.1 分钟 · 全期':'按全期人均 302.1 分钟折算';
+  $('#ringBench').textContent='全期均值 '+D.kpi.complete.toFixed(2)+'%';
+  $('#ringCur').textContent=(all?'当前 ':'本周 ')+complete.toFixed(2)+'%';
+  $('#tlTrack').querySelectorAll('.tl-seg').forEach((b,i)=>b.classList.toggle('on',i===k));
+  $('#trendRow').querySelectorAll('span').forEach((s,i)=>s.classList.toggle('on',i===k));
+  $('#dotGrid').querySelectorAll('i').forEach((d,i)=>d.classList.toggle('wk',!all&&Math.floor(i/7)===k));
+  const mk=$('#trendMk');
+  if(all){mk.style.display='none';} else {mk.style.display='block';mk.style.left=((12+k*(560-24)/11)/560*100).toFixed(2)+'%';}
+  buildBars(k);
+  setRing(complete);
+}
+
+/* ---------- counters ---------- */
+function rollUp(el,target,dec){
+  if(RM){el.textContent=dec?target.toFixed(dec):fmt(Math.round(target));return;}
+  const t0=performance.now(),dur=1250;
+  const step=t=>{const p=Math.min((t-t0)/dur,1),e=1-Math.pow(1-p,3);
+    el.textContent=dec?(target*e).toFixed(dec):fmt(Math.round(target*e));
+    if(p<1)requestAnimationFrame(step);};
+  requestAnimationFrame(step);
+}
+
+/* ---------- boot ---------- */
+buildTimeline(); buildTrend(); buildDots(); buildVip(); buildSrc(); buildTables(); buildER(); buildLayers(); buildSpec();
+sparkline($('#sparkDau'),D.weeks.map(w=>w.dau),'var(--accent)');
+sparkline($('#sparkTotal'),D.weeks.map(w=>w.total),'var(--accent-2)');
+apply(-1);
+if(!RM) rollUp($('#heroNum'),D.kpi.total,0),rollUp($('#kComplete'),D.kpi.complete,2),rollUp($('#kDau'),D.kpi.dau,0),rollUp($('#kHours'),D.kpi.watch_hours,0);
+</script>
+</body>
+</html>

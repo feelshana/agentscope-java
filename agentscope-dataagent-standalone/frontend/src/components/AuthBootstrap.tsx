@@ -13,8 +13,9 @@ export default function AuthBootstrap({ children }: { children: React.ReactEleme
     return () => { active = false; };
   }, [attempt]);
   if (state === 'ready') return children;
+  if (state === 'loading') return null;
   return <div role="status" style={{ padding: 32 }}>
-    {state === 'loading' ? '正在加载…' : '暂时无法读取登录配置，请检查服务连接后重试。'}
-    {state === 'error' && <button className="da-btn" onClick={() => setAttempt(n => n + 1)}>重试</button>}
+    暂时无法读取登录配置，请检查服务连接后重试。
+    <button className="da-btn" onClick={() => setAttempt(n => n + 1)}>重试</button>
   </div>;
 }

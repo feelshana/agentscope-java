@@ -18,11 +18,31 @@
       html { scroll-behavior: smooth; }
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f7f7f8; color: #18181b; min-height: 100dvh; }
       #root { min-height: 100dvh; }
+      /* Keep the same first paint until React mounts the page or an actionable error. */
+      #root:empty { display: none; }
+      #root:not(:empty) + .app-opening { display: none; }
+      .app-opening {
+        min-height: 100dvh; display: grid; place-content: center; justify-items: center;
+        gap: 18px; background: #fff; font: 15px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+      .app-opening p { display: flex; align-items: center; gap: 9px; color: #576074; }
+      .app-opening strong { font-weight: 600; color: #172032; }
+      .app-opening p::before {
+        content: ""; width: 16px; height: 16px; border-radius: 50%;
+        border: 2px solid #e8e5f5; border-top-color: #6954db; border-right-color: #6954db;
+        animation: app-opening-spin .9s linear infinite;
+      }
+      @keyframes app-opening-spin { to { transform: rotate(1turn); } }
+      @media (prefers-reduced-motion: reduce) { .app-opening p::before { animation: none; } }
     </style>
-    <script type="module" crossorigin src="/assets/index-mDF5ScVB.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B-pZKg-b.css">
+    <script type="module" crossorigin src="/assets/index-BvwYaHmK.js"></script>
   </head>
   <body>
     <div id="root"></div>
+    <main class="app-opening" role="status">
+      <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2040%2048'%20fill='none'%3e%3cdefs%3e%3clinearGradient%20id='upper'%20x1='8'%20y1='4'%20x2='35'%20y2='25'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%238868FF'/%3e%3cstop%20offset='.5'%20stop-color='%236447E8'/%3e%3cstop%20offset='1'%20stop-color='%234534B8'/%3e%3c/linearGradient%3e%3clinearGradient%20id='lower'%20x1='34'%20y1='24'%20x2='9'%20y2='44'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%234A3DC4'/%3e%3cstop%20offset='.48'%20stop-color='%23647DE8'/%3e%3cstop%20offset='1'%20stop-color='%2369C9EA'/%3e%3c/linearGradient%3e%3clinearGradient%20id='fold'%20x1='3'%20y1='20'%20x2='16'%20y2='29'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%238868FF'/%3e%3cstop%20offset='1'%20stop-color='%235841CE'/%3e%3c/linearGradient%3e%3c/defs%3e%3cpath%20d='M10%202.8a1.4%201.4%200%200%200-2%201.3v10.1c0%201%20.6%201.9%201.5%202.3L29%2025.2l7-4.3v-5.3a6%206%200%200%200-3.6-5.5L10%202.8Z'%20fill='url(%23upper)'/%3e%3cpath%20d='m36%2020.9-26.5%2012A2.5%202.5%200%200%200%208%2035.2v9a1.4%201.4%200%200%200%202%201.3l22.4-10A6%206%200%200%200%2036%2030V20.9Z'%20fill='url(%23lower)'/%3e%3cpath%20d='m4.5%2021.2%207.8-3.5%203.7%201.7v8.3c0%201-.6%201.9-1.5%202.3l-9.6%204.3A1.4%201.4%200%200%201%203%2033v-9.5c0-1%20.6-1.9%201.5-2.3Z'%20fill='url(%23fold)'/%3e%3c/svg%3e" width="42" height="50" alt="">
+      <p><span>正在打开<strong>红海 DataAgent</strong> …</span></p>
+    </main>
+    <link rel="stylesheet" crossorigin href="/assets/index-B-pZKg-b.css">
   </body>
 </html>
